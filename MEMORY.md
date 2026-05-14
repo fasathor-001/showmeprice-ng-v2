@@ -70,6 +70,14 @@ The agent's exact verification command:
 npm view next versions --json | jq '[.[] | select(startswith("14."))]'
 ```
 
+## Working pattern lessons
+
+### Design tokens, not magic values
+
+Before any UI work: encode every color, spacing value, radius, shadow, and font size as Tailwind config tokens. Components compose tokens via utility classes. Never paste hex codes into JSX. Never use magic margins. The cost is 30 minutes upfront. The savings: every design tweak from then on touches one config file, not the entire codebase.
+
+This is the same principle as D-016's "schema is the database, not the migrations folder." Single source of truth wins.
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `whatsapp_number`)

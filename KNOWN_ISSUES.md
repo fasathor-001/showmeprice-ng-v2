@@ -16,6 +16,17 @@ When fixing, move from `## Open` to `## Resolved` with commit hash and date.
 
 **Not blocking.** Revisit during Phase I (admin/polish) or sooner if reach for hardening pass.
 
+### K-002 — Accessibility pass needed before launch (medium)
+
+Phase A.5 set up the foundation (focus rings via `focus-visible`, semantic HTML, ARIA labels on icon buttons) but a full accessibility audit hasn't been done. Things to check before launch (Phase J):
+- Color contrast ratios on teal-on-white and verified-green-on-bg (WCAG AA 4.5:1)
+- Keyboard navigation order through hero / categories / featured listings
+- Screen reader pass-through on the search bar (location chip + submit button in same form)
+- Image alt text once real product images are wired (Phase D)
+- Reduced-motion preferences (currently `group-hover:scale-105` ignores `prefers-reduced-motion`)
+
+Not blocking for Phase B onward. Owner / planner can add this to Phase J's scope.
+
 ## Resolved
 
 (none yet)
