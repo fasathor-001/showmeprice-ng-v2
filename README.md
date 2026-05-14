@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ShowMePrice.ng v2
 
-## Getting Started
+Nigeria's verified marketplace. v2 rebuild on Next.js 14 + Supabase + Cloudflare Pages.
 
-First, run the development server:
+## Stack
+
+- Next.js 14 (App Router) + TypeScript + Tailwind CSS v3
+- Supabase (Postgres, RLS, Auth, Edge Functions)
+- Cloudflare Pages via `@cloudflare/next-on-pages`
+- Paystack for payments (NGN only)
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .dev.vars.example .dev.vars   # fill in Supabase credentials when Phase A lands
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Build gate
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Every commit must pass:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm typecheck
+pnpm lint
+pnpm build
+```
 
-## Learn More
+## Deployment
 
-To learn more about Next.js, take a look at the following resources:
+Cloudflare Pages auto-deploys on push to `main` (via the GitHub connection in the Cloudflare dashboard). No CLI deploy command needed.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+For local preview of the production build:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm cf:build      # produces .vercel/output/static
+pnpm cf:preview    # serves the production build locally
+```
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Start here, in this order, every session:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `CLAUDE.md` — required reading for every agent session
+- `AGENT.md` — working discipline rules
+- `ARCHITECTURE.md` — stack and data flow
+- `DECISIONS.md` — locked architectural choices
+- `ROADMAP.md` — phased build order
+- `KNOWN_ISSUES.md` — tracked bugs
+- `MEMORY.md` — lessons learned
+- `docs/RUNBOOK.md` — operational procedures
+- `docs/WORKFLOW.md` — collaboration model
+
+## Status
+
+Kickoff complete. Schema design (Phase A) is next.
