@@ -273,3 +273,49 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+--> statement-breakpoint
+
+-- ============================================
+-- Column freeze: profiles.role can only change for admins
+-- ============================================
+CREATE OR REPLACE FUNCTION freeze_profile_role()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin' AND is_disabled = false
+    ) THEN
+      RAISE EXCEPTION 'profiles.role can only be changed by an admin';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER profiles_freeze_role
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION freeze_profile_role();
+--> statement-breakpoint
+
+-- ============================================
+-- Column freeze: businesses.verification_status admin-only
+-- ============================================
+CREATE OR REPLACE FUNCTION freeze_business_verification()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.verification_status IS DISTINCT FROM OLD.verification_status THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin' AND is_disabled = false
+    ) THEN
+      RAISE EXCEPTION 'businesses.verification_status can only be changed by an admin';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER businesses_freeze_verification
+  BEFORE UPDATE ON businesses
+  FOR EACH ROW EXECUTE FUNCTION freeze_business_verification();

@@ -33,15 +33,13 @@ CREATE POLICY "profiles_public_read"
   ON profiles FOR SELECT
   USING (is_disabled = false);
 
--- Users can update their own profile. Role column is frozen here;
--- only admins can change it (see profiles_admin_update).
+-- Users can update their own row. Column-level freeze on `role` is enforced
+-- by the freeze_profile_role() trigger (D-017), not by RLS — WITH CHECK
+-- can't reference OLD.
 CREATE POLICY "profiles_self_update"
   ON profiles FOR UPDATE
   USING (auth.uid() = id)
-  WITH CHECK (
-    auth.uid() = id
-    AND role IS NOT DISTINCT FROM (SELECT role FROM profiles WHERE id = auth.uid())
-  );
+  WITH CHECK (auth.uid() = id);
 
 -- Admins can update anyone (for disabling / role changes).
 CREATE POLICY "profiles_admin_update"
@@ -63,17 +61,12 @@ CREATE POLICY "businesses_owner_insert"
   ON businesses FOR INSERT
   WITH CHECK (auth.uid() = owner_id);
 
--- Owners can update their own business, but verification_status is frozen
--- (only admins can change it via businesses_admin_update).
+-- Owners can update their own row. Column-level freeze on `verification_status`
+-- is enforced by the freeze_business_verification() trigger (D-017).
 CREATE POLICY "businesses_owner_update"
   ON businesses FOR UPDATE
   USING (auth.uid() = owner_id)
-  WITH CHECK (
-    auth.uid() = owner_id
-    AND verification_status IS NOT DISTINCT FROM (
-      SELECT verification_status FROM businesses WHERE id = businesses.id
-    )
-  );
+  WITH CHECK (auth.uid() = owner_id);
 
 CREATE POLICY "businesses_admin_update"
   ON businesses FOR UPDATE
