@@ -16,7 +16,7 @@ const placeholders: PlaceholderListing[] = [
   {
     id: "1",
     title: "iPhone 15 Pro Max 256GB",
-    priceKobo: 125_000_000,
+    priceKobo: 200_000_000,
     isNegotiable: false,
     sellerName: "TechHub Lagos",
     state: "Lagos",
@@ -86,12 +86,7 @@ export function FeaturedListings() {
                 <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">
                   <listing.icon />
                   <div className="absolute top-2 left-2">
-                    <Badge
-                      variant="teal"
-                      className="bg-white text-teal-700 border border-neutral-200"
-                    >
-                      FEATURED
-                    </Badge>
+                    <Badge variant="featured">FEATURED</Badge>
                   </div>
                 </div>
                 <div className="p-3">

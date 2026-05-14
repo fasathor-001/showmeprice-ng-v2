@@ -88,7 +88,7 @@ export function Footer() {
           </div>
         </div>
         <div className="py-6 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-ink-600">
-          <p>© 2026 ShowMePrice.ng — Nigeria&apos;s verified marketplace.</p>
+          <p>© {new Date().getFullYear()} ShowMePrice.ng — Nigeria&apos;s verified marketplace.</p>
           <p>Made for buyers and sellers in Nigeria.</p>
         </div>
       </Container>

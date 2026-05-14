@@ -38,6 +38,9 @@ const iconMap: Record<string, () => JSX.Element> = {
   factory: () => (
     <SvgIcon path="M2 22V10l6 4V10l6 4V10l6 4v8z M6 18h.01M10 18h.01M14 18h.01M18 18h.01" />
   ),
+  tag: () => (
+    <SvgIcon path="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13.1V3.5a.5.5 0 0 1 .5-.5h9.6l7.5 7.6a2 2 0 0 1 0 2.8ZM7 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z" />
+  ),
 };
 
 function SvgIcon({ path }: { path: string }) {
@@ -80,7 +83,7 @@ export async function PopularCategories() {
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3">
           {items.map((cat) => {
-            const Icon = iconMap[cat.icon_name ?? ""] ?? iconMap.smartphone;
+            const Icon = iconMap[cat.icon_name ?? ""] ?? iconMap.tag;
             return (
               <Link
                 key={cat.id}
