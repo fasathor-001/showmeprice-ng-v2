@@ -72,6 +72,14 @@ npm view next versions --json | jq '[.[] | select(startswith("14."))]'
 
 ## Working pattern lessons
 
+### Local `pnpm build` is optimistic about routes Next.js auto-generates
+
+Cloudflare Pages' adapter enforces "all non-static routes must export edge runtime." Next.js's local `pnpm build` does NOT enforce this. The auto-generated `/_not-found` (and the would-be auto-generated `/error`, `/global-error` if we triggered them) won't have the edge runtime export and will silently pass local build, then fail Cloudflare deploy.
+
+Fix: explicitly author `not-found.tsx`, `error.tsx`, and `global-error.tsx` with `export const runtime = "edge"`. Don't rely on Next.js defaults.
+
+Watch-pattern: any time a new top-level route group is added (e.g. Phase B's `/sign-up`, `/sign-in`, etc.), confirm `pnpm build`'s output explicitly lists the system routes, not implicit defaults.
+
 ### Auth metadata flow: signup data must match trigger's read path
 
 When using Supabase's `handle_new_user` trigger to auto-create profile rows, the trigger reads from `raw_user_meta_data->>'key'`. The signup call MUST pass these values via `signUp({ options: { data: { key1, key2 } } })` for the trigger to populate them.
