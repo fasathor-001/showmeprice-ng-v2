@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
-import { Card } from "@/components/ui";
+import { Card, ToastFromSearchParams } from "@/components/ui";
 import { SignOutButton } from "./SignOutButton";
 
 export const runtime = "edge";
@@ -24,6 +24,7 @@ export default async function DashboardPage() {
 
   return (
     <Container>
+      <ToastFromSearchParams />
       <div className="py-10 sm:py-14">
         <div className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">

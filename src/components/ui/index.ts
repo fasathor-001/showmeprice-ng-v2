@@ -5,3 +5,5 @@ export { Badge } from "./Badge";
 export { Avatar } from "./Avatar";
 export { IconButton } from "./IconButton";
 export { Skeleton } from "./Skeleton";
+export { Toast } from "./Toast";
+export { ToastFromSearchParams } from "./ToastFromSearchParams";

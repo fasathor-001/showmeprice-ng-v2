@@ -179,5 +179,5 @@ export async function updatePasswordAction(
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/dashboard?toast=password-updated");
 }
