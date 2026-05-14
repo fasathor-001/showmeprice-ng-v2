@@ -1,7 +1,14 @@
-# Supabase — fresh project, to be created in Phase A
-NEXT_PUBLIC_SUPABASE_URL=
+# Supabase project (eu-west-2)
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# Paystack — to be added in Phase G (Pro upgrade)
+# Direct connection (for Drizzle migrations + local scripts). Port 5432.
+DATABASE_URL=postgresql://postgres:YOUR_DB_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres
+
+# Pooler connection (for runtime queries from edge). Port 6543, transaction mode.
+DATABASE_URL_POOLED=postgresql://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@aws-0-eu-west-2.pooler.supabase.com:6543/postgres
+
+# Paystack (Phase G — leave blank for now)
 NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=
+PAYSTACK_SECRET_KEY=
