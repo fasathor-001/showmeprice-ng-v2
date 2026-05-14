@@ -9,8 +9,9 @@
 | Styling | Tailwind CSS v3 | Stable, well-supported |
 | Database | Supabase Postgres + RLS | Mature, Naira-friendly, generous free tier |
 | Auth | Supabase Auth (`@supabase/ssr`) | SSR-first |
-| ORM/types | Drizzle | Type-safe migrations |
-| Runtime queries | `@supabase/supabase-js` | Realtime, RLS-aware |
+| ORM/types | Drizzle | Type-safe schema, migrations, generated types |
+| Edge-runtime queries | `@supabase/supabase-js` via `@supabase/ssr` | fetch-based, RLS-aware, runs on Cloudflare Pages Functions |
+| Node-runtime queries | Drizzle + `postgres-js` (`src/lib/db.ts`) | Scripts, seed, drizzle-kit only — `postgres-js` doesn't run on edge (D-019) |
 | Validation | Zod | Forms + server actions |
 | Forms | React Hook Form | Stable, ergonomic |
 | Payments | Paystack | Nigerian market standard |
@@ -25,10 +26,13 @@
 
 ## Data flow
 
-1. **Public pages:** Server Component → `supabase.server.from(...).select()` → render HTML.
-2. **Authenticated pages:** Server Component reads cookie session → `supabase.server` with auth context → renders.
-3. **Mutations:** Server Actions → Supabase mutation → `revalidatePath()` for affected pages.
-4. **Realtime (messaging):** Client Component subscribes to Supabase Realtime channel.
+All edge-runtime paths (1-4 below) use the Supabase JS client. The Drizzle pooled client is reserved for Node contexts (seed scripts, `drizzle-kit`, any future Node-runtime API route).
+
+1. **Public pages (edge):** Server Component → `createClient()` from `src/lib/supabase/server.ts` → `.from(...).select()` against PostgREST → render HTML.
+2. **Authenticated pages (edge):** Server Component reads cookie session → `supabase.server` with auth context → renders.
+3. **Mutations (edge):** Server Actions → Supabase mutation → `revalidatePath()` for affected pages.
+4. **Realtime (messaging) (edge):** Client Component subscribes to Supabase Realtime channel.
+5. **Scripts / migrations (Node):** Drizzle pooled client from `src/lib/db.ts` connects via the Session Pooler (D-018).
 
 ## Key flows (later phases)
 
