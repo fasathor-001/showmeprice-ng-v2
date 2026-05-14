@@ -19,8 +19,8 @@ importers:
         version: 18.3.1(react@18.3.1)
     devDependencies:
       '@cloudflare/next-on-pages':
-        specifier: ^1.13.16
-        version: 1.13.16(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(vercel@54.0.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(wrangler@4.91.0)
+        specifier: ^1.13.15
+        version: 1.13.15(vercel@54.0.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(wrangler@4.91.0)
       '@types/node':
         specifier: ^20
         version: 20.19.41
@@ -71,14 +71,13 @@ packages:
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
     engines: {node: '>=22.0.0'}
 
-  '@cloudflare/next-on-pages@1.13.16':
-    resolution: {integrity: sha512-52h51WNcfmx3szTdTd+n/xgz4qNxFtjOGG0zwnUAhTg8cjPwSUYmZp0OPRNw2jYG9xHwRS2ttSPAS8tcGkQGsw==}
+  '@cloudflare/next-on-pages@1.13.15':
+    resolution: {integrity: sha512-HTLgU4S6ESRz79E6a5iTKLk7J/i0/5DL+3q8WfG47muH/dQpSl98ZpZh4R3qPf77HGghZUX934Mt5zwHle8uDw==}
     deprecated: 'Please use the OpenNext adapter instead: https://opennext.js.org/cloudflare'
     hasBin: true
     peerDependencies:
       '@cloudflare/workers-types': ^4.20240208.0
-      next: '>=14.3.0 && <=15.5.2'
-      vercel: '>=30.0.0 && <=47.0.4'
+      vercel: '>=30.0.0'
       wrangler: ^3.28.2 || ^4.0.0
     peerDependenciesMeta:
       '@cloudflare/workers-types':
@@ -3745,7 +3744,7 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/next-on-pages@1.13.16(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(vercel@54.0.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(wrangler@4.91.0)':
+  '@cloudflare/next-on-pages@1.13.15(vercel@54.0.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(wrangler@4.91.0)':
     dependencies:
       acorn: 8.16.0
       ast-types: 0.14.2
@@ -3756,7 +3755,6 @@ snapshots:
       esbuild: 0.15.18
       js-yaml: 4.1.1
       miniflare: 3.20250718.3
-      next: 14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       package-manager-manager: 0.2.0
       pcre-to-regexp: 1.1.0
       semver: 7.8.0
