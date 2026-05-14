@@ -1,0 +1,7 @@
+# Supabase — fresh project, to be created in Phase A
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Paystack — to be added in Phase G (Pro upgrade)
+NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=
