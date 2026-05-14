@@ -127,3 +127,57 @@ export async function requestPasswordResetAction(
 
   return { success: true };
 }
+
+export async function updatePasswordAction(
+  _prev: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!password) return { errors: { password: "Password is required" } };
+  if (password.length < 8)
+    return { errors: { password: "Password must be at least 8 characters" } };
+  if (password.length > 72)
+    return { errors: { password: "Password is too long (max 72 characters)" } };
+  if (password !== confirmPassword) {
+    return { errors: { _form: "Passwords don't match" } };
+  }
+
+  const supabase = createClient();
+
+  // Defense in depth: confirm an active session exists before updating.
+  // Without this, an unauthenticated POST surfaces a Supabase error instead
+  // of a clean message about expired recovery state.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      errors: {
+        _form: "Your session has expired. Please request a new reset link.",
+      },
+    };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    if (error.message.toLowerCase().includes("same password")) {
+      return {
+        errors: {
+          password: "New password must be different from your current password",
+        },
+      };
+    }
+    if (error.message.toLowerCase().includes("rate")) {
+      return {
+        errors: { _form: "Too many attempts. Please wait a moment and try again." },
+      };
+    }
+    return { errors: { _form: error.message } };
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
+}
