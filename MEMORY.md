@@ -72,6 +72,14 @@ npm view next versions --json | jq '[.[] | select(startswith("14."))]'
 
 ## Working pattern lessons
 
+### Auth metadata flow: signup data must match trigger's read path
+
+When using Supabase's `handle_new_user` trigger to auto-create profile rows, the trigger reads from `raw_user_meta_data->>'key'`. The signup call MUST pass these values via `signUp({ options: { data: { key1, key2 } } })` for the trigger to populate them.
+
+Easy to miss: a signup without `options.data` succeeds, the user gets created, the profile gets created with empty/default values, and we have no good recovery UX. Always verify the trigger's expected keys match the signup form's submitted keys.
+
+The Phase A trigger reads `display_name` and `whatsapp_number`. The Phase B signup action passes exactly those keys. If a later phase adds a profile field that should be set at signup, both the trigger AND the signup payload need updating.
+
 ### Design tokens, not magic values
 
 Before any UI work: encode every color, spacing value, radius, shadow, and font size as Tailwind config tokens. Components compose tokens via utility classes. Never paste hex codes into JSX. Never use magic margins. The cost is 30 minutes upfront. The savings: every design tweak from then on touches one config file, not the entire codebase.

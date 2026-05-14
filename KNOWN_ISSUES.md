@@ -27,6 +27,24 @@ Phase A.5 set up the foundation (focus rings via `focus-visible`, semantic HTML,
 
 Not blocking for Phase B onward. Owner / planner can add this to Phase J's scope.
 
+### K-003 — Spam signups possible (email confirmation OFF)
+
+Per D-023, email confirmation is off at launch. This means anyone with a working SMTP-deliverable email can create a profile without proving they own the email. Risks:
+- Bots creating mass accounts to abuse contact-reveal (Phase F)
+- Spam profiles muddying the verified-seller signal
+- Email-typo signups that can't recover their account
+
+Not blocking for Phase B. Mitigations available if abuse surfaces:
+- Flip email confirmation ON (1-line Supabase Dashboard change)
+- Add rate-limiting to signups by IP (Cloudflare Pages can do this via Workers config)
+- Require email verification before seller upgrade (Phase D could enforce this even if buyer signups don't)
+
+### K-004 — No "delete account" flow
+
+Phase B creates accounts but provides no way to delete one. RLS policies + cascade rules in Phase A's schema would technically allow it, but there's no UI. Buyers should be able to self-delete; sellers may need admin-mediated deletion to handle pending escrow/disputes (Phase H).
+
+Not blocking for Phase B. Add in Phase I (admin/polish) or sooner if requested.
+
 ## Resolved
 
 (none yet)

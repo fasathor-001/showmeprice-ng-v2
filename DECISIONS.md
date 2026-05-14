@@ -168,3 +168,42 @@ Both clients connect to the same database. RLS applies to both. Choosing one ove
 **Decision:** All design values live in `tailwind.config.ts`. No inline hex codes, no magic spacing numbers in component markup. Components use Tailwind utility classes only.
 
 **Why:** When (not if) we tune the design, we change one token file, not 200 component files. Phase A's "phantom column" lesson applies broadly: single source of truth saves debugging hours later.
+
+## D-022: Email + password only at v2 launch; phone OTP and Google OAuth deferred
+
+**Context:** Phase B implements user authentication. Multiple options considered: email + password, phone OTP (Supabase supports this with SMS provider configuration), Google OAuth, social providers generally.
+
+**Decision:** Email + password only at launch. Phone is captured as a profile field (`whatsapp_number`) but is not an authentication factor.
+
+**Why:**
+- Phone OTP requires SMS provider setup (Twilio or similar) and per-SMS costs. Real money for unproven onboarding flow.
+- Google OAuth adds a provider integration and consent flow that's not strictly necessary for v2 validation.
+- Email + password is universal, free, and well-understood by users.
+- Phone is captured for the seller-buyer WhatsApp flow (the actual product value), not for auth.
+
+**Revisit when:** sign-up conversion is below target and we suspect email friction is the cause, or when Nigerian users disproportionately struggle with the email flow. Either signal is a reason to add phone OTP. Until then, the simpler stack wins.
+
+## D-023: Email confirmation OFF at launch
+
+**Context:** Supabase's email auth has a toggle: "Confirm email" (require email-click before sign-in works) on/off.
+
+**Decision:** OFF at v2 launch. Users sign up and are immediately signed in.
+
+**Why:**
+- Onboarding friction kills marketplaces. Every step before "able to browse and contact a seller" is a drop-off point.
+- The trust gate that matters is **seller verification** (Phase D — ID, business, bank account, admin review). Buyers being verified-via-email adds friction without commensurate trust benefit.
+- Abuse via fake email signups is low-cost to clean up (admin can delete profiles + cascading data) and we can flip the toggle if abuse becomes real.
+
+**Operational consequence:** spam signups are possible. K-003 tracks this — if we see real abuse, we flip the toggle, accept the friction, and ship.
+
+## D-024: Server Actions for auth forms (no separate API routes)
+
+**Decision:** All auth forms (`sign-up`, `sign-in`, `forgot-password`, `sign-out`) submit to Next.js Server Actions, not to API route handlers.
+
+**Why:**
+- Native to App Router. Less code, less plumbing.
+- Form submission, error state, and pending state are first-class via `useFormState` and `useFormStatus`.
+- Server Actions run on the edge (same runtime as the rest of the app).
+- API routes are still available if a future feature genuinely needs an HTTP endpoint (e.g. webhooks from Paystack — Phase G).
+
+**Trade-off:** Server Actions are progressive-enhancement friendly but tied to Next.js. We accept the framework lock-in — we're not portable to other React frameworks anyway, given the Cloudflare Pages + Next.js + edge runtime stack.
