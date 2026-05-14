@@ -1,39 +1,60 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+
+const PROTECTED_PREFIXES = ["/dashboard"];
+const AUTH_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/forgot-password"];
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request: { headers: request.headers } });
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: "", ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value: "", ...options });
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
         },
       },
     }
   );
 
-  // Refresh session if present. Cookies are set on response above.
-  await supabase.auth.getUser();
+  // getUser() refreshes the auth token cookie if needed. Must run before
+  // any redirect decisions so cookies propagate even on a redirect response.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  return response;
+  const { pathname } = request.nextUrl;
+
+  if (!user && PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  if (user && AUTH_ONLY_PREFIXES.some((p) => pathname.startsWith(p))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.searchParams.delete("next");
+    return NextResponse.redirect(url);
+  }
+
+  return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Match all routes except static assets, _next, and the auth callback.
+    // The callback handles its own session exchange and must not be intercepted.
+    "/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
