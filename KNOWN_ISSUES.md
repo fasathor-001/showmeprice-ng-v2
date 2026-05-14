@@ -45,6 +45,18 @@ Phase B creates accounts but provides no way to delete one. RLS policies + casca
 
 Not blocking for Phase B. Add in Phase I (admin/polish) or sooner if requested.
 
+### K-006 — Recovery session doesn't sign out other sessions after password change
+
+When a user resets their password via the recovery flow, their other active sessions (on other devices or browsers) remain signed in until their session tokens naturally expire (typically 1 hour for the access token, longer for refresh tokens).
+
+If the password reset was triggered because someone else had access to the account (account compromise), the attacker's session stays valid until token expiry.
+
+**Severity:** medium. Real security concern but with bounded blast radius (existing sessions can't refresh once the refresh token expires, and Supabase invalidates refresh tokens on password change in newer versions — needs verification for the version we're on).
+
+**Fix when prioritized:** After successful password update, call `supabase.auth.signOut({ scope: "others" })` to invalidate all other sessions for that user. This is a single line addition to `updatePasswordAction` after `updateUser` succeeds.
+
+**Not blocking for Phase B.7.** Add to Phase I (polish) or sooner if abuse surfaces.
+
 ## Resolved
 
 (none yet)

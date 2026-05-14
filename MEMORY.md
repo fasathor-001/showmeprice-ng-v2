@@ -80,6 +80,55 @@ Fix: explicitly author `not-found.tsx`, `error.tsx`, and `global-error.tsx` with
 
 Watch-pattern: any time a new top-level route group is added (e.g. Phase B's `/sign-up`, `/sign-in`, etc.), confirm `pnpm build`'s output explicitly lists the system routes, not implicit defaults.
 
+### Recovery-token sessions are real sessions — don't conflate "logged in" with "knows their password"
+
+Supabase's password reset flow works by issuing a one-time recovery code that, when exchanged via `exchangeCodeForSession` or `verifyOtp`, creates an authenticated session. From the application's perspective, the user is signed in — `getUser()` returns their record, RLS treats them as authenticated, they can call mutations.
+
+This is a feature, not a bug: it lets the password-reset UI call `supabase.auth.updateUser({ password })` directly without re-authenticating.
+
+The trap: if the recovery callback simply redirects to `/dashboard` and shows the dashboard, the user appears "logged in" but never set a new password. If they forgot their old password, they're now in a session that will expire (typically 1 hour) and then they can't get back in.
+
+**Pattern:** any recovery flow that uses a session-creating token must lead the user to a state-setting page (set new password, set new email, etc.) before they leave the flow. Treat the recovery session as a single-purpose context.
+
+Phase B made this mistake. Phase B.7 fixed it. If we ever add other recovery flows (email change, MFA reset, etc.), the same pattern applies.
+
+### Supabase email templates and the callback handler are a tight contract — verify the URL shape
+
+The default Supabase email templates use `{{ .ConfirmationURL }}` which generates implicit/hash-flow URLs (`https://<site>/#access_token=...`). Our callback handler at `/auth/callback` expects code-flow query parameters (`?code=...` or `?token_hash=...`).
+
+The default template silently bypasses our handler entirely. Users click reset links and land at the site root with a hash fragment that nothing reads. They're either dropped onto the home page (appearing logged out) or, if Supabase's client-side JS happens to be loaded, signed in invisibly without a path to set a new password. Both are broken.
+
+**Fix:** customize the email template to use `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=<type>&next=<path>`. The callback handler must support `token_hash` via `verifyOtp` (used by email-link flows) in addition to `code` via `exchangeCodeForSession` (used by OAuth and PKCE).
+
+**Operational:** whenever a phase introduces or modifies a Supabase email template, verify the URL shape matches what `/auth/callback` parses. Add this as a pre-flight check in AGENT.md for any auth-related phase that touches templates.
+
+### Windows .next/trace EPERM lock — third occurrence, banking the pattern
+
+Three times now (Phase A.5, Phase B amendments, Phase B.7.4) Windows dev iteration has hit `EPERM: operation not permitted` on `.next/trace` during `pnpm build`. Cause: leftover Node processes from prior `pnpm dev` sessions still holding the file lock after Ctrl+C didn't reap them.
+
+**Recipe:**
+```powershell
+Get-Process node | Stop-Process -Force
+Remove-Item -Recurse -Force .next
+pnpm build
+```
+
+If `pnpm dev` is currently running in another terminal, kill that terminal too. Ctrl+C in PowerShell does not reliably stop child node processes.
+
+Pattern is now reliable enough that we don't need to debug it case-by-case — when build hits EPERM on `.next`, run the recipe above and rebuild.
+
+### `replace_all: true` is dangerous on short generic code patterns
+
+When editing files via Edit-with-replace-all, common code patterns (like `redirect("/dashboard");`, `return null;`, or any short non-distinctive line) appear in many places. Replace-all will silently fire on every match.
+
+Phase B.7.5 hit this when editing `updatePasswordAction`: the target block `revalidatePath("/", "layout"); redirect("/dashboard");` appeared in three actions (signUp, signIn, updatePassword). Using `replace_all` accidentally re-routed signUp and signIn to `/dashboard?toast=password-updated` too. Caught on re-read, reverted with surgical edits.
+
+**Rule:** before using `replace_all: true`, verify the target string is genuinely unique to the intended call site. For common-pattern lines, use:
+- Unique surrounding context as part of the `old_str` (e.g. the function name above it + the line itself)
+- Or separate `Edit` calls with single-call replacements
+
+Generic strings (any short common code) → always use unique context, never replace_all.
+
 ### Auth metadata flow: signup data must match trigger's read path
 
 When using Supabase's `handle_new_user` trigger to auto-create profile rows, the trigger reads from `raw_user_meta_data->>'key'`. The signup call MUST pass these values via `signUp({ options: { data: { key1, key2 } } })` for the trigger to populate them.
