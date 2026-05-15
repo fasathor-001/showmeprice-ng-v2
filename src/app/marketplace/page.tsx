@@ -11,17 +11,21 @@ const PAGE_SIZE = 24;
 export default async function MarketplacePage() {
   const supabase = createClient();
 
+  // Visibility gate (Phase C.5.4 + RLS policy P.2): only show listings whose
+  // business is verified. `!inner` forces a real join so the verification_status
+  // filter applies at the join layer instead of post-filtering nulls.
   const { data: listings } = await supabase
     .from("products")
     .select(
       `
       id, title, price_kobo, is_negotiable, created_at,
       product_images ( storage_path, position ),
-      businesses ( business_name, verification_status ),
+      businesses!inner ( business_name, verification_status ),
       nigerian_states ( name )
     `
     )
     .eq("status", "active")
+    .eq("businesses.verification_status", "verified")
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
 

@@ -8,17 +8,19 @@ const FEATURED_COUNT = 6;
 export async function FeaturedListings() {
   const supabase = createClient();
 
+  // Visibility gate (Phase C.5.4 + RLS policy P.2): only verified-seller listings.
   const { data: listings } = await supabase
     .from("products")
     .select(
       `
       id, title, price_kobo, is_negotiable,
       product_images ( storage_path, position ),
-      businesses ( business_name, verification_status ),
+      businesses!inner ( business_name, verification_status ),
       nigerian_states ( name )
     `
     )
     .eq("status", "active")
+    .eq("businesses.verification_status", "verified")
     .order("created_at", { ascending: false })
     .limit(FEATURED_COUNT);
 

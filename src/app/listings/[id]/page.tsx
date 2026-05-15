@@ -30,13 +30,20 @@ export default async function ListingDetailPage({
 
   if (!listing || listing.status !== "active") notFound();
 
+  const business = Array.isArray(listing.businesses)
+    ? listing.businesses[0]
+    : listing.businesses;
+
+  // Visibility gate (Phase C.5.4): RLS P.2 already filters this case at the
+  // DB layer, but a direct .eq("id", ...) without an inner-join filter could
+  // theoretically slip through if RLS regresses. Defensive 404 here keeps the
+  // gate honest regardless of DB state.
+  if (!business || business.verification_status !== "verified") notFound();
+
   const images = [...(listing.product_images ?? [])].sort(
     (a, b) => a.position - b.position
   );
   const primaryImage = images[0]?.storage_path;
-  const business = Array.isArray(listing.businesses)
-    ? listing.businesses[0]
-    : listing.businesses;
   const category = Array.isArray(listing.categories)
     ? listing.categories[0]
     : listing.categories;
