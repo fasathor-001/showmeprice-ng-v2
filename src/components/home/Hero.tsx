@@ -1,6 +1,14 @@
 import { Container } from "@/components/layout";
+import { createClient } from "@/lib/supabase/server";
+import { sortStatesByFeatured } from "@/lib/states";
 
-export function Hero() {
+export async function Hero() {
+  const supabase = createClient();
+  const { data: statesData } = await supabase
+    .from("nigerian_states")
+    .select("id, name, slug");
+  const states = sortStatesByFeatured(statesData ?? []);
+
   return (
     <section className="bg-neutral-50 border-b border-neutral-200">
       <Container>
@@ -13,7 +21,8 @@ export function Hero() {
             Nigeria&apos;s marketplace where every listing has a price and every seller is verified.
           </p>
 
-          {/* Search is a stub for Phase A.5; Phase E wires it. */}
+          {/* Submits q (and optional state slug) to /marketplace. Search
+              wiring lands in Phase D.5. */}
           <form action="/marketplace" className="mt-8 max-w-xl mx-auto">
             <div className="flex items-stretch bg-white border border-neutral-300 rounded-xl shadow-card overflow-hidden focus-within:ring-2 focus-within:ring-teal-400">
               <div className="pl-4 self-center text-neutral-400">
@@ -26,11 +35,25 @@ export function Hero() {
                 className="flex-1 bg-transparent border-0 outline-none text-base text-ink placeholder:text-neutral-400 px-3 py-3 min-w-0"
                 aria-label="Search the marketplace"
               />
-              <div className="hidden sm:flex items-center gap-1.5 px-3 border-l border-neutral-200 text-sm text-ink-600">
-                <MapPinIcon />
-                <span>Lagos</span>
-                <ChevronDownIcon />
-              </div>
+              <label className="hidden sm:flex items-center gap-1.5 px-3 border-l border-neutral-200 text-sm text-ink-600 focus-within:bg-neutral-50">
+                <span className="text-neutral-400">
+                  <MapPinIcon />
+                </span>
+                <span className="sr-only">Location</span>
+                <select
+                  name="state"
+                  defaultValue=""
+                  aria-label="Filter by state"
+                  className="bg-transparent border-0 outline-none text-sm text-ink-600 py-2 pr-1 cursor-pointer focus:text-ink"
+                >
+                  <option value="">All Nigeria</option>
+                  {states.map((s) => (
+                    <option key={s.id} value={s.slug}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="submit"
                 className="bg-teal-600 hover:bg-teal-700 text-white font-medium text-sm px-5 sm:px-6 transition-colors"
@@ -78,23 +101,6 @@ function MapPinIcon() {
     >
       <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
       <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-function ChevronDownIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }

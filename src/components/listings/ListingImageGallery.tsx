@@ -75,18 +75,23 @@ export function ListingImageGallery({ images, title }: Props) {
 
   return (
     <div>
-      {/* Primary image — click to open lightbox */}
+      {/* Primary image — click to open lightbox.
+          Phase D.3.1: dropped the fixed aspect-ratio container and the grey
+          background so the image renders at its natural shape (capped at
+          max-height) without visible letterbox bars. Landscape photos fill
+          the column width edge-to-edge; portrait photos float on white that
+          blends with the page background. */}
       <button
         type="button"
         onClick={() => setLightboxOpen(true)}
-        className="block w-full aspect-square sm:aspect-[4/3] bg-neutral-100 rounded-xl overflow-hidden mb-3 cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+        className="block w-full max-h-[60vh] sm:max-h-[700px] mb-3 rounded-xl overflow-hidden bg-white cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
         aria-label={`View ${title} image ${selectedIndex + 1} of ${images.length} fullscreen`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={current.public_url}
           alt={`${title} — image ${selectedIndex + 1}`}
-          className="w-full h-full object-contain bg-white"
+          className="block w-full max-h-[60vh] sm:max-h-[700px] object-contain"
         />
       </button>
 
