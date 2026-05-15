@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
-import { Card, ToastFromSearchParams } from "@/components/ui";
+import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { SignOutButton } from "./SignOutButton";
 
 export const runtime = "edge";
@@ -23,12 +23,43 @@ export default async function DashboardPage() {
       .single(),
     supabase
       .from("businesses")
-      .select("id, verification_status")
+      .select("id, verification_status, rejection_reason")
       .eq("owner_id", user.id)
       .maybeSingle(),
   ]);
 
-  const displayName = profile?.display_name || user.email?.split("@")[0] || "there";
+  // Only fetch the latest seller_verifications row when it'd shift the
+  // banner state — verified sellers don't need it.
+  let latestSubmission: { status: string } | null = null;
+  if (business && business.verification_status !== "verified") {
+    const { data } = await supabase
+      .from("seller_verifications")
+      .select("status")
+      .eq("business_id", business.id)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    latestSubmission = data;
+  }
+
+  const verificationState:
+    | "no_business"
+    | "unsubmitted"
+    | "pending"
+    | "rejected"
+    | "verified" = !business
+    ? "no_business"
+    : business.verification_status === "verified"
+      ? "verified"
+      : latestSubmission?.status === "pending"
+        ? "pending"
+        : latestSubmission?.status === "rejected" ||
+            business.verification_status === "rejected"
+          ? "rejected"
+          : "unsubmitted";
+
+  const displayName =
+    profile?.display_name || user.email?.split("@")[0] || "there";
   const hasBusiness = business !== null;
 
   return (
@@ -55,11 +86,30 @@ export default async function DashboardPage() {
 
           {hasBusiness ? (
             <Card>
-              <h2 className="text-sm font-medium text-ink mb-1">Your business</h2>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className="text-sm font-medium text-ink">Your business</h2>
+                {verificationState === "verified" && (
+                  <Badge variant="verified">Verified</Badge>
+                )}
+                {verificationState === "pending" && (
+                  <Badge variant="teal">Under review</Badge>
+                )}
+                {verificationState === "rejected" && (
+                  <Badge variant="danger">Rejected</Badge>
+                )}
+                {verificationState === "unsubmitted" && (
+                  <Badge variant="warning">Verify</Badge>
+                )}
+              </div>
               <p className="text-xs text-ink-600 mb-3">
-                {business.verification_status === "verified"
-                  ? "Manage your listings and business profile."
-                  : "Finish verification to publish your listings."}
+                {verificationState === "verified" &&
+                  "Manage your listings and business profile."}
+                {verificationState === "pending" &&
+                  "We're reviewing your verification (1-2 business days)."}
+                {verificationState === "rejected" &&
+                  "Verification not approved — resubmit to go live."}
+                {verificationState === "unsubmitted" &&
+                  "Finish verification to publish your listings."}
               </p>
               <div className="flex flex-col gap-2">
                 <Link
@@ -68,6 +118,17 @@ export default async function DashboardPage() {
                 >
                   Your listings →
                 </Link>
+                {verificationState === "unsubmitted" ||
+                verificationState === "rejected" ? (
+                  <Link
+                    href="/sell/verify"
+                    className="text-sm text-teal-700 hover:text-teal-900 font-medium"
+                  >
+                    {verificationState === "rejected"
+                      ? "Resubmit verification →"
+                      : "Start verification →"}
+                  </Link>
+                ) : null}
                 <Link
                   href="/sell"
                   className="text-sm text-teal-700 hover:text-teal-900 font-medium"

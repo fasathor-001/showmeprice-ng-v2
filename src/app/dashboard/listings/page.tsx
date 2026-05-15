@@ -17,10 +17,42 @@ export default async function SellerListingsPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, verification_status")
+    .select("id, business_name, verification_status, rejection_reason")
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/sell");
+
+  // Only fetch the latest seller_verifications row when it'd actually
+  // contribute to banner state — verified sellers don't need it.
+  let latestSubmission: {
+    status: string;
+    rejection_reason: string | null;
+  } | null = null;
+  if (business.verification_status !== "verified") {
+    const { data } = await supabase
+      .from("seller_verifications")
+      .select("status, rejection_reason")
+      .eq("business_id", business.id)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    latestSubmission = data;
+  }
+
+  // Single derived state. Both source signals (businesses.verification_status
+  // and the latest seller_verifications row) are kept in sync by the admin
+  // approve/reject actions, but the freeze trigger means non-admins can only
+  // change seller_verifications. Reading both protects against either being
+  // stale.
+  const verificationState: "unsubmitted" | "pending" | "rejected" | "verified" =
+    business.verification_status === "verified"
+      ? "verified"
+      : latestSubmission?.status === "pending"
+        ? "pending"
+        : latestSubmission?.status === "rejected" ||
+            business.verification_status === "rejected"
+          ? "rejected"
+          : "unsubmitted";
 
   const { data: listings } = await supabase
     .from("products")
@@ -39,17 +71,24 @@ export default async function SellerListingsPage() {
     <Container>
       <ToastFromSearchParams />
       <div className="py-8 sm:py-12">
-        <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-3 sm:gap-4 mb-8">
+        <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-3 sm:gap-4 mb-6">
           <div>
             <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
               Your listings
             </h1>
-            <p className="text-sm text-ink-600">
-              {business.business_name}
-              {business.verification_status !== "verified" && (
-                <span className="ml-2 inline-flex">
-                  <Badge variant="warning">Verification pending</Badge>
-                </span>
+            <p className="text-sm text-ink-600 flex flex-wrap items-center gap-2">
+              <span>{business.business_name}</span>
+              {verificationState === "verified" && (
+                <Badge variant="verified">Verified</Badge>
+              )}
+              {verificationState === "pending" && (
+                <Badge variant="teal">Under review</Badge>
+              )}
+              {verificationState === "rejected" && (
+                <Badge variant="danger">Verification rejected</Badge>
+              )}
+              {verificationState === "unsubmitted" && (
+                <Badge variant="warning">Verification needed</Badge>
               )}
             </p>
           </div>
@@ -59,6 +98,68 @@ export default async function SellerListingsPage() {
             </Button>
           </Link>
         </div>
+
+        {verificationState === "unsubmitted" && (
+          <Card className="mb-6 bg-warning-bg border-warning/30">
+            <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-warning-text mb-1">
+                  Complete verification to publish listings
+                </p>
+                <p className="text-xs text-warning-text">
+                  Your listings won&apos;t appear publicly until your seller
+                  account is verified. Verification takes 1-2 business days.
+                </p>
+              </div>
+              <Link href="/sell/verify">
+                <Button variant="primary" size="md">
+                  Start verification
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        )}
+
+        {verificationState === "pending" && (
+          <Card className="mb-6 bg-teal-50 border-teal-200">
+            <p className="text-sm font-medium text-teal-900 mb-1">
+              Your verification is under review
+            </p>
+            <p className="text-xs text-teal-900">
+              We&apos;ll email you within 1-2 business days. You can continue
+              preparing draft listings — they&apos;ll appear publicly once
+              your account is approved.
+            </p>
+          </Card>
+        )}
+
+        {verificationState === "rejected" && (
+          <Card className="mb-6 bg-danger-bg border-danger/30">
+            <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-danger-text mb-1">
+                  Verification not approved
+                </p>
+                {(latestSubmission?.rejection_reason ||
+                  business.rejection_reason) && (
+                  <p className="text-xs text-danger-text mb-2">
+                    Reason:{" "}
+                    {latestSubmission?.rejection_reason ??
+                      business.rejection_reason}
+                  </p>
+                )}
+                <p className="text-xs text-danger-text">
+                  Please resubmit with corrections.
+                </p>
+              </div>
+              <Link href="/sell/verify">
+                <Button variant="primary" size="md">
+                  Resubmit verification
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        )}
 
         {items.length === 0 ? (
           <Card>
