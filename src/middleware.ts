@@ -6,6 +6,7 @@ const PROTECTED_PREFIXES = [
   "/reset-password",
   "/sell",
   "/listings/new",
+  "/admin",
 ];
 const AUTH_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/forgot-password"];
 

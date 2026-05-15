@@ -620,6 +620,166 @@ export async function submitVerificationAction(
   redirect("/sell/verify/submitted");
 }
 
+// --- Admin verification review (Phase C.5.6) ----------------------------------
+//
+// approve / reject run as the authenticated admin user. Phase A's
+// businesses_freeze_verification trigger checks auth.uid() against profiles
+// for an admin row; with the admin signed in, the trigger allows the
+// verification_status update. Service role would bypass RLS but ALSO has
+// auth.uid() = NULL which fails the trigger's admin check, so we
+// deliberately use the normal authenticated client here.
+
+async function requireAdmin(): Promise<
+  | { ok: true; userId: string; supabase: ReturnType<typeof createClient> }
+  | { ok: false; reason: "unauthenticated" | "not_admin" }
+> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, reason: "unauthenticated" };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role !== "admin") return { ok: false, reason: "not_admin" };
+  return { ok: true, userId: user.id, supabase };
+}
+
+export async function approveVerificationAction(
+  verificationId: string
+): Promise<void> {
+  if (!verificationId) return;
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    redirect(auth.reason === "unauthenticated" ? "/sign-in" : "/dashboard");
+  }
+  const { userId, supabase } = auth;
+
+  const { data: verification } = await supabase
+    .from("seller_verifications")
+    .select("id, business_id, status")
+    .eq("id", verificationId)
+    .maybeSingle();
+  if (!verification || verification.status !== "pending") {
+    redirect("/admin/verifications");
+  }
+
+  // verification_status enum has no 'approved' value — both
+  // seller_verifications.status and businesses.verification_status share the
+  // same enum which uses 'verified' for the success state.
+  await supabase
+    .from("seller_verifications")
+    .update({
+      status: "verified",
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: userId,
+    })
+    .eq("id", verificationId);
+
+  await supabase
+    .from("businesses")
+    .update({ verification_status: "verified" })
+    .eq("id", verification.business_id);
+
+  redirect("/admin/verifications?toast=verification-approved");
+}
+
+interface RejectVerificationErrors {
+  rejectionReason?: string;
+  _form?: string;
+}
+
+interface RejectVerificationResult {
+  errors?: RejectVerificationErrors;
+}
+
+export async function rejectVerificationAction(
+  _prev: RejectVerificationResult | null,
+  formData: FormData
+): Promise<RejectVerificationResult> {
+  const verificationId = String(formData.get("verificationId") ?? "");
+  const rejectionReason = String(formData.get("rejectionReason") ?? "").trim();
+
+  if (!verificationId)
+    return { errors: { _form: "Missing verification ID" } };
+  if (!rejectionReason)
+    return { errors: { rejectionReason: "Rejection reason is required" } };
+  if (rejectionReason.length < 10)
+    return {
+      errors: { rejectionReason: "Reason must be at least 10 characters" },
+    };
+  if (rejectionReason.length > 500)
+    return {
+      errors: { rejectionReason: "Reason is too long (max 500)" },
+    };
+
+  try {
+    const auth = await requireAdmin();
+    if (!auth.ok) {
+      return {
+        errors: {
+          _form:
+            auth.reason === "unauthenticated"
+              ? "Sign in required"
+              : "Admin only",
+        },
+      };
+    }
+    const { userId, supabase } = auth;
+
+    const { data: verification } = await supabase
+      .from("seller_verifications")
+      .select("id, business_id, status")
+      .eq("id", verificationId)
+      .maybeSingle();
+    if (!verification || verification.status !== "pending") {
+      return { errors: { _form: "Already reviewed or not found" } };
+    }
+
+    const { error: verifyErr } = await supabase
+      .from("seller_verifications")
+      .update({
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: userId,
+        rejection_reason: rejectionReason,
+      })
+      .eq("id", verificationId);
+    if (verifyErr) return { errors: { _form: verifyErr.message } };
+
+    const { error: bizErr } = await supabase
+      .from("businesses")
+      .update({
+        verification_status: "rejected",
+        rejection_reason: rejectionReason,
+      })
+      .eq("id", verification.business_id);
+    if (bizErr) return { errors: { _form: bizErr.message } };
+  } catch (e) {
+    if (
+      e &&
+      typeof e === "object" &&
+      "digest" in e &&
+      typeof (e as { digest?: unknown }).digest === "string" &&
+      (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e;
+    }
+    return {
+      errors: {
+        _form: `Couldn't reject verification: ${
+          e instanceof Error ? e.message : "unknown error"
+        }`,
+      },
+    };
+  }
+
+  redirect("/admin/verifications?toast=verification-rejected");
+}
+
 interface ListingActionResult {
   errors?: ListingValidationErrors;
   success?: boolean;

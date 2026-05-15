@@ -44,6 +44,14 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "success",
     message: "Business updated successfully.",
   },
+  "verification-approved": {
+    variant: "success",
+    message: "Seller approved. Their listings are now live.",
+  },
+  "verification-rejected": {
+    variant: "info",
+    message: "Submission rejected with feedback to seller.",
+  },
 };
 
 export function getToastMessage(
