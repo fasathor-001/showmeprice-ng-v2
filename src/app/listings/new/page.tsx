@@ -69,8 +69,9 @@ export default async function NewListingPage() {
                     Verification needed
                   </p>
                   <p className="text-xs text-warning-text">
-                    Submit your ID, address, and NIN. Review takes 1-2 business
-                    days.
+                    Your listings won&apos;t appear publicly until your seller
+                    account is verified. Submit your ID, address, and NIN —
+                    review takes 1-2 business days.
                   </p>
                 </div>
                 <Link href="/sell/verify">
@@ -88,8 +89,9 @@ export default async function NewListingPage() {
                 Your verification is under review
               </p>
               <p className="text-xs text-teal-900">
-                We&apos;ll email you within 1-2 business days. Once your account
-                is approved, you&apos;ll be able to create listings here.
+                We&apos;ll email you within 1-2 business days. Your listings
+                won&apos;t appear publicly until your seller account is
+                verified.
               </p>
             </Card>
           )}
@@ -107,7 +109,8 @@ export default async function NewListingPage() {
                     </p>
                   )}
                   <p className="text-xs text-danger-text">
-                    Resubmit with corrections to go live.
+                    Your listings won&apos;t appear publicly until your seller
+                    account is verified. Resubmit with corrections.
                   </p>
                 </div>
                 <Link href="/sell/verify">

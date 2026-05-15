@@ -114,9 +114,8 @@ export default async function SellerListingsPage() {
               Your verification is under review
             </p>
             <p className="text-xs text-teal-900">
-              We&apos;ll email you within 1-2 business days. You can continue
-              preparing draft listings — they&apos;ll appear publicly once
-              your account is approved.
+              We&apos;ll email you within 1-2 business days. Your listings
+              won&apos;t appear publicly until your seller account is verified.
             </p>
           </Card>
         )}
@@ -137,7 +136,8 @@ export default async function SellerListingsPage() {
                   </p>
                 )}
                 <p className="text-xs text-danger-text">
-                  Please resubmit with corrections.
+                  Your listings won&apos;t appear publicly until your seller
+                  account is verified. Please resubmit with corrections.
                 </p>
               </div>
               <Link href="/sell/verify">
