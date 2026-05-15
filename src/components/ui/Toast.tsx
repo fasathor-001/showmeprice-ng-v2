@@ -103,7 +103,7 @@ const variantStyles: Record<
 export function Toast({
   message,
   variant = "success",
-  durationMs = 8000,
+  durationMs = 7000,
   onDismiss,
 }: ToastProps) {
   const [visible, setVisible] = useState(true);
