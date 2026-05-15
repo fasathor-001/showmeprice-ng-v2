@@ -40,6 +40,14 @@ export const toastMessages: Record<string, ToastMessage> = {
     message:
       "Your account was created but we couldn't set up your business. Please try again below.",
   },
+  "verification-submitted": {
+    variant: "success",
+    message: "Verification submitted. We'll review within 1-2 business days.",
+  },
+  "verification-resubmitted": {
+    variant: "success",
+    message: "Verification resubmitted. We'll review again.",
+  },
 };
 
 export function getToastMessage(

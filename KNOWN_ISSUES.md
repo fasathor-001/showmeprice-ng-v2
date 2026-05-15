@@ -72,6 +72,23 @@ Both return 404 (the Phase B.6.1 explicit not-found page). A user clicking eithe
 
 **Scheduled:** Phase C.5 (next phase). Not blocking Phase C launch.
 
+### K-009 — seller_verifications banking columns hold placeholder values (medium)
+
+Phase A specced `seller_verifications` as a banking-verification table — `bank_account_number`, `bank_name`, `bank_account_holder` are all NOT NULL. Phase C.5 reuses the same table for **identity** verification (NIN, ID document, selfie, address) and has no banking info to put in those columns yet. The submit action inserts placeholder strings (`"PENDING"`) to satisfy the NOT NULL constraint.
+
+**Severity:** medium. Identity verification works correctly; the placeholders are inert until Phase G builds the payout flow. But:
+- An admin reading `seller_verifications` directly will see `"PENDING"` and might mis-read it as a real submission state.
+- Future analytics or exports that count distinct `bank_name` values will be polluted.
+- If Phase G expects to read pre-collected banking info from these rows, the assumption will silently fail.
+
+**Fix when prioritized:** Phase G (Paystack Pro tier) should either:
+- (a) ALTER the three banking columns to nullable, then UPDATE existing `"PENDING"` rows to NULL, then collect real values during Pro upgrade. Migration is straightforward.
+- (b) Move banking info to a separate `seller_payout_accounts` table keyed on `business_id`; leave `seller_verifications` purely identity-focused.
+
+Recommend (b) when Phase G arrives — cleaner separation of identity verification (one-time gate) from payout setup (per-tier, can change).
+
+**Not blocking Phase C.5.** Identity verification + admin approval flow work correctly with the placeholders.
+
 ### K-011 — Cross-browser email confirmation fails (PKCE flow) (medium)
 
 **Symptom:** A user who signs up in browser A (e.g., desktop Chrome) and clicks the confirmation link in browser B (e.g., mobile Safari, or a different desktop browser) lands on `/sign-in?error=callback-failed`. Signup is complete on the Supabase side — `auth.users` and `profiles` rows exist — but the user can't establish a session from the confirmation click.

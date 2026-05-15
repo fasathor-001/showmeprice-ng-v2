@@ -423,6 +423,191 @@ export async function updateBusinessAction(
   }
 }
 
+interface VerificationErrors {
+  legalFirstName?: string;
+  legalLastName?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  addressStateId?: string;
+  nin?: string;
+  idDocumentType?: string;
+  idDocumentPath?: string;
+  selfiePath?: string;
+  _form?: string;
+}
+
+interface VerificationResult {
+  errors?: VerificationErrors;
+}
+
+const ID_DOC_TYPES = [
+  "nin_slip",
+  "drivers_license",
+  "voters_card",
+  "international_passport",
+] as const;
+
+// Per D-035: this action ONLY inserts into seller_verifications. It does
+// NOT update businesses.verification_status — Phase A's
+// businesses_freeze_verification trigger blocks non-admin writes to that
+// column. The seller's dashboard banner derives state from the latest
+// seller_verifications row. The admin's approve/reject action (running
+// as admin) updates both tables.
+export async function submitVerificationAction(
+  _prev: VerificationResult | null,
+  formData: FormData
+): Promise<VerificationResult> {
+  const legalFirstName = String(formData.get("legalFirstName") ?? "").trim();
+  const legalLastName = String(formData.get("legalLastName") ?? "").trim();
+  const addressLine1 = String(formData.get("addressLine1") ?? "").trim();
+  const addressLine2Raw = String(formData.get("addressLine2") ?? "").trim();
+  const addressLine2 = addressLine2Raw === "" ? null : addressLine2Raw;
+  const city = String(formData.get("city") ?? "").trim();
+  const addressStateId = String(formData.get("addressStateId") ?? "");
+  const nin = String(formData.get("nin") ?? "").trim();
+  const idDocumentType = String(formData.get("idDocumentType") ?? "");
+  const idDocumentPath = String(formData.get("idDocumentPath") ?? "");
+  const selfiePath = String(formData.get("selfiePath") ?? "");
+
+  // Server-side validation. Never log NIN values (NDPR).
+  const errors: VerificationErrors = {};
+  if (!legalFirstName) errors.legalFirstName = "First name is required";
+  else if (legalFirstName.length < 2 || legalFirstName.length > 60)
+    errors.legalFirstName = "First name must be 2-60 characters";
+
+  if (!legalLastName) errors.legalLastName = "Last name is required";
+  else if (legalLastName.length < 2 || legalLastName.length > 60)
+    errors.legalLastName = "Last name must be 2-60 characters";
+
+  if (!addressLine1) errors.addressLine1 = "Address is required";
+  else if (addressLine1.length < 5 || addressLine1.length > 200)
+    errors.addressLine1 = "Address must be 5-200 characters";
+
+  if (addressLine2 && addressLine2.length > 200)
+    errors.addressLine2 = "Address line 2 is too long";
+
+  if (!city) errors.city = "City is required";
+  else if (city.length < 2 || city.length > 80)
+    errors.city = "City must be 2-80 characters";
+
+  if (!addressStateId) errors.addressStateId = "State is required";
+
+  if (!nin) errors.nin = "NIN is required";
+  else if (!/^\d{11}$/.test(nin)) errors.nin = "NIN must be exactly 11 digits";
+
+  if (!idDocumentType) errors.idDocumentType = "Select an ID type";
+  else if (
+    !ID_DOC_TYPES.includes(idDocumentType as (typeof ID_DOC_TYPES)[number])
+  )
+    errors.idDocumentType = "Invalid ID type";
+
+  if (!idDocumentPath) errors.idDocumentPath = "Upload your ID document";
+  if (!selfiePath) errors.selfiePath = "Upload your selfie";
+
+  if (Object.values(errors).some((v) => v)) return { errors };
+
+  let isResubmission = false;
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { errors: { _form: "You must be signed in" } };
+
+    const { data: business } = await supabase
+      .from("businesses")
+      .select("id, verification_status")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (!business)
+      return { errors: { _form: "You need a seller account first" } };
+    if (business.verification_status === "verified") {
+      return { errors: { _form: "Your account is already verified" } };
+    }
+
+    // Defense in depth: storage RLS already enforces folder-scoping via the
+    // verification_*_owner_insert policies (path must start with auth.uid()/),
+    // but re-check here in case a future RLS change drifts.
+    const expectedFolder = `${user.id}/`;
+    if (!idDocumentPath.startsWith(expectedFolder)) {
+      return { errors: { _form: "Invalid ID document upload path" } };
+    }
+    if (!selfiePath.startsWith(expectedFolder)) {
+      return { errors: { _form: "Invalid selfie upload path" } };
+    }
+
+    // Resubmission detection: any prior row for this business counts. After
+    // a rejection, the prior row has status='rejected'; after admin approval
+    // (with subsequent re-verification path), 'verified'. Either way it's
+    // a re-submission.
+    const { data: priorSubmission } = await supabase
+      .from("seller_verifications")
+      .select("id")
+      .eq("business_id", business.id)
+      .limit(1)
+      .maybeSingle();
+    isResubmission = priorSubmission !== null;
+
+    // Banking columns are NOT NULL from Phase A's banking-focused design
+    // (K-009 tracks the technical debt). Insert placeholders for now;
+    // Phase G will collect real banking info during Pro upgrade.
+    const { error: insertError } = await supabase
+      .from("seller_verifications")
+      .insert({
+        business_id: business.id,
+
+        // Banking placeholders (K-009)
+        id_document_path: idDocumentPath,
+        bank_account_number: "PENDING",
+        bank_name: "PENDING",
+        bank_account_holder: "PENDING",
+
+        // Identity (Phase C.5)
+        legal_first_name: legalFirstName,
+        legal_last_name: legalLastName,
+        address_line_1: addressLine1,
+        address_line_2: addressLine2,
+        city,
+        address_state_id: addressStateId,
+        nin,
+        id_document_type: idDocumentType as (typeof ID_DOC_TYPES)[number],
+        selfie_path: selfiePath,
+
+        status: "pending",
+      });
+
+    if (insertError) {
+      return { errors: { _form: insertError.message } };
+    }
+  } catch (e) {
+    if (
+      e &&
+      typeof e === "object" &&
+      "digest" in e &&
+      typeof (e as { digest?: unknown }).digest === "string" &&
+      (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e;
+    }
+    return {
+      errors: {
+        _form: `Couldn't submit verification: ${
+          e instanceof Error ? e.message : "unknown error"
+        }`,
+      },
+    };
+  }
+
+  revalidatePath("/", "layout");
+  redirect(
+    `/dashboard/listings?toast=${
+      isResubmission ? "verification-resubmitted" : "verification-submitted"
+    }`
+  );
+}
+
 interface ListingActionResult {
   errors?: ListingValidationErrors;
   success?: boolean;
