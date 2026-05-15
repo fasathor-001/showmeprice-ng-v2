@@ -1,0 +1,48 @@
+/**
+ * Category tier registry. The canonical tier classification lives on
+ * categories.tier in the database (1/2/3 integer column added in Phase D
+ * P-migration). These slug arrays are the application-side mirror — used
+ * for:
+ *
+ *   - Compile-time type narrowing on known slugs
+ *   - Quick membership checks without a DB roundtrip
+ *   - Documentation: this file is the readable inventory of what's
+ *     featured vs in-nav vs in-the-more-drawer
+ *
+ * Keep this file in sync with the categories.tier column. If you change
+ * the tier of a slug here, also UPDATE the DB row, and vice versa.
+ */
+
+export const TIER_1_FEATURED_SLUGS = [
+  "fashion",
+  "mobile-phones-tablets",
+  "hair-wigs",
+  "beauty",
+  "electronics",
+  "home-living",
+] as const;
+
+export const TIER_2_STANDARD_SLUGS = [
+  "health",
+  "baby-kids",
+  "food-beverages",
+  "vehicles",
+] as const;
+
+export const TIER_3_MORE_SLUGS = [
+  "property",
+  "services",
+  "sports",
+  "books-media",
+  "pets",
+  "industrial",
+] as const;
+
+export type CategoryTier = 1 | 2 | 3;
+
+export function getTierForSlug(slug: string): CategoryTier | null {
+  if ((TIER_1_FEATURED_SLUGS as readonly string[]).includes(slug)) return 1;
+  if ((TIER_2_STANDARD_SLUGS as readonly string[]).includes(slug)) return 2;
+  if ((TIER_3_MORE_SLUGS as readonly string[]).includes(slug)) return 3;
+  return null;
+}
