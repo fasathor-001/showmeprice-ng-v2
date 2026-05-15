@@ -183,18 +183,24 @@ Both clients connect to the same database. RLS applies to both. Choosing one ove
 
 **Revisit when:** sign-up conversion is below target and we suspect email friction is the cause, or when Nigerian users disproportionately struggle with the email flow. Either signal is a reason to add phone OTP. Until then, the simpler stack wins.
 
-## D-023: Email confirmation OFF at launch
+## D-023: Email confirmation ON (revised 2026-05-15)
 
-**Context:** Supabase's email auth has a toggle: "Confirm email" (require email-click before sign-in works) on/off.
+**Context:** Supabase's email auth has a toggle: "Confirm email" (require email-click before sign-in works) on/off. The initial Phase B decision was OFF — see superseded body below for original rationale. During Phase C.5 smoke testing the actual Supabase configuration was found to be ON, and the owner confirmed it should stay ON. This entry is updated in place rather than superseded because the rationale shifted with verified facts (the original "OFF" was never the live configuration).
 
-**Decision:** OFF at v2 launch. Users sign up and are immediately signed in.
+**Decision:** Email confirmation is ON. Users must confirm their email via Supabase's confirmation link before establishing a session. Post-signup flow lands on `/sign-up/success` confirmation page; clicking the email link routes through `/auth/callback`.
 
 **Why:**
-- Onboarding friction kills marketplaces. Every step before "able to browse and contact a seller" is a drop-off point.
-- The trust gate that matters is **seller verification** (Phase D — ID, business, bank account, admin review). Buyers being verified-via-email adds friction without commensurate trust benefit.
-- Abuse via fake email signups is low-cost to clean up (admin can delete profiles + cascading data) and we can flip the toggle if abuse becomes real.
+- Confirmed email is the cheapest credible signal that a signup isn't a bot or typo. Spam signups (K-003) become much harder.
+- The trust gate that matters most is still seller verification (Phase C.5's hard gate, D-032), but email-confirm is a useful first filter at zero ongoing cost.
+- A confirmed email gives a working channel for password-reset (D-026), Pro-tier billing receipts (Phase G), and verification approval/rejection notices (deferred).
 
-**Operational consequence:** spam signups are possible. K-003 tracks this — if we see real abuse, we flip the toggle, accept the friction, and ship.
+**Operational consequence:**
+- `signUp` returns `user` but NO session. Any RLS-protected write in the signup action would fail (auth.uid() is NULL).
+- Seller-specific data (business_name, business_state_id) is stashed in `raw_user_meta_data` and consumed by `/auth/callback` after token exchange — that's the first moment a session exists for the new user.
+- `signUpAction` redirects to `/sign-up/success?type=<buyer|seller>&email=<encoded>` rather than to `/dashboard` or `/sell/verify` directly.
+- The `handle_new_user` trigger still fires on `auth.users` INSERT (which happens during signUp regardless of confirmation state) and populates the profile from metadata, so the profile row exists even before email confirmation. The trigger does not depend on the session.
+
+**Original Phase B rationale (superseded by verified configuration):** Phase B's decision body recorded OFF on the theory that onboarding friction kills marketplaces. That theory still has merit, but Supabase was never actually configured OFF — confirming with the owner during Phase C.5 closed the gap. If signup conversion drops noticeably, revisit by measuring email-confirm completion rate; we can flip back to OFF if the friction is the bottleneck.
 
 ## D-024: Server Actions for auth forms (no separate API routes)
 

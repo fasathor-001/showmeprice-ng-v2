@@ -61,20 +61,37 @@ export async function signUpAction(
   if (!normalized) return { errors: { whatsappNumber: "Invalid WhatsApp number" } };
 
   const supabase = createClient();
-  const { data: signUpData, error } = await supabase.auth.signUp({
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://showmeprice-ng-v2.pages.dev";
+
+  // With email confirmation ON (D-023), signUp does NOT return a session.
+  // Any RLS-protected write here (profile UPDATE, business INSERT) would
+  // silently fail because auth.uid() is NULL. Instead, we stash the seller's
+  // business info in raw_user_meta_data and create the business after the
+  // user clicks the confirmation email — at which point /auth/callback
+  // exchanges the token for a session and runs the writes under the
+  // authenticated context.
+  const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      // Keys must match handle_new_user trigger's reads in 0000_*.sql:
+      // Keys must match handle_new_user trigger's reads:
       //   raw_user_meta_data->>'display_name'
       //   raw_user_meta_data->>'whatsapp_number'
-      // user_type is passed for forward-compat but the current trigger does
-      // not read it; sellers are upgraded via a profile UPDATE below.
+      // user_type / business_name / business_state_id are consumed by
+      // /auth/callback after email confirmation; the trigger ignores them.
       data: {
         display_name: displayName,
         whatsapp_number: normalized,
         user_type: userType,
+        ...(userType === "seller"
+          ? {
+              business_name: businessName,
+              business_state_id: businessStateId,
+            }
+          : {}),
       },
+      emailRedirectTo: `${origin}/auth/callback`,
     },
   });
 
@@ -90,44 +107,10 @@ export async function signUpAction(
     return { errors: { _form: error.message } };
   }
 
-  // Seller path: trigger created the profile as buyer (default). Upgrade to seller
-  // and create the business in the same authenticated context. With email
-  // confirmation OFF (D-023), signUp returns an active session, so subsequent
-  // RLS-protected writes succeed under the new user's auth.uid().
-  if (userType === "seller" && signUpData.user) {
-    const userId = signUpData.user.id;
-
-    // profiles_freeze_role trigger only protects `role`; user_type is freely
-    // writable via profiles_self_update (auth.uid() = id).
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ user_type: "seller" })
-      .eq("id", userId);
-    if (profileError) {
-      console.warn("seller signup: profile user_type upgrade failed", profileError.message);
-    }
-
-    // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md (post P.1).
-    // businesses_freeze_verification is BEFORE UPDATE only, so the INSERT is unimpeded.
-    const { error: bizError } = await supabase.from("businesses").insert({
-      owner_id: userId,
-      business_name: businessName,
-      state_id: businessStateId,
-    });
-    if (bizError) {
-      // Auth user + profile exist; business creation failed. Surface a toast
-      // and route to /sell so they can complete the become-seller form there.
-      console.warn("seller signup: business creation failed", bizError.message);
-      revalidatePath("/", "layout");
-      redirect("/sell?toast=signup-business-failed");
-    }
-
-    revalidatePath("/", "layout");
-    redirect("/sell/verify");
-  }
-
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(
+    `/sign-up/success?type=${userType}&email=${encodeURIComponent(email)}`
+  );
 }
 
 export async function signInAction(
