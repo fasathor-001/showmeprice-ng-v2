@@ -40,6 +40,10 @@ export const toastMessages: Record<string, ToastMessage> = {
     message:
       "Your account was created but we couldn't set up your business. Please try again below.",
   },
+  "business-updated": {
+    variant: "success",
+    message: "Business updated successfully.",
+  },
 };
 
 export function getToastMessage(

@@ -20,11 +20,15 @@ interface Props {
   states: State[];
 }
 
-const initial = { errors: {}, success: false };
+const initial = { errors: {} };
 
 export function ManageBusinessForm({ business, states }: Props) {
   const [state, formAction] = useFormState(updateBusinessAction, initial);
 
+  // Success surfaces as ?toast=business-updated on /sell after the action's
+  // redirect (Phase C.5.6.0 — revalidatePath fails on Cloudflare edge so we
+  // can't keep the previous "return success state" pattern). This form only
+  // renders inline error states.
   return (
     <form action={formAction} noValidate className="space-y-4">
       {state?.errors?._form && (
@@ -33,14 +37,6 @@ export function ManageBusinessForm({ business, states }: Props) {
           className="bg-danger-bg border border-danger/30 text-danger-text text-sm px-3 py-2.5 rounded-lg"
         >
           {state?.errors._form}
-        </div>
-      )}
-      {state?.success && (
-        <div
-          role="status"
-          className="bg-verified-bg border border-verified/30 text-verified-text text-sm px-3 py-2.5 rounded-lg"
-        >
-          Business updated.
         </div>
       )}
 

@@ -347,7 +347,8 @@ export async function becomeSellerAction(
   }
 
   if (shouldRedirect) {
-    revalidatePath("/", "layout");
+    // revalidatePath removed (Phase C.5.6.0): fails silently on Cloudflare
+    // Pages edge with 530. Server components re-render on navigation anyway.
     redirect("/sell/verify?toast=seller-account-created");
   }
   return {};
@@ -362,7 +363,6 @@ interface UpdateBusinessErrors {
 
 interface UpdateBusinessResult {
   errors?: UpdateBusinessErrors;
-  success?: boolean;
 }
 
 export async function updateBusinessAction(
@@ -409,10 +409,16 @@ export async function updateBusinessAction(
       .eq("owner_id", user.id);
 
     if (error) return { errors: { _form: error.message } };
-
-    revalidatePath("/sell");
-    return { success: true };
   } catch (e) {
+    if (
+      e &&
+      typeof e === "object" &&
+      "digest" in e &&
+      typeof (e as { digest?: unknown }).digest === "string" &&
+      (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e;
+    }
     return {
       errors: {
         _form: `Couldn't save business: ${
@@ -421,6 +427,11 @@ export async function updateBusinessAction(
       },
     };
   }
+
+  // No revalidatePath: it fails silently on Cloudflare Pages edge with
+  // "Failed to revalidate tag" + 530 (Phase C.5.6.0). The redirect to
+  // /sell re-renders the server component with fresh data anyway.
+  redirect("/sell?toast=business-updated");
 }
 
 interface VerificationErrors {
@@ -600,7 +611,8 @@ export async function submitVerificationAction(
     };
   }
 
-  revalidatePath("/", "layout");
+  // revalidatePath removed (Phase C.5.6.0): fails silently on Cloudflare
+  // Pages edge with 530. Server components re-render on navigation anyway.
   // First-vs-resubmission is determined by the destination page reading the
   // seller_verifications row count, so no toast key needed in the URL.
   // (isResubmission is computed above only for potential future use / logs.)
