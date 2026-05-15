@@ -13,6 +13,11 @@ export default async function SignUpPage() {
   } = await supabase.auth.getUser();
   if (user) redirect("/dashboard");
 
+  const { data: states } = await supabase
+    .from("nigerian_states")
+    .select("id, name")
+    .order("name", { ascending: true });
+
   return (
     <Container size="narrow">
       <div className="py-12 sm:py-16 max-w-md mx-auto">
@@ -20,9 +25,9 @@ export default async function SignUpPage() {
           Create your account
         </h1>
         <p className="text-sm text-ink-600 text-center mb-8">
-          Browse with real prices and chat verified sellers directly.
+          Join ShowMePrice as a buyer or seller.
         </p>
-        <SignUpForm />
+        <SignUpForm states={states ?? []} />
         <p className="mt-6 text-sm text-ink-600 text-center">
           Already have an account?{" "}
           <Link href="/sign-in" className="text-teal-700 hover:text-teal-900 font-medium">

@@ -20,14 +20,34 @@ export async function GET(request: NextRequest) {
 
   const supabase = createClient();
 
+  // After session exchange, sellers with an un-verified business should land
+  // on /sell/verify rather than /dashboard (overrides `next`, except for
+  // recovery which always routes to /reset-password).
+  async function postAuthRedirect(): Promise<NextResponse> {
+    if (type === "recovery") {
+      return NextResponse.redirect(`${origin}/reset-password`);
+    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: business } = await supabase
+        .from("businesses")
+        .select("verification_status")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+      if (business && business.verification_status !== "verified") {
+        return NextResponse.redirect(`${origin}/sell/verify`);
+      }
+    }
+    return NextResponse.redirect(`${origin}${next}`);
+  }
+
   // Branch 1: token_hash flow (email links — password recovery, signup confirmation).
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type });
     if (!error) {
-      if (type === "recovery") {
-        return NextResponse.redirect(`${origin}/reset-password`);
-      }
-      return NextResponse.redirect(`${origin}${next}`);
+      return postAuthRedirect();
     }
   }
 
@@ -35,10 +55,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      if (type === "recovery") {
-        return NextResponse.redirect(`${origin}/reset-password`);
-      }
-      return NextResponse.redirect(`${origin}${next}`);
+      return postAuthRedirect();
     }
   }
 

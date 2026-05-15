@@ -18,7 +18,11 @@ import {
 } from "@/lib/listings";
 
 export interface ActionResult {
-  errors?: ValidationErrors & { _form?: string };
+  errors?: ValidationErrors & {
+    _form?: string;
+    businessName?: string;
+    businessStateId?: string;
+  };
   success?: boolean;
 }
 
@@ -32,25 +36,44 @@ export async function signUpAction(
   const password = String(formData.get("password") ?? "");
   const displayName = String(formData.get("displayName") ?? "").trim();
   const whatsappNumber = String(formData.get("whatsappNumber") ?? "").trim();
+  const userType = String(formData.get("userType") ?? "buyer");
+  const businessName = String(formData.get("businessName") ?? "").trim();
+  const businessStateId = String(formData.get("businessStateId") ?? "");
 
   // Defense in depth: re-run client-side validation server-side.
-  const errors = validateSignUpForm({ email, password, displayName, whatsappNumber });
-  if (hasErrors(errors)) return { errors };
+  const errors = validateSignUpForm({ email, password, displayName, whatsappNumber }) as ActionResult["errors"];
+  if (userType !== "buyer" && userType !== "seller") {
+    return { errors: { _form: "Invalid account type" } };
+  }
+  if (userType === "seller") {
+    if (!businessName) errors!.businessName = "Business name is required";
+    else if (businessName.length < 2)
+      errors!.businessName = "Business name must be at least 2 characters";
+    else if (businessName.length > 80)
+      errors!.businessName = "Business name is too long (max 80)";
+    if (!businessStateId) errors!.businessStateId = "State is required";
+  }
+  if (hasErrors(errors as ValidationErrors) || errors?.businessName || errors?.businessStateId) {
+    return { errors };
+  }
 
   const normalized = normalizeNigerianWhatsApp(whatsappNumber);
   if (!normalized) return { errors: { whatsappNumber: "Invalid WhatsApp number" } };
 
   const supabase = createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data: signUpData, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       // Keys must match handle_new_user trigger's reads in 0000_*.sql:
       //   raw_user_meta_data->>'display_name'
       //   raw_user_meta_data->>'whatsapp_number'
+      // user_type is passed for forward-compat but the current trigger does
+      // not read it; sellers are upgraded via a profile UPDATE below.
       data: {
         display_name: displayName,
         whatsapp_number: normalized,
+        user_type: userType,
       },
     },
   });
@@ -65,6 +88,42 @@ export async function signUpAction(
       };
     }
     return { errors: { _form: error.message } };
+  }
+
+  // Seller path: trigger created the profile as buyer (default). Upgrade to seller
+  // and create the business in the same authenticated context. With email
+  // confirmation OFF (D-023), signUp returns an active session, so subsequent
+  // RLS-protected writes succeed under the new user's auth.uid().
+  if (userType === "seller" && signUpData.user) {
+    const userId = signUpData.user.id;
+
+    // profiles_freeze_role trigger only protects `role`; user_type is freely
+    // writable via profiles_self_update (auth.uid() = id).
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ user_type: "seller" })
+      .eq("id", userId);
+    if (profileError) {
+      console.warn("seller signup: profile user_type upgrade failed", profileError.message);
+    }
+
+    // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md (post P.1).
+    // businesses_freeze_verification is BEFORE UPDATE only, so the INSERT is unimpeded.
+    const { error: bizError } = await supabase.from("businesses").insert({
+      owner_id: userId,
+      business_name: businessName,
+      state_id: businessStateId,
+    });
+    if (bizError) {
+      // Auth user + profile exist; business creation failed. Surface a toast
+      // and route to /sell so they can complete the become-seller form there.
+      console.warn("seller signup: business creation failed", bizError.message);
+      revalidatePath("/", "layout");
+      redirect("/sell?toast=signup-business-failed");
+    }
+
+    revalidatePath("/", "layout");
+    redirect("/sell/verify");
   }
 
   revalidatePath("/", "layout");

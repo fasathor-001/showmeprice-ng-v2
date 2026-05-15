@@ -1,13 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { Button, Input } from "@/components/ui";
 import { signUpAction, type ActionResult } from "../actions";
 
+interface State {
+  id: string;
+  name: string;
+}
+
+interface Props {
+  states: State[];
+}
+
 const initial: ActionResult = {};
 
-export function SignUpForm() {
+export function SignUpForm({ states }: Props) {
   const [state, formAction] = useFormState(signUpAction, initial);
+  const [accountType, setAccountType] = useState<"buyer" | "seller">("buyer");
 
   return (
     <form action={formAction} noValidate className="space-y-4">
@@ -19,6 +30,45 @@ export function SignUpForm() {
           {state.errors._form}
         </div>
       )}
+
+      <div>
+        <label className="block text-sm font-medium text-ink mb-2">
+          I&apos;m joining as:
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setAccountType("buyer")}
+            className={`px-4 py-3 rounded-lg border text-sm font-medium transition text-left ${
+              accountType === "buyer"
+                ? "bg-teal-50 border-teal-600 text-teal-700"
+                : "bg-white border-neutral-300 text-ink-600 hover:border-neutral-400"
+            }`}
+            aria-pressed={accountType === "buyer"}
+          >
+            Buyer
+            <span className="block text-xs font-normal mt-0.5 text-ink-400">
+              Browse and message sellers
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAccountType("seller")}
+            className={`px-4 py-3 rounded-lg border text-sm font-medium transition text-left ${
+              accountType === "seller"
+                ? "bg-teal-50 border-teal-600 text-teal-700"
+                : "bg-white border-neutral-300 text-ink-600 hover:border-neutral-400"
+            }`}
+            aria-pressed={accountType === "seller"}
+          >
+            Seller
+            <span className="block text-xs font-normal mt-0.5 text-ink-400">
+              List products and reach buyers
+            </span>
+          </button>
+        </div>
+        <input type="hidden" name="userType" value={accountType} />
+      </div>
 
       <div>
         <label htmlFor="email" className="block text-sm font-medium text-ink mb-1.5">
@@ -51,7 +101,10 @@ export function SignUpForm() {
       </div>
 
       <div>
-        <label htmlFor="whatsappNumber" className="block text-sm font-medium text-ink mb-1.5">
+        <label
+          htmlFor="whatsappNumber"
+          className="block text-sm font-medium text-ink mb-1.5"
+        >
           WhatsApp number
         </label>
         <Input
@@ -65,7 +118,9 @@ export function SignUpForm() {
           placeholder="0801 234 5678"
         />
         <p className="mt-1.5 text-xs text-ink-600">
-          Sellers will message you on this number when you contact them.
+          {accountType === "seller"
+            ? "Buyers will message you on this number."
+            : "Sellers will message you on this number when you contact them."}
         </p>
       </div>
 
@@ -84,16 +139,66 @@ export function SignUpForm() {
         />
       </div>
 
-      <SubmitButton />
+      {accountType === "seller" && (
+        <fieldset className="space-y-4 pt-2 border-t border-neutral-200">
+          <legend className="sr-only">Business info</legend>
+          <p className="text-xs text-ink-600 -mb-2">Your business details:</p>
+          <div>
+            <label
+              htmlFor="businessName"
+              className="block text-sm font-medium text-ink mb-1.5"
+            >
+              Business name
+            </label>
+            <Input
+              id="businessName"
+              name="businessName"
+              type="text"
+              required
+              error={state.errors?.businessName}
+              placeholder="e.g. Amaka's Fashion Store"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="businessStateId"
+              className="block text-sm font-medium text-ink mb-1.5"
+            >
+              State of operation
+            </label>
+            <select
+              id="businessStateId"
+              name="businessStateId"
+              required
+              defaultValue=""
+              className="block w-full bg-white border border-neutral-300 rounded-lg text-base text-ink px-3 py-2.5 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400"
+            >
+              <option value="" disabled>
+                Choose state
+              </option>
+              {states.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {state.errors?.businessStateId && (
+              <p className="text-xs text-danger mt-1.5">{state.errors.businessStateId}</p>
+            )}
+          </div>
+        </fieldset>
+      )}
+
+      <SubmitButton accountType={accountType} />
     </form>
   );
 }
 
-function SubmitButton() {
+function SubmitButton({ accountType }: { accountType: "buyer" | "seller" }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" variant="primary" size="lg" fullWidth disabled={pending}>
-      {pending ? "Creating account…" : "Create account"}
+      {pending ? "Creating account…" : `Sign up as ${accountType}`}
     </Button>
   );
 }

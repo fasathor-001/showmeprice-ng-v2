@@ -35,6 +35,11 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Listing deleted.",
   },
+  "signup-business-failed": {
+    variant: "warning",
+    message:
+      "Your account was created but we couldn't set up your business. Please try again below.",
+  },
 };
 
 export function getToastMessage(
