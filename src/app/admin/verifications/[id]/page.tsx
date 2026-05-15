@@ -28,9 +28,16 @@ export default async function VerificationDetailPage({
     .maybeSingle();
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  // Use Drizzle's explicit FK constraint name for the address state embed
-  // (per the K-008 lesson: PostgREST resolves embeds by constraint name and
-  // Drizzle's naming is `<table>_<column>_<reftable>_<refcolumn>_fk`).
+  // Implicit FK resolution for the address state embed. The constraint
+  // name route is fragile here because seller_verifications has FKs from
+  // two sources: Drizzle migration (business_id, reviewed_by — both use
+  // the `_fk` suffix convention) AND P.1's raw ALTER TABLE which added
+  // the address_state_id FK with PostgreSQL's default `_fkey` suffix.
+  // Implicit resolution works regardless and survives future migrations
+  // that might rename constraints. (Phase C.5.6.1 fix to K-008's
+  // "always use explicit FK name" guidance — explicit is fine when you
+  // know the name, but unambiguous column->table mappings can rely on
+  // PostgREST's auto-resolution.)
   const { data: verification } = await supabase
     .from("seller_verifications")
     .select(
@@ -40,7 +47,7 @@ export default async function VerificationDetailPage({
       nin, id_document_type, id_document_path, selfie_path,
       status, submitted_at, reviewed_at, rejection_reason,
       businesses ( id, business_name, description, owner_id ),
-      nigerian_states!seller_verifications_address_state_id_nigerian_states_id_fk ( name )
+      nigerian_states ( name )
     `
     )
     .eq("id", params.id)
