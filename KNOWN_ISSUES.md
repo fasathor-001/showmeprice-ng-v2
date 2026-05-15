@@ -57,6 +57,21 @@ If the password reset was triggered because someone else had access to the accou
 
 **Not blocking for Phase B.7.** Add to Phase I (polish) or sooner if abuse surfaces.
 
+### K-007 — Two `/categories` links currently 404 (low)
+
+Phase C ships with two UI links pointing at `/categories` (no slug):
+
+1. Home page "Popular categories" section, "View all →" link
+2. Category page breadcrumb, "← All categories" link
+
+Both return 404 (the Phase B.6.1 explicit not-found page). A user clicking either gets a "Page not found / Go home" interstitial rather than a category overview.
+
+**Severity:** low. Both links are secondary navigation; primary discovery is via the home page Popular Categories tiles (which work) and the marketplace browse (which works). A buyer hitting the 404 can click "Go home" or use the header nav to recover.
+
+**Fix:** build a `/categories` index page that lists all 14 top-level categories with their icons (similar to home page Popular Categories but showing all 14, not the truncated 7). About 20 minutes of work.
+
+**Scheduled:** Phase C.5 (next phase). Not blocking Phase C launch.
+
 ## Resolved
 
 (none yet)

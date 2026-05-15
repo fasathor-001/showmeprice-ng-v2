@@ -80,6 +80,32 @@ Fix: explicitly author `not-found.tsx`, `error.tsx`, and `global-error.tsx` with
 
 Watch-pattern: any time a new top-level route group is added (e.g. Phase B's `/sign-up`, `/sign-in`, etc.), confirm `pnpm build`'s output explicitly lists the system routes, not implicit defaults.
 
+### Phased delivery beats one-big-phase for risky work
+
+Phase C was originally scoped as one giant phase including listing CRUD + image upload + search + filters + verified gating. Mid-planning we recognized this was ~12-15 hours of work compressed into one spec, with high risk of mid-phase architectural surprises (specifically around Supabase Storage and Postgres tsvector search).
+
+We split into Phase C (marketplace core, paste-URL images) and Phase C.5 (uploads + search + filters + verified gating refinement). Same total scope, but a natural recovery point in the middle.
+
+Pattern: when a phase exceeds roughly 5-6 sections, split it. Build something that ships, prove it works, then layer on. Don't conflate ambition with bundling.
+
+### Supabase nested-resource syntax requires the EXACT FK constraint name (not the convention name)
+
+Phase C.4 spec used `profiles!businesses_owner_id_fkey` in a Supabase select for an embedded resource. PostgREST resolves this against the actual database constraint name, which in our Drizzle-generated schema is `businesses_owner_id_profiles_id_fk` (Drizzle's `<table>_<column>_<reftable>_<refcolumn>_fk` convention), NOT the Postgres default `<table>_<column>_fkey`.
+
+The wrong name compiles cleanly (TypeScript can't validate constraint names) and fails at RUNTIME the first time the route is hit, with an error like "Could not find a relationship between 'businesses' and 'profiles' using the hint 'businesses_owner_id_fkey'."
+
+**Lesson:** any spec that uses Supabase's `tablename!constraint_name (...)` syntax must reference the actual constraint name from the database. Verify by running `SELECT conname FROM pg_constraint WHERE conrelid = 'tablename'::regclass` in SQL Editor, or by inspecting the Drizzle-generated migration SQL.
+
+**Where Drizzle uses non-default names:** all FKs in Phase A's schema. The migration file `supabase/migrations/0000_common_donald_blake.sql` is the canonical source.
+
+### Never mutate fetched arrays — spread-then-sort, not sort-in-place
+
+Phase C.5 spec used `images.sort((a, b) => a.sort_order - b.sort_order)[0]` inline on Supabase-returned arrays. `Array.prototype.sort` mutates in place; Supabase JS responses can be frozen depending on caching layer behavior (next/cache, React deduplication), and frozen arrays throw `TypeError: Cannot assign to read only property` when sorted in place.
+
+**Lesson:** always spread fetched arrays before mutating: `[...images].sort(...)` or use non-mutating equivalents (`toSorted` on Node 20+ but not universally available). Applies to `.sort`, `.reverse`, `.splice`, anything that modifies the array.
+
+**Where this matters:** any time you write `someFetchedArray.sort(...)`, `someFetchedArray.reverse(...)`, etc. Even if the current Supabase version returns plain arrays, this is a fragility we don't need to carry.
+
 ### Recovery-token sessions are real sessions — don't conflate "logged in" with "knows their password"
 
 Supabase's password reset flow works by issuing a one-time recovery code that, when exchanged via `exchangeCodeForSession` or `verifyOtp`, creates an authenticated session. From the application's perspective, the user is signed in — `getUser()` returns their record, RLS treats them as authenticated, they can call mutations.
