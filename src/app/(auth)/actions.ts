@@ -9,6 +9,12 @@ import {
   hasErrors,
   type ValidationErrors,
 } from "@/lib/auth";
+import {
+  parseNairaInputToKobo,
+  validateListingForm,
+  hasErrors as listingHasErrors,
+  type ListingValidationErrors,
+} from "@/lib/listings";
 
 export interface ActionResult {
   errors?: ValidationErrors & { _form?: string };
@@ -258,4 +264,197 @@ export async function becomeSellerAction(
 
   revalidatePath("/", "layout");
   redirect("/dashboard/listings?toast=seller-account-created");
+}
+
+interface ListingActionResult {
+  errors?: ListingValidationErrors;
+  success?: boolean;
+}
+
+async function getSellerBusiness(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+) {
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, name, verification_status")
+    .eq("owner_id", userId)
+    .maybeSingle();
+  return business;
+}
+
+export async function createListingAction(
+  _prev: ListingActionResult | null,
+  formData: FormData
+): Promise<ListingActionResult> {
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const priceInput = String(formData.get("priceInput") ?? "").trim();
+  const categoryId = String(formData.get("categoryId") ?? "");
+  const stateId = String(formData.get("stateId") ?? "");
+  const negotiable = formData.get("negotiable") === "on";
+
+  const imageUrls = formData
+    .getAll("imageUrls")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+
+  const errors = validateListingForm({
+    title,
+    description,
+    priceInput,
+    categoryId,
+    stateId,
+    negotiable,
+    imageUrls,
+  });
+  if (listingHasErrors(errors)) return { errors };
+
+  const priceKobo = parseNairaInputToKobo(priceInput)!;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return { errors: { _form: "You must be signed in to create a listing" } };
+
+  const business = await getSellerBusiness(supabase, user.id);
+  if (!business) {
+    return { errors: { _form: "You need a seller account before posting listings" } };
+  }
+
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .insert({
+      business_id: business.id,
+      seller_id: user.id,
+      title,
+      description,
+      price_kobo: priceKobo,
+      currency: "NGN",
+      is_negotiable: negotiable,
+      category_id: categoryId,
+      state_id: stateId,
+      status: "active",
+    })
+    .select("id")
+    .single();
+
+  if (productError || !product) {
+    return { errors: { _form: productError?.message ?? "Failed to create listing" } };
+  }
+
+  const imageInserts = imageUrls.map((url, idx) => ({
+    product_id: product.id,
+    url,
+    sort_order: idx,
+    is_primary: idx === 0,
+  }));
+  const { error: imageError } = await supabase
+    .from("product_images")
+    .insert(imageInserts);
+  if (imageError) {
+    // Listing created but images failed — log and continue; user can edit to retry images.
+    console.error("Failed to attach images", imageError);
+  }
+
+  revalidatePath("/", "layout");
+  redirect(`/dashboard/listings?toast=listing-created`);
+}
+
+export async function updateListingAction(
+  productId: string,
+  _prev: ListingActionResult | null,
+  formData: FormData
+): Promise<ListingActionResult> {
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const priceInput = String(formData.get("priceInput") ?? "").trim();
+  const categoryId = String(formData.get("categoryId") ?? "");
+  const stateId = String(formData.get("stateId") ?? "");
+  const negotiable = formData.get("negotiable") === "on";
+  const imageUrls = formData
+    .getAll("imageUrls")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+
+  const errors = validateListingForm({
+    title,
+    description,
+    priceInput,
+    categoryId,
+    stateId,
+    negotiable,
+    imageUrls,
+  });
+  if (listingHasErrors(errors)) return { errors };
+
+  const priceKobo = parseNairaInputToKobo(priceInput)!;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { errors: { _form: "You must be signed in" } };
+
+  const { data: existing } = await supabase
+    .from("products")
+    .select("seller_id")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!existing) return { errors: { _form: "Listing not found" } };
+  if (existing.seller_id !== user.id)
+    return { errors: { _form: "You don't own this listing" } };
+
+  const { error: updateError } = await supabase
+    .from("products")
+    .update({
+      title,
+      description,
+      price_kobo: priceKobo,
+      is_negotiable: negotiable,
+      category_id: categoryId,
+      state_id: stateId,
+    })
+    .eq("id", productId);
+
+  if (updateError) return { errors: { _form: updateError.message } };
+
+  // Replace images: delete-then-insert is simpler than diffing for Phase C.
+  await supabase.from("product_images").delete().eq("product_id", productId);
+  const imageInserts = imageUrls.map((url, idx) => ({
+    product_id: productId,
+    url,
+    sort_order: idx,
+    is_primary: idx === 0,
+  }));
+  await supabase.from("product_images").insert(imageInserts);
+
+  revalidatePath("/", "layout");
+  redirect(`/dashboard/listings?toast=listing-updated`);
+}
+
+export async function deleteListingAction(formData: FormData): Promise<void> {
+  const productId = String(formData.get("productId") ?? "");
+  if (!productId) return;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: existing } = await supabase
+    .from("products")
+    .select("seller_id")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!existing || existing.seller_id !== user.id) return;
+
+  // product_images cascade-deletes via FK in Phase A schema.
+  await supabase.from("products").delete().eq("id", productId);
+
+  revalidatePath("/", "layout");
+  redirect(`/dashboard/listings?toast=listing-deleted`);
 }
