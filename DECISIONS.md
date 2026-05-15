@@ -356,3 +356,31 @@ The soft gate model resembles Jiji's; the hard gate resembles a stricter version
 - On rejection, can resubmit with corrections
 
 **What buyers see:** no indication that pending sellers exist. The marketplace simply shows verified sellers.
+
+## D-035: Seller's verification submit action does NOT touch businesses.verification_status
+
+**Context:** Phase A's `businesses_freeze_verification` trigger blocks non-admins from changing `businesses.verification_status`. Phase C.5's seller submission flow cannot directly UPDATE this column without bypassing the trigger.
+
+**Decision:** The seller's `submitVerificationAction` only INSERTs into `seller_verifications`. It does NOT update `businesses.verification_status`. The seller's dashboard derives state from BOTH `businesses.verification_status` AND the latest `seller_verifications.status` row. The admin's approve/reject actions (running with admin role, passing the freeze trigger's `auth.uid()` check) update both tables.
+
+**Why:** Preserves Phase A's security model. `businesses.verification_status` remains a column ONLY admins can modify, enforced at the trigger level. Sellers write to an audit table; admins consume from it and update canonical state.
+
+**State derivation:** see `src/lib/verification.ts:getVerificationState()`. Helper returns one of: `no_business | unsubmitted | pending | rejected | verified` based on the combined signals. Used in `/dashboard`, `/dashboard/listings`, `/sell`, `/listings/new`.
+
+## D-040: Signup overhaul — buyer/seller toggle on /sign-up
+
+**Context:** Phase B's signup created only buyer accounts; sellers had to sign up then visit `/sell` separately. Two-step flow added friction for users with seller intent.
+
+**Decision:** `/sign-up` has a buyer/seller toggle. Selecting seller reveals business name + state fields. Seller signup creates profile + business row, sends confirmation email. After email confirmation, `/auth/callback` creates the seller's business row (idempotent), then routes seller to `/sell/verify` or buyer to `/dashboard`. `/sell` becomes hybrid: shows "become seller" UI for users who upgrade later, "manage business" UI for existing sellers.
+
+**Why:** Removes a step in the seller conversion funnel. Captures seller intent at the highest-motivation moment. Preserves the buyer-upgrades-to-seller path for users who join as buyers first.
+
+**Operational:** `handle_new_user` trigger populates profiles from `auth.users.raw_user_meta_data` (`display_name`, `whatsapp_number` only — NOT `user_type`). Application code does post-signup UPDATE for `user_type='seller'`. With email confirmation ON (D-023), business INSERT happens in `/auth/callback` (post-token-exchange, real session), not in the signup action (no session available pre-confirmation).
+
+## D-041: /listings/new blocks unverified sellers
+
+**Context:** Sellers create listings. Listings need `status='active'` AND `business.verification_status='verified'` to appear publicly (RLS policy `products_public_read_active`). If sellers can create active listings before verification, they accumulate hidden listings.
+
+**Decision:** `/listings/new` shows a verification gate page when seller's business is not verified. `createListingAction` also gates server-side as defense in depth. Gate copy varies by state (unsubmitted/pending/rejected) with appropriate CTAs.
+
+**Alternative considered:** allow draft creation with `status='draft'` for pre-verified sellers, auto-publish on approval. Deferred — adds complexity without proportional value at v2 launch.

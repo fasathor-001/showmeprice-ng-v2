@@ -167,24 +167,36 @@ User profiles. One-to-one with `auth.users`. Created automatically via `handle_n
 
 ### `seller_verifications`
 
-Existing table from Phase A. **Originally focused on banking/payout verification**, not identity verification.
+Originally a banking-focused table from Phase A. Phase C.5 P.1 ALTERed it to add identity-verification columns (the gate ShowMePrice actually shipped). Banking columns remain NOT NULL and are populated with the placeholder string `"PENDING"` until Phase G builds the payout flow (see K-009).
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | business_id | uuid → businesses(id) CASCADE | NO | — |
+| **Banking (Phase A)** | | | |
 | id_document_path | text | NO | — |
 | secondary_document_path | text | YES | — |
-| bank_account_number | text | NO | — |
-| bank_name | text | NO | — |
-| bank_account_holder | text | NO | — |
+| bank_account_number | text | NO | — (placeholder `"PENDING"` until Phase G) |
+| bank_name | text | NO | — (placeholder `"PENDING"` until Phase G) |
+| bank_account_holder | text | NO | — (placeholder `"PENDING"` until Phase G) |
+| **Identity (Phase C.5 P.1)** | | | |
+| legal_first_name | text | YES | — |
+| legal_last_name | text | YES | — |
+| address_line_1 | text | YES | — |
+| address_line_2 | text | YES | — |
+| city | text | YES | — |
+| address_state_id | uuid → nigerian_states(id) | YES | — |
+| nin | text | YES | — |
+| id_document_type | id_document_type (enum) | YES | — |
+| selfie_path | text | YES | — |
+| **Status + review** | | | |
 | status | verification_status (enum) | NO | `'pending'` |
 | reviewed_by | uuid → profiles(id) SET NULL | YES | — |
 | reviewed_at | timestamptz | YES | — |
 | rejection_reason | text | YES | — |
 | submitted_at | timestamptz | NO | now() |
 
-**Notes:** Phase C.5 will ALTER this table to add identity fields (legal_first_name, legal_last_name, address, NIN, selfie_path, etc.) without dropping the existing banking columns. The `status` column uses the `verification_status` enum (shared with `businesses.verification_status`).
+**Notes:** The `status` column shares the `verification_status` enum with `businesses.verification_status`. The `address_state_id` FK constraint is `seller_verifications_address_state_id_fkey` (PostgreSQL default naming because P.1 used raw `ALTER TABLE`, not Drizzle migration syntax) — diverges from the rest of the FKs on this table which use Drizzle's `_fk` convention. Prefer implicit FK resolution in Supabase embeds (see the FK Constraints section's guidance).
 
 ### `subscriptions`
 
@@ -361,9 +373,16 @@ All FK constraints use Drizzle's convention: `<table>_<column>_<reftable>_<refco
 | `profiles_id_auth_users_fk` | profiles.id | auth.users.id | CASCADE |
 | `seller_verifications_business_id_businesses_id_fk` | seller_verifications.business_id | businesses.id | CASCADE |
 | `seller_verifications_reviewed_by_profiles_id_fk` | seller_verifications.reviewed_by | profiles.id | SET NULL |
+| `seller_verifications_address_state_id_fkey` | seller_verifications.address_state_id | nigerian_states.id | NO ACTION (default) |
 | `subscriptions_profile_id_profiles_id_fk` | subscriptions.profile_id | profiles.id | CASCADE |
 
-**Use these EXACT names** in any Supabase nested-resource embed (`profiles!businesses_owner_id_profiles_id_fk(...)`). NEVER assume `_fkey` suffix.
+**Two naming conventions exist** on the same database, because not all FKs were created by Drizzle:
+- Drizzle migration default: `<table>_<col>_<reftable>_<refcol>_fk`
+- PostgreSQL auto-naming for raw `ALTER TABLE ... REFERENCES ...`: `<table>_<col>_fkey`
+
+The `seller_verifications` table demonstrates both — `business_id_businesses_id_fk` (Drizzle) and `address_state_id_fkey` (P.1 raw SQL). Any future raw-ALTER FK addition will land with the `_fkey` suffix unless the migration explicitly names the constraint.
+
+**Operationally:** prefer **implicit FK resolution** in Supabase embeds — `nigerian_states(name)` rather than `nigerian_states!<constraint>(name)`. PostgREST auto-resolves the embed when the column→table mapping is unambiguous, and the embed survives any future rename or replacement. Only use the explicit `!constraint` form when you have multiple FKs between the same two tables and need to disambiguate; in that case, verify the exact name via `SELECT conname FROM pg_constraint WHERE conrelid = 'tablename'::regclass`.
 
 ---
 
@@ -417,3 +436,4 @@ The project journal (chat summary at start of conversations) was inaccurate in s
 8. **Update this file when changing schema** in the same commit as the migration
 9. **Phase A freeze trigger naming is `<table>_freeze_<thing>`, NOT `freeze_<table>_<thing>`.** Actual names: `businesses_freeze_verification` and `profiles_freeze_role`. Searching by the wrong convention will find nothing.
 10. **handle_new_user does NOT set user_type or role.** Signup actions must UPDATE profiles after auth signup if the user is a seller (`profiles_self_update` RLS allows this). The `profiles_freeze_role` trigger only blocks `role` changes, not `user_type`.
+11. **FK constraint names come from two conventions on this database.** PostgreSQL auto-names FKs from raw `ALTER TABLE` with the `_fkey` suffix; Drizzle migrations use `_<reftable>_<refcol>_fk`. Same table can have both (`seller_verifications` does). Never reference FK constraint names explicitly in Supabase JS embeds — use implicit resolution (`nigerian_states(name)`, not `nigerian_states!<constraint>(name)`). Implicit form resolves regardless of source.

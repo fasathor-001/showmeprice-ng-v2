@@ -89,17 +89,18 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Not blocking Phase C.5.** Identity verification + admin approval flow work correctly with the placeholders.
 
-### K-011 — Cross-browser email confirmation fails (PKCE flow) (medium)
+### K-011 — Cross-browser PKCE email confirmation fails (medium)
 
-**Symptom:** A user who signs up in browser A (e.g., desktop Chrome) and clicks the confirmation link in browser B (e.g., mobile Safari, or a different desktop browser) lands on `/sign-in?error=callback-failed`. Signup is complete on the Supabase side — `auth.users` and `profiles` rows exist — but the user can't establish a session from the confirmation click.
+**Context:** Supabase's default auth flow uses PKCE (Proof Key for Code Exchange). When users sign up, the Supabase client stores a "code verifier" in the browser. When they click the confirmation link, the callback expects the same verifier. If clicked in a different browser, mobile device, or after clearing cookies, the verifier is missing and the callback fails with `?error=callback-failed` redirected to `/sign-in`.
 
-**Root cause:** `@supabase/ssr` defaults to the **PKCE flow**. PKCE generates a `code_verifier` at signUp time and stores it in a browser cookie. The confirmation email contains a one-time `code` that must be exchanged with the matching `code_verifier`. When the email is opened in a different browser, the cookie isn't there, so `supabase.auth.exchangeCodeForSession(code)` returns an error and `/auth/callback` falls through to the error redirect.
+**User impact:** Real-world. Users frequently sign up on laptop and check email on phone. They hit this and think the site is broken.
 
-**Severity:** medium. Same-browser flow works (typical desktop signup → click link in default browser). The fail case is: sign up in desktop, click link on phone — a plausible real-world pattern. Mobile-first audiences likely hit this often.
+**Fix options:**
+- (a) Switch from PKCE flow to implicit flow for email confirmation (less secure but cross-device).
+- (b) Add "Resend confirmation email" flow that lets users request a fresh email and trigger PKCE in current browser.
+- (c) Use Supabase Auth's magic-link variant which doesn't require PKCE verifier.
 
-**Fix when prioritized:** Switch the confirm-signup email template to the `token_hash` / OTP flow, mirroring D-027's password-reset fix. The template URL becomes `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/dashboard`. Our callback already handles the `token_hash` branch via `verifyOtp`, which is stateless and works cross-browser. Once the email template is updated, no application code changes are needed.
-
-**Not blocking Phase C.5.** Same-browser flow works; we can ship the gate. Track for a small follow-up: customize the Supabase "Confirm signup" email template in the Dashboard.
+**Priority:** Phase E or before public launch. Not blocking Phase C.5 completion (no real users yet). Add to public-launch checklist.
 
 ## Resolved or superseded
 

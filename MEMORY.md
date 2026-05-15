@@ -192,6 +192,74 @@ Before any UI work: encode every color, spacing value, radius, shadow, and font 
 
 This is the same principle as D-016's "schema is the database, not the migrations folder." Single source of truth wins.
 
+### Pre-flight owner actions must be paired with verification queries and explicit owner paste-back
+
+Phase C.5 had five pre-flight items (P.1–P.5). All five were "specced as owner actions" but only became fully applied after explicit verification queries returned the expected state and were pasted back during execution. The pattern of "spec says owner runs SQL X" without an inline verification query led to repeated drift between assumed and actual database state.
+
+**Operational:** every owner SQL pre-flight should include an inline verification query immediately after, with the spec requiring the owner to paste the output as proof of application. Trust no spec text alone as proof of database state. Phase C.5's P.2 (RLS tightening) was applied without verification during the unified spec; we discovered Section 4 was building against the assumed-applied state, not actually-applied. Same pattern recurred for P.3, P.4, P.5.
+
+### Cloudflare Pages edge runtime is incompatible with `revalidatePath` / `revalidateTag`
+
+Next.js's revalidation mechanism fails on Cloudflare Pages with errors like `Illegal invocation: function called with incorrect this reference` or `Cannot read properties of null (reading 'default')`. When the action `redirect()`s after the failed revalidation, the failure is invisible — but actions that return success state (instead of redirecting) get visible 500 errors.
+
+**Operational:** drive UI freshness via navigation (`redirect()` to refresh page), not via cache invalidation (`revalidatePath`). Never call `revalidatePath` in any server action on this codebase, regardless of whether it's followed by a redirect.
+
+### URL-driven UI state must be captured to component state on first read
+
+Reading derived state directly from `searchParams` on every render creates an unmount cycle when the URL is programmatically replaced (e.g., to strip `?toast=` after consuming). Solution: capture the resolved value into local `useState` on first render, then let subsequent renders ignore the cleaned URL.
+
+Caught in C.5.6.0.1 — toast was disappearing in ~1 frame because `router.replace()` stripped the param, the re-render saw `null`, and the toast unmounted before its dismiss timer fired.
+
+### FK constraint naming is inconsistent between Drizzle migrations and raw SQL ALTER TABLE
+
+Drizzle's convention: `<table>_<col>_<reftable>_<refcol>_fk`. PostgreSQL's auto-naming for FKs added via raw `ALTER TABLE`: `<table>_<col>_fkey`. The same table can have FKs with different conventions if some were added via Drizzle and others via raw ALTER. (Phase C.5's `seller_verifications.address_state_id_fkey` is `_fkey` because P.1 used raw SQL; `business_id_businesses_id_fk` is `_fk` because Drizzle generated it.)
+
+**Operational:** never reference FK constraint names explicitly in Supabase JS embeds. Use implicit resolution: `nigerian_states(name)` not `nigerian_states!<constraint>(name)`. Implicit form resolves regardless of source-of-generation.
+
+**Refines:** K-008 (originally about Drizzle's `_fk` vs `_id_fk` confusion; now expanded to include `_fkey` vs `_fk` cross-source case).
+
+### Build gates catch syntax errors; only end-to-end smoke tests catch runtime/integration issues
+
+`pnpm typecheck && pnpm lint && pnpm build` passing does not mean code works. Phase C.5 had a follow-up commit on roughly every section (2.1, 3.1, 5.1, 5.6.0, 5.6.0.1, 6.1, 8.1) — each catching something only visible at runtime: redirect to wrong destination, `/sell` crash for buyers, toast unmount, edge runtime `revalidatePath`, FK name mismatch, banner copy inconsistency. None of these would have surfaced before deploy + browser test.
+
+**Operational:** plan for at least one follow-up commit per section that involves runtime behavior, file I/O, redirects, or external service interaction. Make hard-stop smoke tests the actual gate, not the build gate.
+
+### Database freeze triggers shape application architecture, not the other way around
+
+Phase C.5's submit flow was redesigned because Phase A's `businesses_freeze_verification` trigger blocks non-admin writes to `verification_status`. Initial approaches (service role wrapper, custom trigger relaxation) worked against the security model. Final approach (seller writes to audit table, admin actions consume it) works with it.
+
+**Operational:** when a database constraint, trigger, or RLS policy "gets in the way," the application flow should change to respect it. The constraint usually encodes a security or correctness guarantee that workarounds dilute. Pattern: for any sensitive state field protected by a freeze trigger, route state changes through admin-only actions, let user-facing actions write to an audit/submission table that admins consume.
+
+### Auth trigger metadata is the bridge between client signup and profile state
+
+Phase A's `handle_new_user` trigger reads from `auth.users.raw_user_meta_data` to populate profiles. Application code sets metadata via `supabase.auth.signUp({ options: { data: {...} } })` and that flows into the trigger. NOT every metadata field is automatically read — the trigger must explicitly select fields. (Phase C.5's signup passes `user_type` in metadata as forward-compat, but the current trigger doesn't consume it; application does post-signup UPDATE instead.)
+
+**Operational:** when adding user-shape fields that need to be set at signup, decide: read in trigger (atomic with profile creation, but requires trigger update) OR read in application post-signup (no trigger dependency, but requires explicit UPDATE permission via RLS). The application path requires the relevant RLS policy to allow self-updates AND the freeze trigger NOT to block the column. Phase C.5 `user_type` passes both checks; `role` doesn't (frozen by trigger) so role updates must go through admin override.
+
+### For critical user actions, prefer dedicated confirmation pages over transient toasts
+
+Critical actions (signup, verification submission, admin approval, escrow funding, dispute filing) merit dedicated confirmation pages, not toasts. Confirmation pages give clear acknowledgment, room to explain next steps, and exit points to other parts of the app. Routine actions (save description, mark read, update preference) can use toasts (4–7 seconds, prominent). Always-on indicators (autosave, search filters) can use inline indicators.
+
+Caught in C.5.2.1 (signup confirmation) and C.5.5.1 (verification submission confirmation).
+
+### Three-layer defense-in-depth for sensitive state
+
+Phase C.5's listing-visibility gate is enforced at three independent layers:
+
+1. **App-layer:** page renders gate page instead of form when `verification_status !== 'verified'`
+2. **Action-layer:** server action returns error response if state check fails (catches direct POST attempts)
+3. **DB-layer:** RLS policy filters rows from public marketplace queries
+
+Each layer catches different failure modes. App layer catches normal users. Action layer catches devs replaying captured form submissions. DB layer catches anyone who somehow bypasses both above. The cost is small (one if-block per layer); the security guarantee is real.
+
+**Pattern for future phases:** for any feature with sensitive access control (escrow status, message content filtering, premium tier features), apply all three layers.
+
+### State derivation logic should live in a single helper, not be duplicated across pages
+
+The verification state machine has five states derived from two database signals (`businesses.verification_status` and latest `seller_verifications.status`). Originally each page consuming this state had its own switch ladder. Section 8 extracted `getVerificationState({ business, latestSubmission })` to `src/lib/verification.ts`.
+
+**Operational:** when the same multi-signal state derivation appears in 2+ pages, extract it. The cost is one helper file; the benefit is a single source of truth for state mapping. Phase C.5 caught a latent bug in `/sell` during the extraction (was reading only one signal, was mislabeling pending sellers as "Verification needed").
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `whatsapp_number`)
