@@ -18,7 +18,7 @@ export const businesses = pgTable("businesses", {
   logo_path: text("logo_path"),
   verification_status: verificationStatusEnum("verification_status")
     .notNull()
-    .default("unverified"),
+    .default("unsubmitted"),
   rejection_reason: text("rejection_reason"),
   is_disabled: boolean("is_disabled").notNull().default(false),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
