@@ -72,6 +72,18 @@ Both return 404 (the Phase B.6.1 explicit not-found page). A user clicking eithe
 
 **Scheduled:** Phase C.5 (next phase). Not blocking Phase C launch.
 
+### K-011 — Cross-browser email confirmation fails (PKCE flow) (medium)
+
+**Symptom:** A user who signs up in browser A (e.g., desktop Chrome) and clicks the confirmation link in browser B (e.g., mobile Safari, or a different desktop browser) lands on `/sign-in?error=callback-failed`. Signup is complete on the Supabase side — `auth.users` and `profiles` rows exist — but the user can't establish a session from the confirmation click.
+
+**Root cause:** `@supabase/ssr` defaults to the **PKCE flow**. PKCE generates a `code_verifier` at signUp time and stores it in a browser cookie. The confirmation email contains a one-time `code` that must be exchanged with the matching `code_verifier`. When the email is opened in a different browser, the cookie isn't there, so `supabase.auth.exchangeCodeForSession(code)` returns an error and `/auth/callback` falls through to the error redirect.
+
+**Severity:** medium. Same-browser flow works (typical desktop signup → click link in default browser). The fail case is: sign up in desktop, click link on phone — a plausible real-world pattern. Mobile-first audiences likely hit this often.
+
+**Fix when prioritized:** Switch the confirm-signup email template to the `token_hash` / OTP flow, mirroring D-027's password-reset fix. The template URL becomes `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/dashboard`. Our callback already handles the `token_hash` branch via `verifyOtp`, which is stateless and works cross-browser. Once the email template is updated, no application code changes are needed.
+
+**Not blocking Phase C.5.** Same-browser flow works; we can ship the gate. Track for a small follow-up: customize the Supabase "Confirm signup" email template in the Dashboard.
+
 ## Resolved or superseded
 
 ### K-008 — Phase C listing CRUD broken on actual schema (RESOLVED)

@@ -288,12 +288,16 @@ export async function becomeSellerAction(
     return { errors: { _form: "You already have a seller account" } };
   }
 
+  // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md (post P.1).
+  // Setting it to 'pending' here was wrong: 'pending' means "we have a submission
+  // under review," but a brand-new business has no submission yet. The seller's
+  // /sell/verify flow flips both businesses.verification_status and
+  // seller_verifications.status through the admin approval path.
   const { error: insertError } = await supabase.from("businesses").insert({
     owner_id: user.id,
     business_name: businessName,
     description: businessDescription,
     state_id: stateId,
-    verification_status: "pending",
   });
 
   if (insertError) {
@@ -306,7 +310,67 @@ export async function becomeSellerAction(
     .eq("id", user.id);
 
   revalidatePath("/", "layout");
-  redirect("/dashboard/listings?toast=seller-account-created");
+  redirect("/sell/verify?toast=seller-account-created");
+}
+
+interface UpdateBusinessErrors {
+  businessName?: string;
+  businessDescription?: string;
+  stateId?: string;
+  _form?: string;
+}
+
+interface UpdateBusinessResult {
+  errors?: UpdateBusinessErrors;
+  success?: boolean;
+}
+
+export async function updateBusinessAction(
+  _prev: UpdateBusinessResult | null,
+  formData: FormData
+): Promise<UpdateBusinessResult> {
+  const businessName = String(formData.get("businessName") ?? "").trim();
+  const businessDescription = String(
+    formData.get("businessDescription") ?? ""
+  ).trim();
+  const stateId = String(formData.get("stateId") ?? "");
+
+  const errors: UpdateBusinessErrors = {};
+  if (!businessName) errors.businessName = "Business name is required";
+  else if (businessName.length < 2)
+    errors.businessName = "Business name must be at least 2 characters";
+  else if (businessName.length > 80)
+    errors.businessName = "Business name is too long (max 80)";
+
+  if (businessDescription && businessDescription.length > 500)
+    errors.businessDescription = "Description is too long (max 500)";
+
+  if (!stateId) errors.stateId = "State is required";
+
+  if (Object.values(errors).some((v) => v)) return { errors };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { errors: { _form: "You must be signed in" } };
+
+  // businesses_owner_update RLS allows the owner to update; the
+  // businesses_freeze_verification trigger only blocks changes to
+  // verification_status — other columns pass through cleanly.
+  const { error } = await supabase
+    .from("businesses")
+    .update({
+      business_name: businessName,
+      description: businessDescription || null,
+      state_id: stateId,
+    })
+    .eq("owner_id", user.id);
+
+  if (error) return { errors: { _form: error.message } };
+
+  revalidatePath("/sell");
+  return { success: true };
 }
 
 interface ListingActionResult {

@@ -21,7 +21,7 @@ export const toastMessages: Record<string, ToastMessage> = {
   "seller-account-created": {
     variant: "success",
     message:
-      "Your seller account is ready. Post your first listing to get started.",
+      "Your seller account is ready. Verify your business below to start listing.",
   },
   "listing-created": {
     variant: "success",
