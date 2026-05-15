@@ -329,7 +329,7 @@ Business-logic triggers (excluding auto-generated FK constraint triggers).
 | `enforce_product_seller_matches_business` | (trigger context) | trigger | Trigger function for products INSERT check |
 | `freeze_business_verification` | (trigger context) | trigger | Trigger function on businesses UPDATE |
 | `freeze_profile_role` | (trigger context) | trigger | Trigger function on profiles UPDATE |
-| `handle_new_user` | (trigger context) | trigger | Creates profile row on auth.users insert |
+| `handle_new_user` | (trigger context) | trigger | Creates profile row on auth.users insert. Reads `display_name` and `whatsapp_number` from `NEW.raw_user_meta_data` (passed via `supabase.auth.signUp({ options: { data: ... } })`). Falls back to `split_part(email, '@', 1)` if display_name missing, empty string if whatsapp_number missing. Does NOT read `user_type` or `role` — application code must set those after signup. |
 | **`is_admin`** | `check_user_id uuid` | boolean | Checks if given user_id is admin |
 | `set_updated_at` | (trigger context) | trigger | Generic updated_at maintenance |
 
@@ -367,12 +367,34 @@ All FK constraints use Drizzle's convention: `<table>_<column>_<reftable>_<refco
 
 ---
 
+## Unique Constraints
+
+Seven unique constraints in the `public` schema (separate from FK constraints).
+
+| Constraint | Table | Columns | Meaning |
+|---|---|---|---|
+| `businesses_owner_id_unique` | businesses | owner_id | One business per user. New seller signup INSERT fails with duplicate-key if user already has a business. |
+| `businesses_slug_unique` | businesses | slug | Business slugs are globally unique. |
+| `categories_slug_unique` | categories | slug | Category slugs globally unique. |
+| `nigerian_states_iso_code_unique` | nigerian_states | iso_code | State ISO codes unique. |
+| `nigerian_states_name_unique` | nigerian_states | name | State names unique. |
+| `products_slug_unique` | products | slug | Listing slugs globally unique. `generateListingSlug()` must produce unique output (random 4-char suffix). |
+| `profiles_handle_unique` | profiles | handle | User handles unique when set (column is nullable). |
+
+**Implications for application code:**
+- Seller signup: business INSERT fails with constraint violation if user already has a business (good — enforces 1:1 owner→business)
+- Listing creation: slug must be unique across the table. Random suffix in `generateListingSlug()` makes collision astronomically rare but not impossible. Retry on conflict if needed.
+- Profile setup: any future "claim your handle" flow needs to handle the unique constraint on collision.
+---
+
 ## Schema gaps relative to project journal
 
 The project journal (chat summary at start of conversations) was inaccurate in several places. Items to correct:
 
 - "11 tables" → actually 12 (admin_audit_log was missing from journal count)
 - "8 enums" → confirmed 8, but values were wrong:
+- "Unique constraints" — the original audit checked FK constraints (`contype = 'f'`) but not unique constraints (`contype = 'u'`). Seven unique constraints exist; documented in the new Unique Constraints section.
+- "`handle_new_user` body" — original audit listed the function but not its behavior. Now documented in the Functions section above.
   - `verification_status` does not include `'suspended'`
   - Journal didn't mention `unverified` value
 - "Triggers: freeze_profile_role and freeze_business_verification" → actual names are `profiles_freeze_role` and `businesses_freeze_verification` (different naming convention)
@@ -393,3 +415,5 @@ The project journal (chat summary at start of conversations) was inaccurate in s
 6. **`product_images` columns are `storage_path` and `position`**, NOT `url` and `sort_order`. There is NO `is_primary` column
 7. **`businesses` column is `business_name`**, NOT `name`
 8. **Update this file when changing schema** in the same commit as the migration
+9. **Phase A freeze trigger naming is `<table>_freeze_<thing>`, NOT `freeze_<table>_<thing>`.** Actual names: `businesses_freeze_verification` and `profiles_freeze_role`. Searching by the wrong convention will find nothing.
+10. **handle_new_user does NOT set user_type or role.** Signup actions must UPDATE profiles after auth signup if the user is a seller (`profiles_self_update` RLS allows this). The `profiles_freeze_role` trigger only blocks `role` changes, not `user_type`.
