@@ -22,20 +22,32 @@ export const TIER_1_FEATURED_SLUGS = [
   "home-living",
 ] as const;
 
+// Phase D.4.1: promoted property + sports from T3, added computer-accessories
+// + travel-luggage. 8 parents in display order.
 export const TIER_2_STANDARD_SLUGS = [
   "health",
   "baby-kids",
   "food-beverages",
   "vehicles",
+  "property",
+  "sports",
+  "computer-accessories",
+  "travel-luggage",
 ] as const;
 
+// Phase D.4.1: -2 (promoted) +7 (new) = 11 parents.
 export const TIER_3_MORE_SLUGS = [
-  "property",
   "services",
-  "sports",
   "books-media",
   "pets",
   "industrial",
+  "office-supplies",
+  "tools-hardware",
+  "garden-outdoor",
+  "musical-instruments",
+  "arts-crafts",
+  "photography-equipment",
+  "religious-items",
 ] as const;
 
 export type CategoryTier = 1 | 2 | 3;
@@ -48,31 +60,46 @@ export function getTierForSlug(slug: string): CategoryTier | null {
 }
 
 /**
- * Emoji icons keyed on categories.icon_name (the lucide-react-style names
- * the Phase D seed populates). Kept here rather than in the categories
- * table so we don't have to migrate every time we tweak an icon. Fallback
- * is a generic tag emoji.
+ * Emoji icons keyed on the category slug. Slug is the canonical identifier
+ * used everywhere else in the app — looking up by slug avoids the dead-end
+ * `icon_name` column (which was a placeholder for an icon library we never
+ * adopted, and is NULL on Phase D.4.1's tier-promotion / new-parent rows).
+ *
+ * Fallback is a generic tag emoji. Subcategory slugs aren't listed because
+ * /categories renders parents only; sub pages don't show an icon.
  */
 const CATEGORY_EMOJI: Record<string, string> = {
-  shirt: "👕",
-  smartphone: "📱",
-  scissors: "💇",
-  sparkles: "💄",
-  cpu: "💻",
-  home: "🛋️",
-  "heart-pulse": "💊",
-  baby: "👶",
-  utensils: "🍽️",
-  car: "🚗",
-  building: "🏢",
-  wrench: "🔧",
-  dumbbell: "🏋️",
-  "book-open": "📚",
-  "paw-print": "🐾",
-  factory: "🏭",
+  // Tier 1
+  fashion: "👕",
+  "mobile-phones-tablets": "📱",
+  "hair-wigs": "💇",
+  beauty: "💄",
+  electronics: "📺", // Phase D.4.1: was 💻; Laptops moved out to Computer & Accessories
+  "home-living": "🛋️",
+  // Tier 2
+  health: "💊",
+  "baby-kids": "👶",
+  "food-beverages": "🍽️",
+  vehicles: "🚗",
+  property: "🏠",
+  sports: "⚽",
+  "computer-accessories": "🖥️",
+  "travel-luggage": "🧳",
+  // Tier 3
+  services: "🛠️",
+  "books-media": "📚",
+  pets: "🐾",
+  industrial: "🏭",
+  "office-supplies": "📎",
+  "tools-hardware": "🔨",
+  "garden-outdoor": "🌱",
+  "musical-instruments": "🎸",
+  "arts-crafts": "🎨",
+  "photography-equipment": "📷",
+  "religious-items": "🙏",
 };
 
-export function getCategoryEmoji(iconName: string | null | undefined): string {
-  if (!iconName) return "🏷️";
-  return CATEGORY_EMOJI[iconName] ?? "🏷️";
+export function getCategoryEmoji(slug: string | null | undefined): string {
+  if (!slug) return "🏷️";
+  return CATEGORY_EMOJI[slug] ?? "🏷️";
 }

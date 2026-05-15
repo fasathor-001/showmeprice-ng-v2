@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Card } from "@/components/ui";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { sortStatesByFeatured } from "@/lib/states";
 
@@ -161,6 +162,15 @@ export default async function CategoryPage({
             <StateFilterAutoSubmit />
           </form>
         </div>
+
+        {/* Property-specific caveat. Renders on the parent /categories/property
+            page and on any subcategory under it (current taxonomy has none,
+            but futureproofed). */}
+        {(params.slug === "property" || parentCategory?.slug === "property") && (
+          <div className="mb-6">
+            <PropertyWarningBanner />
+          </div>
+        )}
 
         {/* Subcategory chips (only on a category that has children) */}
         {children.length > 0 && (

@@ -167,7 +167,7 @@ function CategoryTile({
       <Card variant="hover" className="h-full">
         <div className={large ? "py-2" : ""}>
           <div className={large ? "text-4xl mb-2" : "text-2xl mb-1.5"}>
-            {getCategoryEmoji(category.icon_name)}
+            {getCategoryEmoji(category.slug)}
           </div>
           <p
             className={`font-medium text-ink leading-snug ${

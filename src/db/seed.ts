@@ -63,9 +63,10 @@ async function seed() {
 
   console.log("  ✓ Nigerian states");
 
-  // Phase D taxonomy: 6 Tier 1 (featured) + 4 Tier 2 (standard) + 6 Tier 3
-  // (more drawer). Tier values mirror DB column added in Phase D P-migration.
-  // sort_order is per-tier display order (1..n within each tier).
+  // Phase D taxonomy (post-D.4.1): 6 Tier 1 + 8 Tier 2 + 11 Tier 3.
+  // tier values mirror the DB column; sort_order is per-tier display order.
+  // icon_name is left out of new rows — Phase D.4.1 lookups happen by slug
+  // via getCategoryEmoji() in src/lib/categories.ts.
   const topCategories = await db
     .insert(schema.categories)
     .values([
@@ -77,19 +78,31 @@ async function seed() {
       { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu" },
       { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home" },
 
-      // Tier 2 — in main nav, not on hero
+      // Tier 2 — in main nav, not on hero (8 parents post-D.4.1)
       { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 1, icon_name: "heart-pulse" },
       { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 2, icon_name: "baby" },
       { name: "Food & Drinks", slug: "food-beverages", tier: 2, sort_order: 3, icon_name: "utensils" },
       { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car" },
+      // Promoted from Tier 3 in Phase D.4.1
+      { name: "Property", slug: "property", tier: 2, sort_order: 5 },
+      { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 6 },
+      // New Tier 2 parents in Phase D.4.1
+      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7 },
+      { name: "Travel & Luggage", slug: "travel-luggage", tier: 2, sort_order: 8 },
 
-      // Tier 3 — "more categories" drawer
-      { name: "Property", slug: "property", tier: 3, sort_order: 1, icon_name: "building" },
-      { name: "Services", slug: "services", tier: 3, sort_order: 2, icon_name: "wrench" },
-      { name: "Sports & Fitness", slug: "sports", tier: 3, sort_order: 3, icon_name: "dumbbell" },
-      { name: "Books & Media", slug: "books-media", tier: 3, sort_order: 4, icon_name: "book-open" },
-      { name: "Pets", slug: "pets", tier: 3, sort_order: 5, icon_name: "paw-print" },
-      { name: "Industrial & Business", slug: "industrial", tier: 3, sort_order: 6, icon_name: "factory" },
+      // Tier 3 — "more categories" drawer (11 parents post-D.4.1)
+      { name: "Services", slug: "services", tier: 3, sort_order: 1, icon_name: "wrench" },
+      { name: "Books & Media", slug: "books-media", tier: 3, sort_order: 2, icon_name: "book-open" },
+      { name: "Pets", slug: "pets", tier: 3, sort_order: 3, icon_name: "paw-print" },
+      { name: "Industrial & Business", slug: "industrial", tier: 3, sort_order: 4, icon_name: "factory" },
+      // Phase D.4.1 additions
+      { name: "Office Supplies & Equipment", slug: "office-supplies", tier: 3, sort_order: 5 },
+      { name: "Tools & Hardware", slug: "tools-hardware", tier: 3, sort_order: 6 },
+      { name: "Garden & Outdoor", slug: "garden-outdoor", tier: 3, sort_order: 7 },
+      { name: "Musical Instruments", slug: "musical-instruments", tier: 3, sort_order: 8 },
+      { name: "Arts & Crafts", slug: "arts-crafts", tier: 3, sort_order: 9 },
+      { name: "Photography Equipment", slug: "photography-equipment", tier: 3, sort_order: 10 },
+      { name: "Religious Items", slug: "religious-items", tier: 3, sort_order: 11 },
     ])
     .onConflictDoNothing()
     .returning();
@@ -100,8 +113,10 @@ async function seed() {
   const mobile = topCategories.find((c) => c.slug === "mobile-phones-tablets");
   const hair = topCategories.find((c) => c.slug === "hair-wigs");
   const electronics = topCategories.find((c) => c.slug === "electronics");
+  const compAcc = topCategories.find((c) => c.slug === "computer-accessories");
+  const travel = topCategories.find((c) => c.slug === "travel-luggage");
 
-  if (fashion && mobile && hair && electronics) {
+  if (fashion && mobile && hair && electronics && compAcc && travel) {
     await db
       .insert(schema.categories)
       .values([
@@ -127,11 +142,24 @@ async function seed() {
         { name: "Closures & Frontals", slug: "closures-frontals", parent_id: hair.id, sort_order: 4 },
         { name: "Hair Care Products", slug: "hair-care-products", parent_id: hair.id, sort_order: 5 },
 
-        // Electronics & Gadgets — 1 sub confirmed in current live DB
+        // Electronics & Gadgets — 1 sub (Phase D.4.1 moved Laptops out)
         { name: "Accessories", slug: "electronics-accessories", parent_id: electronics.id, sort_order: 1 },
+
+        // Computer & Accessories subs (6, Phase D.4.1)
+        { name: "Laptops", slug: "laptops", parent_id: compAcc.id, sort_order: 1 },
+        { name: "Desktops & Workstations", slug: "desktops-workstations", parent_id: compAcc.id, sort_order: 2 },
+        { name: "Monitors", slug: "monitors", parent_id: compAcc.id, sort_order: 3 },
+        { name: "Keyboards & Mice", slug: "keyboards-mice", parent_id: compAcc.id, sort_order: 4 },
+        { name: "Storage & Drives", slug: "storage-drives", parent_id: compAcc.id, sort_order: 5 },
+        { name: "Computer Accessories", slug: "computer-accessories-misc", parent_id: compAcc.id, sort_order: 6 },
+
+        // Travel & Luggage subs (3, Phase D.4.1)
+        { name: "Suitcases", slug: "suitcases", parent_id: travel.id, sort_order: 1 },
+        { name: "Backpacks & Travel Bags", slug: "backpacks-bags", parent_id: travel.id, sort_order: 2 },
+        { name: "Travel Accessories", slug: "travel-accessories", parent_id: travel.id, sort_order: 3 },
       ])
       .onConflictDoNothing();
-    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics");
+    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage");
   } else {
     console.log("  - top categories already seeded; skipping sub-categories");
   }

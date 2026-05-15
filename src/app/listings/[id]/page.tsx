@@ -6,6 +6,7 @@ import { Badge, Card, Avatar } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { ListingImageGallery } from "@/components/listings/ListingImageGallery";
+import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
 
 export const runtime = "edge";
 
@@ -59,6 +60,13 @@ export default async function ListingDetailPage({
       .maybeSingle();
     parentCategory = parent;
   }
+
+  // Property listings carry a category-wide warning (D.4.1) — we don't
+  // verify titles or ownership. Matches when the listing is in 'property'
+  // directly OR in any subcategory of 'property' (futureproofed; current
+  // taxonomy has no subs under property but Phase D.4.1 spec calls it out).
+  const isPropertyTree =
+    category?.slug === "property" || parentCategory?.slug === "property";
 
   // Seller's state (where the business operates from) — separate from the
   // listing's state. Used in the seller info card.
@@ -123,6 +131,12 @@ export default async function ListingDetailPage({
             {listing.title}
           </span>
         </nav>
+
+        {isPropertyTree && (
+          <div className="mb-6">
+            <PropertyWarningBanner />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           {/* Gallery */}
