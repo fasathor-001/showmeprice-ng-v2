@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Badge, Card, Avatar } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
+import { getProductImagePublicUrl } from "@/lib/storage";
 
 export const runtime = "edge";
 
@@ -43,7 +44,9 @@ export default async function ListingDetailPage({
   const images = [...(listing.product_images ?? [])].sort(
     (a, b) => a.position - b.position
   );
-  const primaryImage = images[0]?.storage_path;
+  const primaryImage = images[0]
+    ? getProductImagePublicUrl(images[0].storage_path)
+    : undefined;
   const category = Array.isArray(listing.categories)
     ? listing.categories[0]
     : listing.categories;
@@ -111,7 +114,7 @@ export default async function ListingDetailPage({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={img.storage_path}
+                      src={getProductImagePublicUrl(img.storage_path)}
                       alt=""
                       className="w-full h-full object-cover"
                     />

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { getProductImagePublicUrl } from "@/lib/storage";
 
 const FEATURED_COUNT = 6;
 
@@ -81,7 +82,11 @@ export async function FeaturedListings() {
                 title={listing.title}
                 priceKobo={listing.price_kobo}
                 isNegotiable={listing.is_negotiable}
-                primaryImageUrl={primary?.storage_path}
+                primaryImageUrl={
+                  primary
+                    ? getProductImagePublicUrl(primary.storage_path)
+                    : undefined
+                }
                 sellerName={biz?.business_name}
                 isVerified={biz?.verification_status === "verified"}
                 stateName={state?.name}

@@ -5,6 +5,7 @@ import { Container } from "@/components/layout";
 import { Button, Card, Badge, ToastFromSearchParams } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
 import { getVerificationState } from "@/lib/verification";
+import { getProductImagePublicUrl } from "@/lib/storage";
 import { DeleteListingButton } from "./DeleteListingButton";
 
 export const runtime = "edge";
@@ -169,7 +170,9 @@ export default async function SellerListingsPage() {
               const sortedImages = [...(listing.product_images ?? [])].sort(
                 (a, b) => a.position - b.position
               );
-              const primaryImage = sortedImages[0]?.storage_path;
+              const primaryImage = sortedImages[0]
+                ? getProductImagePublicUrl(sortedImages[0].storage_path)
+                : undefined;
               return (
                 <Card key={listing.id} padding="none" className="overflow-hidden">
                   <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">

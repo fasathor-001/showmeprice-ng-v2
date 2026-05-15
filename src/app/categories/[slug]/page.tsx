@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Card } from "@/components/ui";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { getProductImagePublicUrl } from "@/lib/storage";
 
 export const runtime = "edge";
 
@@ -98,7 +99,11 @@ export default async function CategoryPage({
                   title={listing.title}
                   priceKobo={listing.price_kobo}
                   isNegotiable={listing.is_negotiable}
-                  primaryImageUrl={primary?.storage_path}
+                  primaryImageUrl={
+                    primary
+                      ? getProductImagePublicUrl(primary.storage_path)
+                      : undefined
+                  }
                   sellerName={biz?.business_name}
                   isVerified={biz?.verification_status === "verified"}
                   stateName={state?.name}
