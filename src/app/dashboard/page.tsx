@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
@@ -14,13 +15,21 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/sign-in");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name, whatsapp_number")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: business }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("display_name, whatsapp_number")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("businesses")
+      .select("id, verification_status")
+      .eq("owner_id", user.id)
+      .maybeSingle(),
+  ]);
 
   const displayName = profile?.display_name || user.email?.split("@")[0] || "there";
+  const hasBusiness = business !== null;
 
   return (
     <Container>
@@ -43,6 +52,46 @@ export default async function DashboardPage() {
               </p>
             )}
           </Card>
+
+          {hasBusiness ? (
+            <Card>
+              <h2 className="text-sm font-medium text-ink mb-1">Your business</h2>
+              <p className="text-xs text-ink-600 mb-3">
+                {business.verification_status === "verified"
+                  ? "Manage your listings and business profile."
+                  : "Finish verification to publish your listings."}
+              </p>
+              <div className="flex flex-col gap-2">
+                <Link
+                  href="/dashboard/listings"
+                  className="text-sm text-teal-700 hover:text-teal-900 font-medium"
+                >
+                  Your listings →
+                </Link>
+                <Link
+                  href="/sell"
+                  className="text-sm text-teal-700 hover:text-teal-900 font-medium"
+                >
+                  Manage business →
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <Card>
+              <h2 className="text-sm font-medium text-ink mb-1">
+                Want to sell on ShowMePrice?
+              </h2>
+              <p className="text-xs text-ink-600 mb-3">
+                Set up your business profile to start listing products.
+              </p>
+              <Link
+                href="/sell"
+                className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-teal-700"
+              >
+                Become a seller
+              </Link>
+            </Card>
+          )}
 
           <Card>
             <h2 className="text-sm font-medium text-ink mb-3">Quick actions</h2>

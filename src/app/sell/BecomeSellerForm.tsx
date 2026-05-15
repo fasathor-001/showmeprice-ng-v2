@@ -20,12 +20,12 @@ export function BecomeSellerForm({ states }: Props) {
 
   return (
     <form action={formAction} noValidate className="space-y-4">
-      {state.errors?._form && (
+      {state?.errors?._form && (
         <div
           role="alert"
           className="bg-danger-bg border border-danger/30 text-danger-text text-sm px-3 py-2.5 rounded-lg"
         >
-          {state.errors._form}
+          {state?.errors._form}
         </div>
       )}
 
@@ -41,7 +41,7 @@ export function BecomeSellerForm({ states }: Props) {
           name="businessName"
           type="text"
           required
-          error={state.errors?.businessName}
+          error={state?.errors?.businessName}
           placeholder="e.g. Lagos Phone Hub"
         />
       </div>
@@ -61,9 +61,9 @@ export function BecomeSellerForm({ states }: Props) {
           className="block w-full bg-white border border-neutral-300 rounded-lg text-base text-ink placeholder:text-neutral-400 px-3 py-2.5 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400 focus:ring-offset-1"
           placeholder="Briefly describe your business — what you sell, where you're based, anything that helps buyers trust you."
         />
-        {state.errors?.businessDescription && (
+        {state?.errors?.businessDescription && (
           <p className="text-xs text-danger mt-1.5">
-            {state.errors.businessDescription}
+            {state?.errors.businessDescription}
           </p>
         )}
       </div>
@@ -88,8 +88,8 @@ export function BecomeSellerForm({ states }: Props) {
             </option>
           ))}
         </select>
-        {state.errors?.stateId && (
-          <p className="text-xs text-danger mt-1.5">{state.errors.stateId}</p>
+        {state?.errors?.stateId && (
+          <p className="text-xs text-danger mt-1.5">{state?.errors.stateId}</p>
         )}
       </div>
 

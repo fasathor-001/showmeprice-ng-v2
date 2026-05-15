@@ -270,47 +270,87 @@ export async function becomeSellerAction(
 
   if (Object.values(errors).some((v) => v)) return { errors };
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { errors: { _form: "You must be signed in to become a seller" } };
+  let shouldRedirect = false;
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { errors: { _form: "You must be signed in to become a seller" } };
+    }
+
+    // Defense in depth: page also checks this and redirects.
+    const { data: existingBiz } = await supabase
+      .from("businesses")
+      .select("id")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (existingBiz) {
+      return { errors: { _form: "You already have a seller account" } };
+    }
+
+    // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md (post P.1).
+    // Setting it to 'pending' here was wrong: 'pending' means "we have a submission
+    // under review," but a brand-new business has no submission yet. The seller's
+    // /sell/verify flow flips both businesses.verification_status and
+    // seller_verifications.status through the admin approval path.
+    const { error: insertError } = await supabase.from("businesses").insert({
+      owner_id: user.id,
+      business_name: businessName,
+      description: businessDescription,
+      state_id: stateId,
+    });
+
+    if (insertError) {
+      return { errors: { _form: insertError.message } };
+    }
+
+    // Surface profile-UPDATE errors instead of swallowing them. A silent failure
+    // here was a likely root cause for the C.5.3 production 500 — the business
+    // was created but the user_type upgrade rejected somehow, and the
+    // unhandled rejection bubbled out of the action.
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ user_type: "seller" })
+      .eq("id", user.id);
+    if (profileError) {
+      return {
+        errors: {
+          _form: `Seller upgrade failed: ${profileError.message}`,
+        },
+      };
+    }
+
+    shouldRedirect = true;
+  } catch (e) {
+    // redirect() throws NEXT_REDIRECT which must propagate. Anything else
+    // is a real exception we want to surface as a form error instead of
+    // letting it 500 — that's what triggered the "Application error" /
+    // undefined-state crash on the client (C.5.3.1).
+    if (
+      e &&
+      typeof e === "object" &&
+      "digest" in e &&
+      typeof (e as { digest?: unknown }).digest === "string" &&
+      (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e;
+    }
+    return {
+      errors: {
+        _form: `Couldn't create seller account: ${
+          e instanceof Error ? e.message : "unknown error"
+        }`,
+      },
+    };
   }
 
-  // Defense in depth: page also checks this and redirects.
-  const { data: existingBiz } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (existingBiz) {
-    return { errors: { _form: "You already have a seller account" } };
+  if (shouldRedirect) {
+    revalidatePath("/", "layout");
+    redirect("/sell/verify?toast=seller-account-created");
   }
-
-  // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md (post P.1).
-  // Setting it to 'pending' here was wrong: 'pending' means "we have a submission
-  // under review," but a brand-new business has no submission yet. The seller's
-  // /sell/verify flow flips both businesses.verification_status and
-  // seller_verifications.status through the admin approval path.
-  const { error: insertError } = await supabase.from("businesses").insert({
-    owner_id: user.id,
-    business_name: businessName,
-    description: businessDescription,
-    state_id: stateId,
-  });
-
-  if (insertError) {
-    return { errors: { _form: insertError.message } };
-  }
-
-  await supabase
-    .from("profiles")
-    .update({ user_type: "seller" })
-    .eq("id", user.id);
-
-  revalidatePath("/", "layout");
-  redirect("/sell/verify?toast=seller-account-created");
+  return {};
 }
 
 interface UpdateBusinessErrors {
@@ -349,28 +389,38 @@ export async function updateBusinessAction(
 
   if (Object.values(errors).some((v) => v)) return { errors };
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { errors: { _form: "You must be signed in" } };
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { errors: { _form: "You must be signed in" } };
 
-  // businesses_owner_update RLS allows the owner to update; the
-  // businesses_freeze_verification trigger only blocks changes to
-  // verification_status — other columns pass through cleanly.
-  const { error } = await supabase
-    .from("businesses")
-    .update({
-      business_name: businessName,
-      description: businessDescription || null,
-      state_id: stateId,
-    })
-    .eq("owner_id", user.id);
+    // businesses_owner_update RLS allows the owner to update; the
+    // businesses_freeze_verification trigger only blocks changes to
+    // verification_status — other columns pass through cleanly.
+    const { error } = await supabase
+      .from("businesses")
+      .update({
+        business_name: businessName,
+        description: businessDescription || null,
+        state_id: stateId,
+      })
+      .eq("owner_id", user.id);
 
-  if (error) return { errors: { _form: error.message } };
+    if (error) return { errors: { _form: error.message } };
 
-  revalidatePath("/sell");
-  return { success: true };
+    revalidatePath("/sell");
+    return { success: true };
+  } catch (e) {
+    return {
+      errors: {
+        _form: `Couldn't save business: ${
+          e instanceof Error ? e.message : "unknown error"
+        }`,
+      },
+    };
+  }
 }
 
 interface ListingActionResult {
