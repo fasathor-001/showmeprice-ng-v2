@@ -22,7 +22,7 @@ export default async function ListingDetailPage({
       product_images ( url, sort_order, is_primary ),
       categories ( name, slug ),
       nigerian_states ( name ),
-      businesses ( id, name, description, verification_status, owner_id )
+      businesses ( id, business_name, description, verification_status, owner_id )
     `
     )
     .eq("id", params.id)
@@ -182,14 +182,14 @@ export default async function ListingDetailPage({
               <Card>
                 <div className="flex items-center gap-3">
                   <Avatar
-                    initials={business.name.slice(0, 2)}
-                    alt={business.name}
+                    initials={business.business_name.slice(0, 2)}
+                    alt={business.business_name}
                     size="md"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-medium text-ink truncate">
-                        {business.name}
+                        {business.business_name}
                       </p>
                       {isVerified && (
                         <svg

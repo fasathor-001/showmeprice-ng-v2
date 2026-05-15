@@ -30,7 +30,7 @@ export default async function CategoryPage({
       `
       id, title, price_kobo, is_negotiable, created_at,
       product_images ( url, is_primary, sort_order ),
-      businesses ( name, verification_status ),
+      businesses ( business_name, verification_status ),
       nigerian_states ( name )
     `
     )
@@ -97,7 +97,7 @@ export default async function CategoryPage({
                   priceKobo={listing.price_kobo}
                   isNegotiable={listing.is_negotiable}
                   primaryImageUrl={primary?.url}
-                  sellerName={biz?.name}
+                  sellerName={biz?.business_name}
                   isVerified={biz?.verification_status === "verified"}
                   stateName={state?.name}
                 />

@@ -17,7 +17,7 @@ export default async function SellerListingsPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, name, verification_status")
+    .select("id, business_name, verification_status")
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/sell");
@@ -45,7 +45,7 @@ export default async function SellerListingsPage() {
               Your listings
             </h1>
             <p className="text-sm text-ink-600">
-              {business.name}
+              {business.business_name}
               {business.verification_status !== "verified" && (
                 <span className="ml-2 inline-flex">
                   <Badge variant="warning">Verification pending</Badge>

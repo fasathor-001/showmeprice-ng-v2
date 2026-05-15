@@ -247,7 +247,7 @@ export async function becomeSellerAction(
 
   const { error: insertError } = await supabase.from("businesses").insert({
     owner_id: user.id,
-    name: businessName,
+    business_name: businessName,
     description: businessDescription,
     state_id: stateId,
     verification_status: "pending",
@@ -277,7 +277,7 @@ async function getSellerBusiness(
 ) {
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, name, verification_status")
+    .select("id, business_name, verification_status")
     .eq("owner_id", userId)
     .maybeSingle();
   return business;
