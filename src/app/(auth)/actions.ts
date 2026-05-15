@@ -943,11 +943,15 @@ export async function updateListingAction(
   const categoryId = String(formData.get("categoryId") ?? "");
   const stateId = String(formData.get("stateId") ?? "");
   const negotiable = formData.get("negotiable") === "on";
-  const imageUrls = formData
-    .getAll("imageUrls")
+
+  // Phase D.3: same imagePaths[] convention as createListingAction.
+  const imagePaths = formData
+    .getAll("imagePaths")
     .map((v) => String(v).trim())
     .filter((v) => v.length > 0);
 
+  // Reuse the field validators, skipping the URL check (which is for the
+  // old paste-URL flow).
   const errors = validateListingForm({
     title,
     description,
@@ -955,9 +959,17 @@ export async function updateListingAction(
     categoryId,
     stateId,
     negotiable,
-    imageUrls,
+    imageUrls: imagePaths.length > 0 ? ["https://placeholder/"] : [],
   });
+  errors.imageUrls = undefined;
   if (listingHasErrors(errors)) return { errors };
+
+  if (imagePaths.length === 0) {
+    return { errors: { imageUrls: "Add at least one image" } };
+  }
+  if (imagePaths.length > 8) {
+    return { errors: { imageUrls: "Maximum 8 images per listing" } };
+  }
 
   const priceKobo = parseNairaInputToKobo(priceInput)!;
 
@@ -969,12 +981,45 @@ export async function updateListingAction(
 
   const { data: existing } = await supabase
     .from("products")
-    .select("seller_id")
+    .select("seller_id, business_id")
     .eq("id", productId)
     .maybeSingle();
   if (!existing) return { errors: { _form: "Listing not found" } };
   if (existing.seller_id !== user.id)
     return { errors: { _form: "You don't own this listing" } };
+
+  // Defense in depth: business must still be verified.
+  const business = await getSellerBusiness(supabase, user.id);
+  if (!business || business.id !== existing.business_id) {
+    return { errors: { _form: "You don't own this listing" } };
+  }
+  if (business.verification_status !== "verified") {
+    return {
+      errors: {
+        _form: "Your account must be verified to edit listings",
+      },
+    };
+  }
+
+  // Every submitted path must live under this listing's storage folder.
+  const expectedPrefix = `${business.id}/${productId}/`;
+  for (const p of imagePaths) {
+    if (!p.startsWith(expectedPrefix)) {
+      return {
+        errors: { _form: "One or more uploaded images don't belong to this listing." },
+      };
+    }
+  }
+
+  // Snapshot current DB rows so we can compute which Storage files to remove.
+  const { data: dbImages } = await supabase
+    .from("product_images")
+    .select("storage_path")
+    .eq("product_id", productId);
+  const submittedSet = new Set(imagePaths);
+  const filesToRemove = (dbImages ?? [])
+    .map((r) => r.storage_path)
+    .filter((p) => !submittedSet.has(p));
 
   const { error: updateError } = await supabase
     .from("products")
@@ -987,19 +1032,36 @@ export async function updateListingAction(
       state_id: stateId,
     })
     .eq("id", productId);
-
   if (updateError) return { errors: { _form: updateError.message } };
 
-  // Replace images: delete-then-insert is simpler than diffing for Phase C.
+  // Replace product_images: delete all, re-insert in submission order. The
+  // delete-then-insert pattern handles reorder, add, and remove in one
+  // INSERT pass; positions match submitted order exactly.
   await supabase.from("product_images").delete().eq("product_id", productId);
-  const imageInserts = imageUrls.map((url, idx) => ({
+  const imageInserts = imagePaths.map((path, idx) => ({
     product_id: productId,
-    storage_path: url,
+    storage_path: path,
     position: idx,
   }));
-  await supabase.from("product_images").insert(imageInserts);
+  const { error: imageError } = await supabase
+    .from("product_images")
+    .insert(imageInserts);
+  if (imageError) {
+    console.error("Failed to update images", imageError);
+  }
 
-  revalidatePath("/", "layout");
+  // Best-effort Storage cleanup for files no longer referenced. Failures
+  // leave orphans (K-010 territory) — not blocking.
+  if (filesToRemove.length > 0) {
+    const { error: removeError } = await supabase.storage
+      .from("product-images")
+      .remove(filesToRemove);
+    if (removeError) {
+      console.warn("Storage cleanup failed", removeError.message);
+    }
+  }
+
+  // No revalidatePath (broken on Cloudflare edge — banked C.5.6.0 lesson).
   redirect(`/dashboard/listings?toast=listing-updated`);
 }
 
@@ -1015,14 +1077,27 @@ export async function deleteListingAction(formData: FormData): Promise<void> {
 
   const { data: existing } = await supabase
     .from("products")
-    .select("seller_id")
+    .select("seller_id, product_images ( storage_path )")
     .eq("id", productId)
     .maybeSingle();
   if (!existing || existing.seller_id !== user.id) return;
 
-  // product_images cascade-deletes via FK in Phase A schema.
+  const storagePaths = (existing.product_images ?? []).map((i) => i.storage_path);
+
+  // Storage cleanup before the DB delete — product_images rows cascade away
+  // when the product is deleted (FK ON DELETE CASCADE), but Storage objects
+  // don't, so they'd orphan if we deleted the product first.
+  if (storagePaths.length > 0) {
+    const { error: removeError } = await supabase.storage
+      .from("product-images")
+      .remove(storagePaths);
+    if (removeError) {
+      console.warn("Storage cleanup failed during delete", removeError.message);
+    }
+  }
+
+  // product_images rows cascade via FK; we don't need a separate delete.
   await supabase.from("products").delete().eq("id", productId);
 
-  revalidatePath("/", "layout");
   redirect(`/dashboard/listings?toast=listing-deleted`);
 }

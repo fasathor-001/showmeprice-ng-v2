@@ -6,7 +6,6 @@ import { Button, Card, Badge, ToastFromSearchParams } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
 import { getVerificationState } from "@/lib/verification";
 import { getProductImagePublicUrl } from "@/lib/storage";
-import { DeleteListingButton } from "./DeleteListingButton";
 
 export const runtime = "edge";
 
@@ -218,10 +217,13 @@ export default async function SellerListingsPage() {
                         >
                           Edit
                         </Link>
-                        <DeleteListingButton
-                          productId={listing.id}
-                          title={listing.title}
-                        />
+                        <Link
+                          href={`/listings/${listing.id}/delete`}
+                          className="text-danger-text hover:underline font-medium"
+                          aria-label={`Delete ${listing.title}`}
+                        >
+                          Delete
+                        </Link>
                       </div>
                     </div>
                   </div>

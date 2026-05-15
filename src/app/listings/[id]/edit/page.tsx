@@ -3,9 +3,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Card } from "@/components/ui";
-import { ListingForm } from "@/components/listings/ListingForm";
+import { EditListingForm } from "@/components/listings/EditListingForm";
 import { updateListingAction } from "@/app/(auth)/actions";
 import { formatNaira } from "@/lib/listings";
+import { getProductImagePublicUrl } from "@/lib/storage";
+import { getVerificationState } from "@/lib/verification";
 
 export const runtime = "edge";
 
@@ -20,12 +22,38 @@ export default async function EditListingPage({
   } = await supabase.auth.getUser();
   if (!user) redirect(`/sign-in?next=/listings/${params.id}/edit`);
 
+  // Load the seller's business to (a) check ownership against the listing
+  // and (b) gate on verification status. Same defensive layering used by
+  // /listings/new (Phase C.5.8).
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, verification_status, rejection_reason")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!business) redirect("/sell");
+
+  let latestSubmission: { status: string } | null = null;
+  if (business.verification_status !== "verified") {
+    const { data } = await supabase
+      .from("seller_verifications")
+      .select("status")
+      .eq("business_id", business.id)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    latestSubmission = data;
+  }
+  const verificationState = getVerificationState({ business, latestSubmission });
+  if (verificationState !== "verified") {
+    redirect("/dashboard/listings");
+  }
+
   const { data: listing } = await supabase
     .from("products")
     .select(
       `
       id, title, description, price_kobo, is_negotiable,
-      category_id, state_id, seller_id,
+      category_id, state_id, seller_id, business_id,
       product_images ( storage_path, position )
     `
     )
@@ -34,15 +62,19 @@ export default async function EditListingPage({
 
   if (!listing) redirect("/dashboard/listings");
   if (listing.seller_id !== user.id) redirect("/dashboard/listings");
+  if (listing.business_id !== business.id) redirect("/dashboard/listings");
 
   const [{ data: categories }, { data: states }] = await Promise.all([
     supabase.from("categories").select("id, name").order("sort_order", { ascending: true }),
     supabase.from("nigerian_states").select("id, name").order("name", { ascending: true }),
   ]);
 
-  const imageUrls = [...(listing.product_images ?? [])]
+  const existingImages = [...(listing.product_images ?? [])]
     .sort((a, b) => a.position - b.position)
-    .map((img) => img.storage_path);
+    .map((img) => ({
+      storage_path: img.storage_path,
+      public_url: getProductImagePublicUrl(img.storage_path),
+    }));
 
   const boundUpdateAction = updateListingAction.bind(null, listing.id);
 
@@ -57,21 +89,21 @@ export default async function EditListingPage({
         <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">Edit listing</h1>
         <p className="text-sm text-ink-600 mb-8">{listing.title}</p>
         <Card>
-          <ListingForm
+          <EditListingForm
             action={boundUpdateAction}
             categories={categories ?? []}
             states={states ?? []}
+            businessId={business.id}
+            productId={listing.id}
+            existingImages={existingImages}
             defaults={{
               title: listing.title,
               description: listing.description,
               priceInput: formatNaira(listing.price_kobo).replace("₦", ""),
-              categoryId: listing.category_id,
-              stateId: listing.state_id,
+              categoryId: listing.category_id ?? "",
+              stateId: listing.state_id ?? "",
               negotiable: listing.is_negotiable,
-              imageUrls: imageUrls.length > 0 ? imageUrls : [""],
             }}
-            submitLabel="Save changes"
-            pendingLabel="Saving…"
           />
         </Card>
       </div>

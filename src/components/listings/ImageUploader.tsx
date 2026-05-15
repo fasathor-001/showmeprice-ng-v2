@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 export interface UploaderImage {
@@ -11,6 +11,13 @@ export interface UploaderImage {
 interface Props {
   businessId: string;
   productId: string;
+  /**
+   * Images that already exist in product_images for this product. The
+   * uploader treats them as already-uploaded — no Storage call on init.
+   * When the user removes one, it's dropped from local state and the
+   * server action computes the final diff at submit time (so we don't
+   * delete the Storage object until the form is actually saved).
+   */
   existingImages?: UploaderImage[];
   /** Notified on every list change (add/remove/reorder) so the parent form's
    *  hidden inputs stay in sync with what'll be submitted. */
@@ -39,6 +46,13 @@ export function ImageUploader({
     done: 0,
     total: 0,
   });
+
+  // Snapshot of paths that were already in product_images at mount. Used in
+  // deleteImage() to decide whether to clean up Storage now (newly uploaded)
+  // or let the server action handle it on submit (existing).
+  const initialPaths = useRef<Set<string>>(
+    new Set((existingImages ?? []).map((i) => i.storage_path))
+  );
 
   const supabase = createBrowserSupabase();
 
@@ -123,13 +137,20 @@ export function ImageUploader({
   const deleteImage = async (idx: number) => {
     const img = images[idx];
     if (!img) return;
-    // Optimistic local removal so the UI is responsive even if Storage
-    // delete is slow. On failure the file becomes an orphan, picked up
-    // later by K-010's eventual cleanup job.
     setImages((prev) => prev.filter((_, i) => i !== idx));
-    const { error } = await supabase.storage.from(BUCKET).remove([img.storage_path]);
-    if (error) {
-      console.warn("Storage delete failed", img.storage_path, error.message);
+
+    // Only clean up Storage immediately for newly-uploaded files. For images
+    // that were already in product_images when this uploader mounted, leave
+    // the Storage object alone — the server action will diff the submitted
+    // paths against the DB and remove the file then. This avoids "I clicked
+    // delete, hit cancel on the form, and now my image is gone."
+    if (!initialPaths.current.has(img.storage_path)) {
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .remove([img.storage_path]);
+      if (error) {
+        console.warn("Storage delete failed", img.storage_path, error.message);
+      }
     }
   };
 
