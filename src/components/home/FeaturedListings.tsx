@@ -13,7 +13,7 @@ export async function FeaturedListings() {
     .select(
       `
       id, title, price_kobo, is_negotiable,
-      product_images ( url, is_primary, sort_order ),
+      product_images ( storage_path, position ),
       businesses ( business_name, verification_status ),
       nigerian_states ( name )
     `
@@ -63,9 +63,9 @@ export async function FeaturedListings() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {items.map((listing) => {
             const images = listing.product_images ?? [];
-            const primary =
-              images.find((i) => i.is_primary) ??
-              [...images].sort((a, b) => a.sort_order - b.sort_order)[0];
+            const primary = [...images].sort(
+              (a, b) => a.position - b.position
+            )[0];
             const biz = Array.isArray(listing.businesses)
               ? listing.businesses[0]
               : listing.businesses;
@@ -79,7 +79,7 @@ export async function FeaturedListings() {
                 title={listing.title}
                 priceKobo={listing.price_kobo}
                 isNegotiable={listing.is_negotiable}
-                primaryImageUrl={primary?.url}
+                primaryImageUrl={primary?.storage_path}
                 sellerName={biz?.business_name}
                 isVerified={biz?.verification_status === "verified"}
                 stateName={state?.name}

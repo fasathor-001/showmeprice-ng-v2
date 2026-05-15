@@ -4,6 +4,7 @@ export {
   truncate,
   timeAgo,
   isValidImageUrl,
+  generateListingSlug,
 } from "./format";
 export {
   validateTitle,

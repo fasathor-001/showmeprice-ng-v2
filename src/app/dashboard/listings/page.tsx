@@ -27,7 +27,7 @@ export default async function SellerListingsPage() {
     .select(
       `
       id, title, price_kobo, is_negotiable, status, created_at,
-      product_images ( url, sort_order, is_primary )
+      product_images ( storage_path, position )
     `
     )
     .eq("seller_id", user.id)
@@ -77,9 +77,10 @@ export default async function SellerListingsPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((listing) => {
-              const primaryImage =
-                listing.product_images?.find((img) => img.is_primary)?.url ??
-                listing.product_images?.[0]?.url;
+              const sortedImages = [...(listing.product_images ?? [])].sort(
+                (a, b) => a.position - b.position
+              );
+              const primaryImage = sortedImages[0]?.storage_path;
               return (
                 <Card key={listing.id} padding="none" className="overflow-hidden">
                   <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">

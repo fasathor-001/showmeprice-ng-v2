@@ -19,7 +19,7 @@ export default async function ListingDetailPage({
     .select(
       `
       id, title, description, price_kobo, is_negotiable, status, created_at,
-      product_images ( url, sort_order, is_primary ),
+      product_images ( storage_path, position ),
       categories ( name, slug ),
       nigerian_states ( name ),
       businesses ( id, business_name, description, verification_status, owner_id )
@@ -30,12 +30,10 @@ export default async function ListingDetailPage({
 
   if (!listing || listing.status !== "active") notFound();
 
-  const images = (listing.product_images ?? []).sort((a, b) => {
-    if (a.is_primary && !b.is_primary) return -1;
-    if (!a.is_primary && b.is_primary) return 1;
-    return a.sort_order - b.sort_order;
-  });
-  const primaryImage = images[0]?.url;
+  const images = [...(listing.product_images ?? [])].sort(
+    (a, b) => a.position - b.position
+  );
+  const primaryImage = images[0]?.storage_path;
   const business = Array.isArray(listing.businesses)
     ? listing.businesses[0]
     : listing.businesses;
@@ -106,7 +104,7 @@ export default async function ListingDetailPage({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={img.url}
+                      src={img.storage_path}
                       alt=""
                       className="w-full h-full object-cover"
                     />

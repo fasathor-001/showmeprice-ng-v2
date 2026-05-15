@@ -26,7 +26,7 @@ export default async function EditListingPage({
       `
       id, title, description, price_kobo, is_negotiable,
       category_id, state_id, seller_id,
-      product_images ( url, sort_order )
+      product_images ( storage_path, position )
     `
     )
     .eq("id", params.id)
@@ -40,9 +40,9 @@ export default async function EditListingPage({
     supabase.from("nigerian_states").select("id, name").order("name", { ascending: true }),
   ]);
 
-  const imageUrls = (listing.product_images ?? [])
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((img) => img.url);
+  const imageUrls = [...(listing.product_images ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .map((img) => img.storage_path);
 
   const boundUpdateAction = updateListingAction.bind(null, listing.id);
 

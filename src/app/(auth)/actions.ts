@@ -13,6 +13,7 @@ import {
   parseNairaInputToKobo,
   validateListingForm,
   hasErrors as listingHasErrors,
+  generateListingSlug,
   type ListingValidationErrors,
 } from "@/lib/listings";
 
@@ -324,11 +325,13 @@ export async function createListingAction(
     return { errors: { _form: "You need a seller account before posting listings" } };
   }
 
+  const slug = generateListingSlug(title);
   const { data: product, error: productError } = await supabase
     .from("products")
     .insert({
       business_id: business.id,
       seller_id: user.id,
+      slug,
       title,
       description,
       price_kobo: priceKobo,
@@ -337,6 +340,7 @@ export async function createListingAction(
       category_id: categoryId,
       state_id: stateId,
       status: "active",
+      published_at: new Date().toISOString(),
     })
     .select("id")
     .single();
@@ -347,9 +351,8 @@ export async function createListingAction(
 
   const imageInserts = imageUrls.map((url, idx) => ({
     product_id: product.id,
-    url,
-    sort_order: idx,
-    is_primary: idx === 0,
+    storage_path: url,
+    position: idx,
   }));
   const { error: imageError } = await supabase
     .from("product_images")
@@ -425,9 +428,8 @@ export async function updateListingAction(
   await supabase.from("product_images").delete().eq("product_id", productId);
   const imageInserts = imageUrls.map((url, idx) => ({
     product_id: productId,
-    url,
-    sort_order: idx,
-    is_primary: idx === 0,
+    storage_path: url,
+    position: idx,
   }));
   await supabase.from("product_images").insert(imageInserts);
 

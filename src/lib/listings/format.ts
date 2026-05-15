@@ -73,3 +73,22 @@ export function isValidImageUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * Generate a URL-safe slug from a listing title.
+ * Appends a short random suffix to avoid collisions.
+ * Example: "iPhone 15 Pro Max" -> "iphone-15-pro-max-a3f9"
+ */
+export function generateListingSlug(title: string): string {
+  const base = title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+  const suffix = Math.random().toString(36).slice(2, 6);
+
+  return base ? `${base}-${suffix}` : suffix;
+}
