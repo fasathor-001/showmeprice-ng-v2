@@ -74,6 +74,21 @@ Both return 404 (the Phase B.6.1 explicit not-found page). A user clicking eithe
 
 ## Resolved or superseded
 
+### K-008 — Phase C listing CRUD broken on actual schema (RESOLVED)
+
+Phase C's listing creation and image management code referenced column names that did not exist in the actual database schema:
+
+- `product_images.url` (actual: `storage_path`)
+- `product_images.sort_order` (actual: `position`)
+- `product_images.is_primary` (no such column)
+- `products.slug` missing on INSERT (required, no default)
+
+The bugs would have surfaced on first listing creation attempt. They didn't reach production because the `/sell` form failed with the `businesses.name` column bug first (separate hotfix `109eb51`).
+
+**Root cause:** Phase C spec was written against an assumed schema, not the actual one. Audited and corrected during the Phase C.5 pre-flight schema review. Fixed in commit `1976827`.
+
+**Resolved:** Phase C revision (commit `1976827`). `ACTUAL_SCHEMA.md` added to repo as source of truth to prevent recurrence.
+
 ### K-005 (was: verification_status not enforced) — superseded by D-032
 
 The Phase C launch had no enforcement of `verification_status` on public-listing queries. This is being addressed structurally by Phase C.5's hard-gate model (D-032) rather than as a one-off bug fix. Tracked here for traceability; not a separate issue going forward.

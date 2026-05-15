@@ -72,6 +72,21 @@ npm view next versions --json | jq '[.[] | select(startswith("14."))]'
 
 ## Working pattern lessons
 
+### Verify schema state before writing specs that reference identifiers
+
+Three "phantom identifier" bugs surfaced in Phase C (column names, FK constraints, table existence assumptions). The pattern: planner specs reference table/column/enum names assumed from memory or journal records rather than verified against the actual database state.
+
+**Rule:** any spec that names a database identifier (table, column, enum, RLS policy, FK constraint, function) must verify the name against `ACTUAL_SCHEMA.md` BEFORE writing the spec body. If the schema doc is out of date, run an `information_schema` query and update the doc first.
+
+**Operational:** at the start of every phase that touches the database, the planner runs (or asks the owner to run) verification queries against:
+1. `information_schema.columns` for any table referenced
+2. `pg_type` for any enum value referenced
+3. `pg_policy` for any RLS policy referenced
+4. `pg_constraint` for any FK constraint name used in Supabase nested-resource syntax
+5. `pg_proc` for any function call (including its argument signature)
+
+The 30 minutes spent verifying is cheaper than the hours spent debugging "could not find column X" errors after deploy.
+
 ### Local `pnpm build` is optimistic about routes Next.js auto-generates
 
 Cloudflare Pages' adapter enforces "all non-static routes must export edge runtime." Next.js's local `pnpm build` does NOT enforce this. The auto-generated `/_not-found` (and the would-be auto-generated `/error`, `/global-error` if we triggered them) won't have the edge runtime export and will silently pass local build, then fail Cloudflare deploy.
