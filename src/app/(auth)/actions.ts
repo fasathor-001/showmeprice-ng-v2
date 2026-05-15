@@ -181,3 +181,81 @@ export async function updatePasswordAction(
   revalidatePath("/", "layout");
   redirect("/dashboard?toast=password-updated");
 }
+
+interface BecomeSellerErrors {
+  businessName?: string;
+  businessDescription?: string;
+  stateId?: string;
+  _form?: string;
+}
+
+interface BecomeSellerResult {
+  errors?: BecomeSellerErrors;
+  success?: boolean;
+}
+
+export async function becomeSellerAction(
+  _prev: BecomeSellerResult | null,
+  formData: FormData
+): Promise<BecomeSellerResult> {
+  const businessName = String(formData.get("businessName") ?? "").trim();
+  const businessDescription = String(
+    formData.get("businessDescription") ?? ""
+  ).trim();
+  const stateId = String(formData.get("stateId") ?? "");
+
+  const errors: BecomeSellerErrors = {};
+  if (!businessName) errors.businessName = "Business name is required";
+  else if (businessName.length < 2)
+    errors.businessName = "Business name must be at least 2 characters";
+  else if (businessName.length > 80)
+    errors.businessName = "Business name is too long (max 80)";
+
+  if (!businessDescription) errors.businessDescription = "Description is required";
+  else if (businessDescription.length < 20)
+    errors.businessDescription = "Description must be at least 20 characters";
+  else if (businessDescription.length > 500)
+    errors.businessDescription = "Description is too long (max 500)";
+
+  if (!stateId) errors.stateId = "State is required";
+
+  if (Object.values(errors).some((v) => v)) return { errors };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { errors: { _form: "You must be signed in to become a seller" } };
+  }
+
+  // Defense in depth: page also checks this and redirects.
+  const { data: existingBiz } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (existingBiz) {
+    return { errors: { _form: "You already have a seller account" } };
+  }
+
+  const { error: insertError } = await supabase.from("businesses").insert({
+    owner_id: user.id,
+    name: businessName,
+    description: businessDescription,
+    state_id: stateId,
+    verification_status: "pending",
+  });
+
+  if (insertError) {
+    return { errors: { _form: insertError.message } };
+  }
+
+  await supabase
+    .from("profiles")
+    .update({ user_type: "seller" })
+    .eq("id", user.id);
+
+  revalidatePath("/", "layout");
+  redirect("/dashboard/listings?toast=seller-account-created");
+}
