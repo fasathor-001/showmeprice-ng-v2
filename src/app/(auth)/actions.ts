@@ -838,6 +838,19 @@ export async function createListingAction(
     return { errors: { _form: "You need a seller account before posting listings" } };
   }
 
+  // Defense in depth (Phase C.5.8): the /listings/new page already gates the
+  // form, but a direct POST to this action could otherwise bypass it. The
+  // products_public_read_active RLS gate would still hide the row from buyers,
+  // but a successful INSERT with status='active' would mislead the seller
+  // into thinking they had a live listing.
+  if (business.verification_status !== "verified") {
+    return {
+      errors: {
+        _form: "Your account must be verified before creating listings",
+      },
+    };
+  }
+
   const slug = generateListingSlug(title);
   const { data: product, error: productError } = await supabase
     .from("products")

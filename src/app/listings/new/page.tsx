@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
-import { Card } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import { ListingForm } from "@/components/listings/ListingForm";
 import { createListingAction } from "@/app/(auth)/actions";
+import { getVerificationState } from "@/lib/verification";
 
 export const runtime = "edge";
 
@@ -17,10 +18,110 @@ export default async function NewListingPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, verification_status, rejection_reason")
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/sell");
+
+  // Disambiguate 'unsubmitted' from 'pending' via the latest seller_verifications
+  // row. (See /sell page for the same pattern + rationale.)
+  let latestSubmission: {
+    status: string;
+    rejection_reason: string | null;
+  } | null = null;
+  if (business.verification_status !== "verified") {
+    const { data } = await supabase
+      .from("seller_verifications")
+      .select("status, rejection_reason")
+      .eq("business_id", business.id)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    latestSubmission = data;
+  }
+
+  const verificationState = getVerificationState({ business, latestSubmission });
+
+  if (verificationState !== "verified") {
+    const rejectionReason =
+      latestSubmission?.rejection_reason ?? business.rejection_reason;
+    return (
+      <Container size="narrow">
+        <div className="py-8 sm:py-12 max-w-2xl mx-auto">
+          <div className="mb-2 text-sm text-ink-600">
+            <Link href="/dashboard/listings" className="hover:text-ink">
+              ← Your listings
+            </Link>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
+            Complete verification before creating listings
+          </h1>
+          <p className="text-sm text-ink-600 mb-6">
+            Your listings won&apos;t appear on the marketplace until your seller
+            account is verified.
+          </p>
+
+          {verificationState === "unsubmitted" && (
+            <Card className="bg-warning-bg border-warning/30">
+              <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warning-text mb-1">
+                    Verification needed
+                  </p>
+                  <p className="text-xs text-warning-text">
+                    Submit your ID, address, and NIN. Review takes 1-2 business
+                    days.
+                  </p>
+                </div>
+                <Link href="/sell/verify">
+                  <Button variant="primary" size="md">
+                    Start verification
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+          )}
+
+          {verificationState === "pending" && (
+            <Card className="bg-teal-50 border-teal-200">
+              <p className="text-sm font-medium text-teal-900 mb-1">
+                Your verification is under review
+              </p>
+              <p className="text-xs text-teal-900">
+                We&apos;ll email you within 1-2 business days. Once your account
+                is approved, you&apos;ll be able to create listings here.
+              </p>
+            </Card>
+          )}
+
+          {verificationState === "rejected" && (
+            <Card className="bg-danger-bg border-danger/30">
+              <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-danger-text mb-1">
+                    Verification not approved
+                  </p>
+                  {rejectionReason && (
+                    <p className="text-xs text-danger-text mb-2">
+                      Reason: {rejectionReason}
+                    </p>
+                  )}
+                  <p className="text-xs text-danger-text">
+                    Resubmit with corrections to go live.
+                  </p>
+                </div>
+                <Link href="/sell/verify">
+                  <Button variant="primary" size="md">
+                    Resubmit verification
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+          )}
+        </div>
+      </Container>
+    );
+  }
 
   const [{ data: categories }, { data: states }] = await Promise.all([
     supabase
@@ -41,7 +142,9 @@ export default async function NewListingPage() {
             ← Your listings
           </Link>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">New listing</h1>
+        <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
+          New listing
+        </h1>
         <p className="text-sm text-ink-600 mb-8">
           Share what you&apos;re selling. Real prices, no haggling games.
         </p>

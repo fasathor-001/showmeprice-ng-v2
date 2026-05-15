@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
+import { getVerificationState } from "@/lib/verification";
 import { BecomeSellerForm } from "./BecomeSellerForm";
 import { ManageBusinessForm } from "./ManageBusinessForm";
 
@@ -53,9 +54,22 @@ export default async function SellPage() {
     );
   }
 
-  const needsVerificationCta =
-    business.verification_status === "unsubmitted" ||
-    business.verification_status === "rejected";
+  // Use the latest seller_verifications row to disambiguate 'unsubmitted'
+  // (no submission yet) from 'pending' (submitted, awaiting review). Phase
+  // A's freeze trigger keeps businesses.verification_status='unsubmitted'
+  // during the review window, so reading only that column would mislabel
+  // pending sellers.
+  const { data: latestSubmission } = await supabase
+    .from("seller_verifications")
+    .select("status, rejection_reason")
+    .eq("business_id", business.id)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const verificationState = getVerificationState({ business, latestSubmission });
+  const rejectionReason =
+    latestSubmission?.rejection_reason ?? business.rejection_reason;
 
   return (
     <Container size="narrow">
@@ -71,16 +85,16 @@ export default async function SellPage() {
           <h1 className="text-2xl sm:text-3xl font-medium text-ink">
             Your business
           </h1>
-          {business.verification_status === "verified" && (
+          {verificationState === "verified" && (
             <Badge variant="verified">Verified</Badge>
           )}
-          {business.verification_status === "pending" && (
-            <Badge variant="warning">Pending review</Badge>
+          {verificationState === "pending" && (
+            <Badge variant="teal">Under review</Badge>
           )}
-          {business.verification_status === "rejected" && (
+          {verificationState === "rejected" && (
             <Badge variant="danger">Rejected</Badge>
           )}
-          {business.verification_status === "unsubmitted" && (
+          {verificationState === "unsubmitted" && (
             <Badge variant="warning">Verification needed</Badge>
           )}
         </div>
@@ -88,24 +102,48 @@ export default async function SellPage() {
           Manage your business profile. Verification status updates here.
         </p>
 
-        {needsVerificationCta && (
+        {verificationState === "unsubmitted" && (
           <Card className="mb-4 bg-warning-bg border-warning/30">
             <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
               <div className="flex-1">
                 <p className="text-sm font-medium text-warning-text mb-1">
-                  {business.verification_status === "rejected"
-                    ? "Verification rejected — please resubmit"
-                    : "Verify your account to publish listings"}
+                  Verify your account to publish listings
                 </p>
-                {business.verification_status === "rejected" &&
-                  business.rejection_reason && (
-                    <p className="text-xs text-warning-text">
-                      Reason: {business.rejection_reason}
-                    </p>
-                  )}
-                {business.verification_status === "unsubmitted" && (
-                  <p className="text-xs text-warning-text">
-                    Listings stay hidden from buyers until your account is verified.
+                <p className="text-xs text-warning-text">
+                  Listings stay hidden from buyers until your account is verified.
+                </p>
+              </div>
+              <Link
+                href="/sell/verify"
+                className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
+              >
+                Start verification
+              </Link>
+            </div>
+          </Card>
+        )}
+
+        {verificationState === "pending" && (
+          <Card className="mb-4 bg-teal-50 border-teal-200">
+            <p className="text-sm font-medium text-teal-900 mb-1">
+              Your verification is under review
+            </p>
+            <p className="text-xs text-teal-900">
+              We&apos;ll email you within 1-2 business days.
+            </p>
+          </Card>
+        )}
+
+        {verificationState === "rejected" && (
+          <Card className="mb-4 bg-danger-bg border-danger/30">
+            <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-danger-text mb-1">
+                  Verification rejected — please resubmit
+                </p>
+                {rejectionReason && (
+                  <p className="text-xs text-danger-text">
+                    Reason: {rejectionReason}
                   </p>
                 )}
               </div>
@@ -113,9 +151,7 @@ export default async function SellPage() {
                 href="/sell/verify"
                 className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
               >
-                {business.verification_status === "rejected"
-                  ? "Resubmit"
-                  : "Start verification"}
+                Resubmit
               </Link>
             </div>
           </Card>

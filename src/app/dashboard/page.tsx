@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
+import { getVerificationState } from "@/lib/verification";
 import { SignOutButton } from "./SignOutButton";
 
 export const runtime = "edge";
@@ -42,21 +43,7 @@ export default async function DashboardPage() {
     latestSubmission = data;
   }
 
-  const verificationState:
-    | "no_business"
-    | "unsubmitted"
-    | "pending"
-    | "rejected"
-    | "verified" = !business
-    ? "no_business"
-    : business.verification_status === "verified"
-      ? "verified"
-      : latestSubmission?.status === "pending"
-        ? "pending"
-        : latestSubmission?.status === "rejected" ||
-            business.verification_status === "rejected"
-          ? "rejected"
-          : "unsubmitted";
+  const verificationState = getVerificationState({ business, latestSubmission });
 
   const displayName =
     profile?.display_name || user.email?.split("@")[0] || "there";

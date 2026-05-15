@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Button, Card, Badge, ToastFromSearchParams } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
+import { getVerificationState } from "@/lib/verification";
 import { DeleteListingButton } from "./DeleteListingButton";
 
 export const runtime = "edge";
@@ -39,20 +40,7 @@ export default async function SellerListingsPage() {
     latestSubmission = data;
   }
 
-  // Single derived state. Both source signals (businesses.verification_status
-  // and the latest seller_verifications row) are kept in sync by the admin
-  // approve/reject actions, but the freeze trigger means non-admins can only
-  // change seller_verifications. Reading both protects against either being
-  // stale.
-  const verificationState: "unsubmitted" | "pending" | "rejected" | "verified" =
-    business.verification_status === "verified"
-      ? "verified"
-      : latestSubmission?.status === "pending"
-        ? "pending"
-        : latestSubmission?.status === "rejected" ||
-            business.verification_status === "rejected"
-          ? "rejected"
-          : "unsubmitted";
+  const verificationState = getVerificationState({ business, latestSubmission });
 
   const { data: listings } = await supabase
     .from("products")
