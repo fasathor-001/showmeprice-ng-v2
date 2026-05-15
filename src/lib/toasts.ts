@@ -18,9 +18,23 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "success",
     message: "Your password has been updated.",
   },
-  // Add new keys here as future flows need them:
-  //   "account-created": { variant: "success", message: "Welcome to ShowMePrice!" },
-  //   "signed-out": { variant: "info", message: "You've been signed out." },
+  "seller-account-created": {
+    variant: "success",
+    message:
+      "Your seller account is ready. Post your first listing to get started.",
+  },
+  "listing-created": {
+    variant: "success",
+    message: "Your listing is live.",
+  },
+  "listing-updated": {
+    variant: "success",
+    message: "Your listing has been updated.",
+  },
+  "listing-deleted": {
+    variant: "info",
+    message: "Listing deleted.",
+  },
 };
 
 export function getToastMessage(
