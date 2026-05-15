@@ -797,6 +797,13 @@ async function getSellerBusiness(
   return business;
 }
 
+// Loose UUID check — defends against malformed productId from the client.
+// (Storage RLS already restricts uploads to `{business_id}/...` so this is
+// belt-and-braces; we still want a clean error if someone tries to submit
+// a non-UUID id.)
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function createListingAction(
   _prev: ListingActionResult | null,
   formData: FormData
@@ -807,12 +814,18 @@ export async function createListingAction(
   const categoryId = String(formData.get("categoryId") ?? "");
   const stateId = String(formData.get("stateId") ?? "");
   const negotiable = formData.get("negotiable") === "on";
+  const productId = String(formData.get("productId") ?? "");
 
-  const imageUrls = formData
-    .getAll("imageUrls")
+  // Phase D.2: imagePaths are storage paths under the product-images bucket,
+  // NOT public URLs. The old paste-URL flow used `imageUrls`.
+  const imagePaths = formData
+    .getAll("imagePaths")
     .map((v) => String(v).trim())
     .filter((v) => v.length > 0);
 
+  // Reuse the existing field validators but skip validateImageUrls (which
+  // checks for http(s)) — paths are validated below against the business +
+  // product folder structure.
   const errors = validateListingForm({
     title,
     description,
@@ -820,9 +833,22 @@ export async function createListingAction(
     categoryId,
     stateId,
     negotiable,
-    imageUrls,
+    imageUrls: imagePaths.length > 0 ? ["https://placeholder/"] : [],
   });
+  // Drop the URL-validator's complaint about the placeholder; the real
+  // path validation happens below.
+  errors.imageUrls = undefined;
   if (listingHasErrors(errors)) return { errors };
+
+  if (!productId || !UUID_RE.test(productId)) {
+    return { errors: { _form: "Invalid product id" } };
+  }
+  if (imagePaths.length === 0) {
+    return { errors: { imageUrls: "Add at least one image" } };
+  }
+  if (imagePaths.length > 8) {
+    return { errors: { imageUrls: "Maximum 8 images per listing" } };
+  }
 
   const priceKobo = parseNairaInputToKobo(priceInput)!;
 
@@ -839,10 +865,7 @@ export async function createListingAction(
   }
 
   // Defense in depth (Phase C.5.8): the /listings/new page already gates the
-  // form, but a direct POST to this action could otherwise bypass it. The
-  // products_public_read_active RLS gate would still hide the row from buyers,
-  // but a successful INSERT with status='active' would mislead the seller
-  // into thinking they had a live listing.
+  // form, but a direct POST to this action could otherwise bypass it.
   if (business.verification_status !== "verified") {
     return {
       errors: {
@@ -851,10 +874,25 @@ export async function createListingAction(
     };
   }
 
+  // Validate that every image path falls under this user's business folder
+  // AND under the supplied productId. Defense in depth against tampering —
+  // Storage RLS already prevents writing outside the business folder, but a
+  // malicious client could submit paths that belong to someone else's
+  // products. Reject the whole submission if any path looks wrong.
+  const expectedPrefix = `${business.id}/${productId}/`;
+  for (const p of imagePaths) {
+    if (!p.startsWith(expectedPrefix)) {
+      return {
+        errors: { _form: "One or more uploaded images don't belong to this listing." },
+      };
+    }
+  }
+
   const slug = generateListingSlug(title);
   const { data: product, error: productError } = await supabase
     .from("products")
     .insert({
+      id: productId, // explicit so storage paths match
       business_id: business.id,
       seller_id: user.id,
       slug,
@@ -875,20 +913,22 @@ export async function createListingAction(
     return { errors: { _form: productError?.message ?? "Failed to create listing" } };
   }
 
-  const imageInserts = imageUrls.map((url, idx) => ({
+  const imageInserts = imagePaths.map((path, idx) => ({
     product_id: product.id,
-    storage_path: url,
+    storage_path: path,
     position: idx,
   }));
   const { error: imageError } = await supabase
     .from("product_images")
     .insert(imageInserts);
   if (imageError) {
-    // Listing created but images failed — log and continue; user can edit to retry images.
+    // Listing created but images failed to attach — log and continue. The
+    // seller can edit the listing to retry image attachment; the storage
+    // objects themselves are uploaded and will be picked up later.
     console.error("Failed to attach images", imageError);
   }
 
-  revalidatePath("/", "layout");
+  // No revalidatePath (broken on Cloudflare edge — banked C.5.6.0 lesson).
   redirect(`/dashboard/listings?toast=listing-created`);
 }
 

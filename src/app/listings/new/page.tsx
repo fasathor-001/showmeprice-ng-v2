@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Button, Card } from "@/components/ui";
-import { ListingForm } from "@/components/listings/ListingForm";
+import { NewListingForm } from "@/components/listings/NewListingForm";
 import { createListingAction } from "@/app/(auth)/actions";
 import { getVerificationState } from "@/lib/verification";
 
@@ -152,12 +152,11 @@ export default async function NewListingPage() {
           Share what you&apos;re selling. Real prices, no haggling games.
         </p>
         <Card>
-          <ListingForm
+          <NewListingForm
             action={createListingAction}
             categories={categories ?? []}
             states={states ?? []}
-            submitLabel="Publish listing"
-            pendingLabel="Publishing…"
+            businessId={business.id}
           />
         </Card>
       </div>
