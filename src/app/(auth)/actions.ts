@@ -601,11 +601,11 @@ export async function submitVerificationAction(
   }
 
   revalidatePath("/", "layout");
-  redirect(
-    `/dashboard/listings?toast=${
-      isResubmission ? "verification-resubmitted" : "verification-submitted"
-    }`
-  );
+  // First-vs-resubmission is determined by the destination page reading the
+  // seller_verifications row count, so no toast key needed in the URL.
+  // (isResubmission is computed above only for potential future use / logs.)
+  void isResubmission;
+  redirect("/sell/verify/submitted");
 }
 
 interface ListingActionResult {
