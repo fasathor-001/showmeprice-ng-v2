@@ -5,6 +5,7 @@ import { Container } from "@/components/layout";
 import { Card } from "@/components/ui";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { getProductImagePublicUrl } from "@/lib/storage";
+import { sortStatesByFeatured } from "@/lib/states";
 
 export const runtime = "edge";
 
@@ -12,21 +13,60 @@ const PAGE_SIZE = 24;
 
 export default async function CategoryPage({
   params,
+  searchParams,
 }: {
   params: { slug: string };
+  searchParams: { state?: string };
 }) {
   const supabase = createClient();
 
   const { data: category } = await supabase
     .from("categories")
-    .select("id, name")
+    .select("id, name, parent_id")
     .eq("slug", params.slug)
     .maybeSingle();
 
   if (!category) notFound();
 
-  // Visibility gate (Phase C.5.4 + RLS policy P.2): only verified-seller listings.
-  const { data: listings } = await supabase
+  // Parent (for breadcrumb back-link if this slug is a subcategory).
+  let parentCategory: { name: string; slug: string } | null = null;
+  if (category.parent_id) {
+    const { data: parent } = await supabase
+      .from("categories")
+      .select("name, slug")
+      .eq("id", category.parent_id)
+      .maybeSingle();
+    parentCategory = parent;
+  }
+
+  // Direct children for subcategory chip nav. Empty for subcategory pages.
+  const { data: childrenData } = await supabase
+    .from("categories")
+    .select("id, name, slug, sort_order")
+    .eq("parent_id", category.id)
+    .order("sort_order", { ascending: true });
+  const children = childrenData ?? [];
+
+  // States for the filter dropdown (featured-first ordering).
+  const { data: statesData } = await supabase
+    .from("nigerian_states")
+    .select("id, name, slug");
+  const states = sortStatesByFeatured(statesData ?? []);
+
+  // Resolve state filter slug -> id. Unknown slug = no filter (graceful).
+  const selectedStateSlug = searchParams.state ?? "";
+  let selectedStateId: string | null = null;
+  if (selectedStateSlug) {
+    const match = states.find((s) => s.slug === selectedStateSlug);
+    selectedStateId = match?.id ?? null;
+  }
+
+  // Build the listings query. If the category is a top-level (has children),
+  // include products in any of its subcategories too — the parent page rolls
+  // up its descendants. Subcategory pages narrow to that category only.
+  const categoryIds = [category.id, ...children.map((c) => c.id)];
+
+  let query = supabase
     .from("products")
     .select(
       `
@@ -37,36 +77,112 @@ export default async function CategoryPage({
     `
     )
     .eq("status", "active")
-    .eq("category_id", category.id)
+    .in("category_id", categoryIds)
     .eq("businesses.verification_status", "verified")
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
 
+  if (selectedStateId) {
+    query = query.eq("state_id", selectedStateId);
+  }
+
+  const { data: listings } = await query;
   const items = listings ?? [];
 
   return (
     <Container>
       <div className="py-8 sm:py-12">
-        <div className="mb-2 text-sm text-ink-600">
-          <Link href="/marketplace" className="hover:text-ink">
+        {/* Breadcrumb */}
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-2 text-sm text-ink-600 flex items-center gap-1.5 flex-wrap"
+        >
+          <Link href="/categories" className="hover:text-ink">
             ← All categories
           </Link>
+          {parentCategory && (
+            <>
+              <span aria-hidden="true">·</span>
+              <Link
+                href={`/categories/${parentCategory.slug}`}
+                className="hover:text-ink"
+              >
+                {parentCategory.name}
+              </Link>
+            </>
+          )}
+        </nav>
+
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
+              {category.name}
+            </h1>
+            <p className="text-sm text-ink-600">
+              {items.length} {items.length === 1 ? "listing" : "listings"}
+              {selectedStateSlug && (
+                <>
+                  {" "}
+                  in{" "}
+                  <span className="text-ink">
+                    {states.find((s) => s.slug === selectedStateSlug)?.name ??
+                      selectedStateSlug}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* State filter — submit-on-change. Server-rendered, no JS. */}
+          <form className="sm:w-56" action="" method="get">
+            <label className="block">
+              <span className="sr-only">Filter by state</span>
+              <select
+                name="state"
+                defaultValue={selectedStateSlug}
+                className="block w-full bg-white border border-neutral-300 rounded-lg text-sm text-ink px-3 py-2 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400"
+              >
+                <option value="">All states</option>
+                {states.map((s) => (
+                  <option key={s.id} value={s.slug}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <noscript>
+              <button
+                type="submit"
+                className="mt-2 text-xs text-teal-700 hover:text-teal-900"
+              >
+                Apply filter
+              </button>
+            </noscript>
+            <StateFilterAutoSubmit />
+          </form>
         </div>
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
-            {category.name}
-          </h1>
-          <p className="text-sm text-ink-600">
-            {items.length} {items.length === 1 ? "listing" : "listings"} in{" "}
-            {category.name.toLowerCase()}.
-          </p>
-        </div>
+
+        {/* Subcategory chips (only on a category that has children) */}
+        {children.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {children.map((c) => (
+              <Link
+                key={c.id}
+                href={`/categories/${c.slug}`}
+                className="inline-flex items-center text-xs sm:text-sm text-ink-600 hover:text-ink bg-white border border-neutral-300 hover:border-neutral-400 px-3 py-1.5 rounded-full transition-colors"
+              >
+                {c.name}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {items.length === 0 ? (
           <Card>
             <div className="py-12 text-center max-w-md mx-auto">
               <p className="text-base text-ink mb-2">
-                No listings in {category.name} yet.
+                No verified sellers have listed in {category.name.toLowerCase()}
+                {selectedStateSlug ? " in this state" : ""} yet.
               </p>
               <p className="text-sm text-ink-600 mb-6">
                 Check back soon, or be the first to list in this category.
@@ -114,5 +230,29 @@ export default async function CategoryPage({
         )}
       </div>
     </Container>
+  );
+}
+
+/**
+ * Small client island that auto-submits the parent form on <select> change.
+ * Kept tiny so the category page stays mostly server-rendered.
+ */
+function StateFilterAutoSubmit() {
+  // Inline script tag — auto-submits the parent form when the state select
+  // changes. Server-rendered, runs once on page load, no React state.
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `(function(){
+  var s=document.currentScript;
+  if(!s)return;
+  var form=s.closest('form');
+  if(!form)return;
+  var sel=form.querySelector('select[name="state"]');
+  if(!sel)return;
+  sel.addEventListener('change',function(){form.submit();});
+})();`,
+      }}
+    />
   );
 }

@@ -46,3 +46,33 @@ export function getTierForSlug(slug: string): CategoryTier | null {
   if ((TIER_3_MORE_SLUGS as readonly string[]).includes(slug)) return 3;
   return null;
 }
+
+/**
+ * Emoji icons keyed on categories.icon_name (the lucide-react-style names
+ * the Phase D seed populates). Kept here rather than in the categories
+ * table so we don't have to migrate every time we tweak an icon. Fallback
+ * is a generic tag emoji.
+ */
+const CATEGORY_EMOJI: Record<string, string> = {
+  shirt: "👕",
+  smartphone: "📱",
+  scissors: "💇",
+  sparkles: "💄",
+  cpu: "💻",
+  home: "🛋️",
+  "heart-pulse": "💊",
+  baby: "👶",
+  utensils: "🍽️",
+  car: "🚗",
+  building: "🏢",
+  wrench: "🔧",
+  dumbbell: "🏋️",
+  "book-open": "📚",
+  "paw-print": "🐾",
+  factory: "🏭",
+};
+
+export function getCategoryEmoji(iconName: string | null | undefined): string {
+  if (!iconName) return "🏷️";
+  return CATEGORY_EMOJI[iconName] ?? "🏷️";
+}
