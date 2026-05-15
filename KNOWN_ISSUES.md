@@ -72,6 +72,8 @@ Both return 404 (the Phase B.6.1 explicit not-found page). A user clicking eithe
 
 **Scheduled:** Phase C.5 (next phase). Not blocking Phase C launch.
 
-## Resolved
+## Resolved or superseded
 
-(none yet)
+### K-005 (was: verification_status not enforced) — superseded by D-032
+
+The Phase C launch had no enforcement of `verification_status` on public-listing queries. This is being addressed structurally by Phase C.5's hard-gate model (D-032) rather than as a one-off bug fix. Tracked here for traceability; not a separate issue going forward.

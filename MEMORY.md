@@ -106,6 +106,14 @@ Phase C.5 spec used `images.sort((a, b) => a.sort_order - b.sort_order)[0]` inli
 
 **Where this matters:** any time you write `someFetchedArray.sort(...)`, `someFetchedArray.reverse(...)`, etc. Even if the current Supabase version returns plain arrays, this is a fragility we don't need to carry.
 
+### Research the market before architecting compliance-adjacent features
+
+Phase C shipped with `verification_status` stored but unenforced — a result of planning the marketplace mechanics without first researching how Nigerian C2C platforms actually handle seller verification. The pivot to Phase C.5 (hard verification gate) came from owner-prompted research into Jumia, Konga, and Jiji's onboarding flows.
+
+**Lesson:** for any feature that touches identity, payments, data privacy, or regulated activity, the planning conversation must include a research pass on how competitors and incumbents in the same jurisdiction handle it. General architectural intuition is not enough — local legal and market norms drive the right structure.
+
+**Operational:** for ShowMePrice specifically, future phases touching Paystack (G), escrow (H), or any compliance surface should start with a "how do competitors handle this" search step before the spec is written.
+
 ### Recovery-token sessions are real sessions — don't conflate "logged in" with "knows their password"
 
 Supabase's password reset flow works by issuing a one-time recovery code that, when exchanged via `exchangeCodeForSession` or `verifyOtp`, creates an authenticated session. From the application's perspective, the user is signed in — `getUser()` returns their record, RLS treats them as authenticated, they can call mutations.

@@ -287,3 +287,66 @@ Server-driven success states (like password updated after a Server Action) signa
 **Why:** The badge is the trust gate. Showing it indiscriminately would defeat its purpose. Showing it correctly now (even though Phase C.5 will refine the display rules) ensures Phase D's verification flow plugs into existing UI without changes.
 
 **Operational consequence:** during Phase C testing the owner manually flips a test seller's `verification_status` in SQL Editor to confirm the badge appears. Phase D builds the real flow.
+
+## D-031: Phase C.5 pivoted to seller verification gate; image upload / search / filters deferred to Phase E
+
+**Context:** Phase C shipped a working marketplace with `verification_status='pending'` stored but not enforced. Pending sellers' listings were visible to buyers identically to verified sellers' listings (except for the badge). This contradicts ShowMePrice's product wedge ("Real prices, verified sellers") and exposes the platform to Nigerian C2C marketplace fraud patterns the model is supposed to solve.
+
+**Research summary (Nigerian C2C/B2C marketplaces):**
+- **Jumia / Konga** (high-trust, hold money via integrated pay): require NIN or CAC + government ID + bank verification + photo holding ID. Verification before listing. 24-72 hour review.
+- **Jiji** (closest to our C2C model, no money custody): basic posting is open; "Verified ID" badge is optional, requires ID + selfie via SmileID, gated by paid Boost package. Result: many unverified ads, persistent scam reputation.
+- **ShowMePrice's position:** we do not hold money (contact-reveal model), but we do promise verified sellers. Going Jiji-light defeats the wedge; going Jumia-heavy is overkill since we're not a payment processor.
+
+**Decision:** Phase C.5 builds a seller verification flow that GATES public listing visibility. Specifically:
+- Sellers can create listings (mechanics from Phase C remain unchanged in the database)
+- Listings from sellers with `verification_status != 'verified'` are HIDDEN from public marketplace, category pages, home featured, and search results
+- Sellers see their own draft listings in `/dashboard/listings` regardless of verification status (so they can prepare while waiting)
+- Verification submission collects: full legal name (first + last), residential address, NIN (11-digit National Identification Number), government ID document upload, selfie photo
+- Admin (the owner) manually reviews submissions via `/admin/verifications` and approves or rejects with a reason
+- Once approved, all the seller's existing draft listings become public automatically
+
+**What this displaces:**
+- Image upload via Supabase Storage → **Phase E**
+- Keyword search (Postgres tsvector) → **Phase E**
+- Filters (price range, sort) → **Phase E**
+- `/categories` index page (K-007 fix) → **Phase E**
+- Verified-badge refinement → folded into Phase C.5 (the gate makes refinement trivial — verified means publicly visible)
+
+**Why manual review for now, not third-party API:**
+- Low volume initially; manual is cheap
+- Third-party APIs (SmileID, Dojah, Verifyme.ng) cost per-check and aren't perfect — automation comes when we see what real fraud looks like
+- The first 50-100 reviews are product research the admin needs to do personally to learn rejection patterns
+- Automated NIN/ID verification API tracked for Phase E or later
+
+**Compliance posture:**
+- NIN is mandatory for all Nigerian adults; collecting it is standard
+- We are NOT a financial institution under CBN; BVN is not required
+- NDPR (Nigeria Data Protection Regulation, 2019) applies to personal data handling — Phase C.5 spec will include data-minimization, encryption-at-rest, access controls, and a defined retention policy
+- Documents (ID + selfie) stored in Supabase Storage with RLS — only the uploading seller and admins can access
+
+**Open question (deferred to Phase C.5 planning):** whether to collect BVN as well for sellers using Pro tier (Phase G — Paystack subscriptions). Paystack may require BVN/bank verification for payout; if so, the Pro upgrade flow collects it then, not at initial verification.
+
+## D-032: Verification gate is a HARD gate, not a badge
+
+**Context:** Two models considered for unverified seller visibility:
+1. **Hard gate** — unverified listings hidden entirely (D-032)
+2. **Soft gate** — unverified listings visible with a clear "unverified" badge
+
+The soft gate model resembles Jiji's; the hard gate resembles a stricter version of Jumia/Konga adapted to our non-custodial model.
+
+**Decision:** hard gate. Unverified seller listings do not appear in any public-facing query. The verified badge becomes implicit (every visible seller is verified) rather than a feature to seek out.
+
+**Reasoning:**
+- Defends the "Real prices, verified sellers" product promise truthfully
+- Eliminates the failure mode where buyers contact unverified sellers and get scammed, then blame the platform
+- Differentiates from Jiji's perceived scam problem
+- Friction for sellers is desirable filtering — bad actors abandon at verification rather than after harming buyers
+
+**What sellers see during pending state:**
+- Full `/dashboard/listings` access; can create / edit / delete draft listings
+- Banner: "Complete verification to make your listings public"
+- Clear CTA to verification flow
+- Submission status: pending review / approved / rejected with reason
+- On rejection, can resubmit with corrections
+
+**What buyers see:** no indication that pending sellers exist. The marketplace simply shows verified sellers.
