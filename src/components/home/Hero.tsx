@@ -21,30 +21,20 @@ export async function Hero() {
             Nigeria&apos;s marketplace where every listing has a price and every seller is verified.
           </p>
 
-          {/* Submits q (and optional state slug) to /marketplace. Search
-              wiring lands in Phase D.5. */}
-          <form action="/marketplace" className="mt-8 max-w-xl mx-auto">
+          {/* State picker only — global search lives in the header (D.5.1).
+              Pick a state, click Browse, land on the marketplace filtered. */}
+          <form action="/marketplace" className="mt-8 max-w-md mx-auto">
             <div className="flex items-stretch bg-white border border-neutral-300 rounded-xl shadow-card overflow-hidden focus-within:ring-2 focus-within:ring-teal-400">
-              <div className="pl-4 self-center text-neutral-400">
-                <SearchIcon />
-              </div>
-              <input
-                type="search"
-                name="q"
-                placeholder="iPhone, generator, sofa…"
-                className="flex-1 bg-transparent border-0 outline-none text-base text-ink placeholder:text-neutral-400 px-3 py-3 min-w-0"
-                aria-label="Search the marketplace"
-              />
-              <label className="hidden sm:flex items-center gap-1.5 px-3 border-l border-neutral-200 text-sm text-ink-600 focus-within:bg-neutral-50">
-                <span className="text-neutral-400">
+              <label className="flex flex-1 items-center gap-1.5 px-3 border-r border-neutral-200">
+                <span className="text-neutral-400 shrink-0">
                   <MapPinIcon />
                 </span>
-                <span className="sr-only">Location</span>
+                <span className="sr-only">State</span>
                 <select
                   name="state"
                   defaultValue=""
                   aria-label="Filter by state"
-                  className="bg-transparent border-0 outline-none text-sm text-ink-600 py-2 pr-1 cursor-pointer focus:text-ink"
+                  className="flex-1 bg-transparent border-0 outline-none text-base text-ink-600 py-3 cursor-pointer focus:text-ink"
                 >
                   <option value="">All Nigeria</option>
                   {states.map((s) => (
@@ -58,7 +48,7 @@ export async function Hero() {
                 type="submit"
                 className="bg-teal-600 hover:bg-teal-700 text-white font-medium text-sm px-5 sm:px-6 transition-colors"
               >
-                Search
+                Browse listings
               </button>
             </div>
           </form>
@@ -68,24 +58,6 @@ export async function Hero() {
   );
 }
 
-function SearchIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
 function MapPinIcon() {
   return (
     <svg

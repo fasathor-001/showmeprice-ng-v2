@@ -122,46 +122,36 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
   return (
     <Container>
       <div className="py-8 sm:py-12">
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
-            {heading}
-          </h1>
-          <p className="text-sm text-ink-600">
-            {items.length} {items.length === 1 ? "listing" : "listings"} from
-            verified sellers
-            {selectedState ? <> in {selectedState.name}</> : null}.
-          </p>
-        </div>
+        {/* Toolbar: heading on the left, state filter on the right.
+            Stacks on mobile. Keyword search lives in the global header
+            (Phase D.5.1) — no input on this page. */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-1">
+              {heading}
+            </h1>
+            <p className="text-sm text-ink-600">
+              {items.length} {items.length === 1 ? "listing" : "listings"} from
+              verified sellers
+              {selectedState ? <> in {selectedState.name}</> : null}.
+            </p>
+          </div>
 
-        {/* In-page search + state filter. Combines q and state in a single
-            submission; category, if present, rides along via hidden input so
-            it isn't lost when the user narrows by keyword or state. The
-            inline auto-submit script triggers form submission on state
-            change for parity with /categories/[slug]. */}
-        <form action="/marketplace" method="get" className="mb-6">
-          {categorySlug && (
-            <input type="hidden" name="category" value={categorySlug} />
-          )}
-          <div className="flex flex-col sm:flex-row gap-2 items-stretch">
-            <label className="flex-1 flex items-stretch bg-white border border-neutral-300 rounded-lg focus-within:ring-2 focus-within:ring-teal-400 focus-within:border-teal-600 overflow-hidden">
-              <span className="pl-3 self-center text-neutral-400">
-                <SearchIcon />
-              </span>
-              <span className="sr-only">Search listings</span>
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="Search by keyword…"
-                className="flex-1 bg-transparent border-0 outline-none text-base text-ink placeholder:text-neutral-400 px-3 py-2 min-w-0"
-              />
-            </label>
-            <label className="sm:w-56">
+          {/* State-only form. Preserves the current q + category via hidden
+              inputs so the active search/category survives a state change.
+              Auto-submits on select change via a tiny inline script (same
+              pattern as /categories/[slug]). */}
+          <form action="/marketplace" method="get" className="sm:w-56">
+            {q && <input type="hidden" name="q" value={q} />}
+            {categorySlug && (
+              <input type="hidden" name="category" value={categorySlug} />
+            )}
+            <label>
               <span className="sr-only">Filter by state</span>
               <select
                 name="state"
                 defaultValue={stateSlug}
-                className="block w-full h-full bg-white border border-neutral-300 rounded-lg text-sm text-ink px-3 py-2 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400"
+                className="block w-full bg-white border border-neutral-300 rounded-lg text-sm text-ink px-3 py-2 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400"
               >
                 <option value="">All states</option>
                 {states.map((s) => (
@@ -171,15 +161,17 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
                 ))}
               </select>
             </label>
-            <button
-              type="submit"
-              className="bg-teal-600 hover:bg-teal-700 text-white font-medium text-sm px-5 py-2 rounded-lg transition-colors"
-            >
-              Search
-            </button>
+            <noscript>
+              <button
+                type="submit"
+                className="mt-2 text-xs text-teal-700 hover:text-teal-900"
+              >
+                Apply filter
+              </button>
+            </noscript>
             <StateFilterAutoSubmit />
-          </div>
-        </form>
+          </form>
+        </div>
 
         {/* Active filter chips */}
         {hasFilters && (
@@ -359,25 +351,6 @@ function FilterChip({
         </svg>
       </Link>
     </span>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
   );
 }
 
