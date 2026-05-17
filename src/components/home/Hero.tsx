@@ -1,28 +1,10 @@
 import Link from "next/link";
 import { Container } from "@/components/layout";
 import { createClient } from "@/lib/supabase/server";
-import { sortStatesByFeatured } from "@/lib/states";
-
-/**
- * Buyer-friendly chip labels. Where the state and commerce-hub city share a
- * name (Lagos, Abuja, Enugu, Kaduna, Kano), label = state name. Where the
- * state is less recognizable than its main commerce city (Rivers / Delta /
- * Oyo / Anambra), label = city, URL still ?state=<state-slug>.
- *
- * Warri picked over Asaba for Delta and Onitsha over Awka for Anambra —
- * both are the better-known commerce cities in their respective states.
- */
-const FEATURED_CITY_CHIPS: ReadonlyArray<{ label: string; stateSlug: string }> = [
-  { label: "Lagos", stateSlug: "lagos" },
-  { label: "Abuja", stateSlug: "abuja" },
-  { label: "Port Harcourt", stateSlug: "rivers" },
-  { label: "Warri", stateSlug: "delta" },
-  { label: "Ibadan", stateSlug: "oyo" },
-  { label: "Enugu", stateSlug: "enugu" },
-  { label: "Kaduna", stateSlug: "kaduna" },
-  { label: "Onitsha", stateSlug: "anambra" },
-  { label: "Kano", stateSlug: "kano" },
-];
+import {
+  sortStatesByFeatured,
+  getFeaturedCityChips,
+} from "@/lib/states";
 
 export async function Hero() {
   const supabase = createClient();
@@ -30,6 +12,11 @@ export async function Hero() {
     .from("nigerian_states")
     .select("id, name, slug");
   const states = sortStatesByFeatured(statesData ?? []);
+
+  // City chips ordered by actual listing count (D.6.2). Top 9 by verified-
+  // active listing count, ties broken by FEATURED_STATE_SLUGS order, padded
+  // with the featured fallback if fewer than 9 states have listings.
+  const cityChips = await getFeaturedCityChips(supabase, states);
 
   return (
     <section className="bg-neutral-50 border-b border-neutral-200">
@@ -76,9 +63,10 @@ export async function Hero() {
 
           {/* City quick-pick chips. Labels are buyer-friendly city names; the
               href still carries the canonical ?state=<slug> so the marketplace
-              filter works unchanged. */}
+              filter works unchanged. Order is dynamic (D.6.2) — most-listed
+              first, padded with the featured fallback when sparse. */}
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {FEATURED_CITY_CHIPS.map((chip) => (
+            {cityChips.map((chip) => (
               <Link
                 key={chip.stateSlug}
                 href={`/marketplace?state=${chip.stateSlug}`}
