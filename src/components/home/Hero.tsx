@@ -1,7 +1,28 @@
 import Link from "next/link";
 import { Container } from "@/components/layout";
 import { createClient } from "@/lib/supabase/server";
-import { sortStatesByFeatured, FEATURED_STATE_SLUGS } from "@/lib/states";
+import { sortStatesByFeatured } from "@/lib/states";
+
+/**
+ * Buyer-friendly chip labels. Where the state and commerce-hub city share a
+ * name (Lagos, Abuja, Enugu, Kaduna, Kano), label = state name. Where the
+ * state is less recognizable than its main commerce city (Rivers / Delta /
+ * Oyo / Anambra), label = city, URL still ?state=<state-slug>.
+ *
+ * Warri picked over Asaba for Delta and Onitsha over Awka for Anambra —
+ * both are the better-known commerce cities in their respective states.
+ */
+const FEATURED_CITY_CHIPS: ReadonlyArray<{ label: string; stateSlug: string }> = [
+  { label: "Lagos", stateSlug: "lagos" },
+  { label: "Abuja", stateSlug: "abuja" },
+  { label: "Port Harcourt", stateSlug: "rivers" },
+  { label: "Warri", stateSlug: "delta" },
+  { label: "Ibadan", stateSlug: "oyo" },
+  { label: "Enugu", stateSlug: "enugu" },
+  { label: "Kaduna", stateSlug: "kaduna" },
+  { label: "Onitsha", stateSlug: "anambra" },
+  { label: "Kano", stateSlug: "kano" },
+];
 
 export async function Hero() {
   const supabase = createClient();
@@ -9,12 +30,6 @@ export async function Hero() {
     .from("nigerian_states")
     .select("id, name, slug");
   const states = sortStatesByFeatured(statesData ?? []);
-
-  // Quick-pick chips for the featured 9 states. Each is a direct link into
-  // /marketplace?state=<slug> — saves a step for the most common picks.
-  const chipStates = (FEATURED_STATE_SLUGS as readonly string[])
-    .map((slug) => states.find((s) => s.slug === slug))
-    .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
   return (
     <section className="bg-neutral-50 border-b border-neutral-200">
@@ -59,15 +74,17 @@ export async function Hero() {
             </div>
           </form>
 
-          {/* City / state quick-pick chips */}
+          {/* City quick-pick chips. Labels are buyer-friendly city names; the
+              href still carries the canonical ?state=<slug> so the marketplace
+              filter works unchanged. */}
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {chipStates.map((s) => (
+            {FEATURED_CITY_CHIPS.map((chip) => (
               <Link
-                key={s.id}
-                href={`/marketplace?state=${s.slug}`}
+                key={chip.stateSlug}
+                href={`/marketplace?state=${chip.stateSlug}`}
                 className="inline-flex items-center text-xs sm:text-sm text-ink-600 hover:text-ink bg-white border border-neutral-300 hover:border-neutral-400 px-3 py-1.5 rounded-full transition-colors"
               >
-                {s.name}
+                {chip.label}
               </Link>
             ))}
             <Link
