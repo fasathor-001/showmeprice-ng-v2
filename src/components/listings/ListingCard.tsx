@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui";
-import { formatNaira, truncate } from "@/lib/listings";
+import { formatNaira } from "@/lib/listings";
 
 interface ListingCardProps {
   id: string;
@@ -8,25 +8,28 @@ interface ListingCardProps {
   priceKobo: number | bigint;
   isNegotiable: boolean;
   primaryImageUrl?: string | null;
-  sellerName?: string;
-  isVerified: boolean;
   stateName?: string;
 }
 
+/**
+ * Compact marketplace listing card. Phase D.6 density:
+ *   - 2 / 3 / 4 cards per row (mobile / tablet / desktop)
+ *   - price leads visually; title supports; state chip anchors
+ *   - no seller name (visible on detail), no per-card verified badge
+ *     (marketplace queries already filter to verified-only sellers)
+ */
 export function ListingCard({
   id,
   title,
   priceKobo,
   isNegotiable,
   primaryImageUrl,
-  sellerName,
-  isVerified,
   stateName,
 }: ListingCardProps) {
   return (
-    <Link href={`/listings/${id}`}>
+    <Link href={`/listings/${id}`} className="block">
       <Card variant="hover" padding="none" className="overflow-hidden h-full">
-        <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">
+        <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300">
           {primaryImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -50,41 +53,45 @@ export function ListingCard({
             </svg>
           )}
         </div>
-        <div className="p-3">
-          <h3 className="text-sm font-medium text-ink leading-snug mb-1 line-clamp-2">
-            {truncate(title, 80)}
-          </h3>
-          <div className="flex items-baseline gap-1.5 mb-2">
-            <span className="text-base font-medium text-ink tabular-nums">
-              {formatNaira(priceKobo)}
-            </span>
+        <div className="p-2.5 sm:p-3">
+          <p className="text-base sm:text-lg font-medium text-ink tabular-nums leading-tight">
+            {formatNaira(priceKobo)}
             {isNegotiable && (
-              <span className="text-xs text-ink-600">negotiable</span>
+              <span className="text-xs text-ink-600 font-normal ml-1">
+                neg.
+              </span>
             )}
-          </div>
-          <div className="flex items-center justify-between text-xs text-ink-600 gap-2">
-            <div className="flex items-center gap-1 min-w-0">
-              {isVerified && (
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#0F9D58"
-                  strokeWidth="2.5"
-                  className="shrink-0"
-                  aria-hidden="true"
-                >
-                  <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" />
-                  <path d="m9 12 2 2 4-4" />
-                </svg>
-              )}
-              {sellerName && <span className="truncate">{sellerName}</span>}
-            </div>
-            {stateName && <span className="shrink-0">{stateName}</span>}
-          </div>
+          </p>
+          <h3 className="text-sm text-ink-600 leading-snug line-clamp-2 mt-1 mb-2">
+            {title}
+          </h3>
+          {stateName && (
+            <span className="inline-flex items-center gap-1 text-xs text-ink-600">
+              <MapPinIcon />
+              {stateName}
+            </span>
+          )}
         </div>
       </Card>
     </Link>
+  );
+}
+
+function MapPinIcon() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
   );
 }

@@ -131,9 +131,10 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
               {heading}
             </h1>
             <p className="text-sm text-ink-600">
-              {items.length} {items.length === 1 ? "listing" : "listings"} from
-              verified sellers
-              {selectedState ? <> in {selectedState.name}</> : null}.
+              {items.length === 0
+                ? "No verified listings yet"
+                : `${items.length} verified ${items.length === 1 ? "listing" : "listings"}`}
+              {selectedState ? <> in {selectedState.name}</> : null}
             </p>
           </div>
 
@@ -239,15 +240,12 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {items.map((listing) => {
               const images = listing.product_images ?? [];
               const primary = [...images].sort(
                 (a, b) => a.position - b.position
               )[0];
-              const biz = Array.isArray(listing.businesses)
-                ? listing.businesses[0]
-                : listing.businesses;
               const state = Array.isArray(listing.nigerian_states)
                 ? listing.nigerian_states[0]
                 : listing.nigerian_states;
@@ -263,8 +261,6 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
                       ? getProductImagePublicUrl(primary.storage_path)
                       : undefined
                   }
-                  sellerName={biz?.business_name}
-                  isVerified={biz?.verification_status === "verified"}
                   stateName={state?.name}
                 />
               );

@@ -4,7 +4,7 @@ import { Container } from "@/components/layout";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { getProductImagePublicUrl } from "@/lib/storage";
 
-const FEATURED_COUNT = 6;
+const FEATURED_COUNT = 8;
 
 export async function FeaturedListings() {
   const supabase = createClient();
@@ -63,15 +63,12 @@ export async function FeaturedListings() {
             View all →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {items.map((listing) => {
             const images = listing.product_images ?? [];
             const primary = [...images].sort(
               (a, b) => a.position - b.position
             )[0];
-            const biz = Array.isArray(listing.businesses)
-              ? listing.businesses[0]
-              : listing.businesses;
             const state = Array.isArray(listing.nigerian_states)
               ? listing.nigerian_states[0]
               : listing.nigerian_states;
@@ -87,8 +84,6 @@ export async function FeaturedListings() {
                     ? getProductImagePublicUrl(primary.storage_path)
                     : undefined
                 }
-                sellerName={biz?.business_name}
-                isVerified={biz?.verification_status === "verified"}
                 stateName={state?.name}
               />
             );

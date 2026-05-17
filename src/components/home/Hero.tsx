@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { Container } from "@/components/layout";
 import { createClient } from "@/lib/supabase/server";
-import { sortStatesByFeatured } from "@/lib/states";
+import { sortStatesByFeatured, FEATURED_STATE_SLUGS } from "@/lib/states";
 
 export async function Hero() {
   const supabase = createClient();
@@ -9,20 +10,25 @@ export async function Hero() {
     .select("id, name, slug");
   const states = sortStatesByFeatured(statesData ?? []);
 
+  // Quick-pick chips for the featured 9 states. Each is a direct link into
+  // /marketplace?state=<slug> — saves a step for the most common picks.
+  const chipStates = (FEATURED_STATE_SLUGS as readonly string[])
+    .map((slug) => states.find((s) => s.slug === slug))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
   return (
     <section className="bg-neutral-50 border-b border-neutral-200">
       <Container>
-        <div className="py-14 sm:py-20 text-center max-w-2xl mx-auto">
+        <div className="py-12 sm:py-20 text-center max-w-2xl mx-auto">
           <h1 className="text-3xl sm:text-4xl font-medium text-ink leading-tight tracking-tight">
-            Real prices, verified sellers,
-            <br className="hidden sm:inline" /> one tap to chat.
+            Nigeria&apos;s verified marketplace.
           </h1>
           <p className="mt-4 text-base text-ink-600 max-w-md mx-auto">
-            Nigeria&apos;s marketplace where every listing has a price and every seller is verified.
+            Buy from sellers verified with NIN, address, and ID. Real prices,
+            no scams, one tap to chat on WhatsApp.
           </p>
 
-          {/* State picker only — global search lives in the header (D.5.1).
-              Pick a state, click Browse, land on the marketplace filtered. */}
+          {/* State picker — global search lives in the header (D.5.1). */}
           <form action="/marketplace" className="mt-8 max-w-md mx-auto">
             <div className="flex items-stretch bg-white border border-neutral-300 rounded-xl shadow-card overflow-hidden focus-within:ring-2 focus-within:ring-teal-400">
               <label className="flex flex-1 items-center gap-1.5 px-3 border-r border-neutral-200">
@@ -52,6 +58,25 @@ export async function Hero() {
               </button>
             </div>
           </form>
+
+          {/* City / state quick-pick chips */}
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {chipStates.map((s) => (
+              <Link
+                key={s.id}
+                href={`/marketplace?state=${s.slug}`}
+                className="inline-flex items-center text-xs sm:text-sm text-ink-600 hover:text-ink bg-white border border-neutral-300 hover:border-neutral-400 px-3 py-1.5 rounded-full transition-colors"
+              >
+                {s.name}
+              </Link>
+            ))}
+            <Link
+              href="/marketplace"
+              className="inline-flex items-center text-xs sm:text-sm text-teal-700 hover:text-teal-900 px-3 py-1.5"
+            >
+              All states →
+            </Link>
+          </div>
         </div>
       </Container>
     </section>

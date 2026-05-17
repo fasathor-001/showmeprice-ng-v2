@@ -206,15 +206,12 @@ export default async function CategoryPage({
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {items.map((listing) => {
               const images = listing.product_images ?? [];
               const primary = [...images].sort(
                 (a, b) => a.position - b.position
               )[0];
-              const biz = Array.isArray(listing.businesses)
-                ? listing.businesses[0]
-                : listing.businesses;
               const state = Array.isArray(listing.nigerian_states)
                 ? listing.nigerian_states[0]
                 : listing.nigerian_states;
@@ -230,8 +227,6 @@ export default async function CategoryPage({
                       ? getProductImagePublicUrl(primary.storage_path)
                       : undefined
                   }
-                  sellerName={biz?.business_name}
-                  isVerified={biz?.verification_status === "verified"}
                   stateName={state?.name}
                 />
               );
