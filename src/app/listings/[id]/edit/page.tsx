@@ -53,7 +53,7 @@ export default async function EditListingPage({
     .select(
       `
       id, title, description, price_kobo, is_negotiable,
-      category_id, state_id, seller_id, business_id,
+      category_id, state_id, seller_id, business_id, category_specs,
       product_images ( storage_path, position )
     `
     )
@@ -65,7 +65,12 @@ export default async function EditListingPage({
   if (listing.business_id !== business.id) redirect("/dashboard/listings");
 
   const [{ data: categories }, { data: states }] = await Promise.all([
-    supabase.from("categories").select("id, name").order("sort_order", { ascending: true }),
+    supabase
+      .from("categories")
+      // slug + parent_id are needed by CategorySpecFields (D.7) to resolve
+      // which spec schema applies for the selected category.
+      .select("id, name, slug, parent_id")
+      .order("sort_order", { ascending: true }),
     supabase.from("nigerian_states").select("id, name").order("name", { ascending: true }),
   ]);
 
@@ -103,6 +108,9 @@ export default async function EditListingPage({
               categoryId: listing.category_id ?? "",
               stateId: listing.state_id ?? "",
               negotiable: listing.is_negotiable,
+              categorySpecs: (listing.category_specs ?? undefined) as
+                | Record<string, string | number>
+                | undefined,
             }}
           />
         </Card>

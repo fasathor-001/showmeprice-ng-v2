@@ -5,11 +5,13 @@ import { useFormState, useFormStatus } from "react-dom";
 import { Button, Input } from "@/components/ui";
 import type { ListingValidationErrors } from "@/lib/listings";
 import { ImageUploader, type UploaderImage } from "./ImageUploader";
+import {
+  CategorySpecFields,
+  type CategoryForSpecs,
+} from "./CategorySpecFields";
 
-interface Category {
-  id: string;
-  name: string;
-}
+type Category = CategoryForSpecs;
+
 interface State {
   id: string;
   name: string;
@@ -22,6 +24,8 @@ interface Defaults {
   categoryId: string;
   stateId: string;
   negotiable: boolean;
+  /** Existing category_specs values from the DB, keyed on spec field name. */
+  categorySpecs?: Record<string, string | number>;
 }
 
 interface Props {
@@ -49,6 +53,7 @@ export function EditListingForm({
 }: Props) {
   const [state, formAction] = useFormState(action, { errors: {} });
   const [images, setImages] = useState<UploaderImage[]>(existingImages);
+  const [categoryId, setCategoryId] = useState<string>(defaults.categoryId);
 
   return (
     <form action={formAction} noValidate className="space-y-5">
@@ -138,7 +143,8 @@ export function EditListingForm({
           id="categoryId"
           name="categoryId"
           required
-          defaultValue={defaults.categoryId}
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
           className="block w-full bg-white border border-neutral-300 rounded-lg text-base text-ink px-3 py-2.5 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400 focus:ring-offset-1"
         >
           {categories.map((c) => (
@@ -151,6 +157,19 @@ export function EditListingForm({
           <p className="text-xs text-danger mt-1.5">{state.errors.categoryId}</p>
         )}
       </div>
+
+      {/* Category-aware fields. Only re-prefills the defaults when the user
+          keeps the same category — switching to a different category resets
+          fields to empty (useState defaults wins over key-based remount, so
+          we just rely on CategorySpecFields' own keying behaviour). */}
+      <CategorySpecFields
+        categories={categories}
+        selectedCategoryId={categoryId}
+        defaults={
+          categoryId === defaults.categoryId ? defaults.categorySpecs : undefined
+        }
+      />
+
 
       <div>
         <label htmlFor="stateId" className="block text-sm font-medium text-ink mb-1.5">

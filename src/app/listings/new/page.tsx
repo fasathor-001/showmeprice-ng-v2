@@ -129,7 +129,9 @@ export default async function NewListingPage() {
   const [{ data: categories }, { data: states }] = await Promise.all([
     supabase
       .from("categories")
-      .select("id, name")
+      // slug + parent_id are needed by CategorySpecFields to resolve which
+      // spec schema to render for the selected category.
+      .select("id, name, slug, parent_id")
       .order("sort_order", { ascending: true }),
     supabase
       .from("nigerian_states")

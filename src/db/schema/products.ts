@@ -6,6 +6,7 @@ import {
   integer,
   bigint,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { profiles } from "./profiles";
 import { businesses } from "./businesses";
@@ -39,6 +40,9 @@ export const products = pgTable("products", {
   status: productStatusEnum("status").notNull().default("draft"),
   view_count: integer("view_count").notNull().default(0),
   is_featured: boolean("is_featured").notNull().default(false),
+  // Phase D.7: category-aware listing fields. Schema lives in
+  // src/lib/categorySpecs.ts; this column holds the per-listing values.
+  category_specs: jsonb("category_specs"),
   published_at: timestamp("published_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

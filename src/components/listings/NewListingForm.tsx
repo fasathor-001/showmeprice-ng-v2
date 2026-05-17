@@ -5,11 +5,13 @@ import { useFormState, useFormStatus } from "react-dom";
 import { Button, Input } from "@/components/ui";
 import type { ListingValidationErrors } from "@/lib/listings";
 import { ImageUploader, type UploaderImage } from "./ImageUploader";
+import {
+  CategorySpecFields,
+  type CategoryForSpecs,
+} from "./CategorySpecFields";
 
-interface Category {
-  id: string;
-  name: string;
-}
+type Category = CategoryForSpecs;
+
 interface State {
   id: string;
   name: string;
@@ -42,6 +44,8 @@ export function NewListingForm({
   // first upload and form submission.
   const [productId] = useState<string>(() => crypto.randomUUID());
   const [images, setImages] = useState<UploaderImage[]>([]);
+  // Track the selected category so the dynamic spec fields can react.
+  const [categoryId, setCategoryId] = useState<string>("");
 
   return (
     <form action={formAction} noValidate className="space-y-5">
@@ -132,7 +136,8 @@ export function NewListingForm({
           id="categoryId"
           name="categoryId"
           required
-          defaultValue=""
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
           className="block w-full bg-white border border-neutral-300 rounded-lg text-base text-ink px-3 py-2.5 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400 focus:ring-offset-1"
         >
           <option value="" disabled>
@@ -148,6 +153,15 @@ export function NewListingForm({
           <p className="text-xs text-danger mt-1.5">{state.errors.categoryId}</p>
         )}
       </div>
+
+      {/* Category-aware fields (e.g. condition for phones, year/mileage
+          for vehicles). Server reads `spec_<name>` form keys and stores
+          them in products.category_specs JSONB. */}
+      <CategorySpecFields
+        categories={categories}
+        selectedCategoryId={categoryId}
+      />
+
 
       <div>
         <label htmlFor="stateId" className="block text-sm font-medium text-ink mb-1.5">

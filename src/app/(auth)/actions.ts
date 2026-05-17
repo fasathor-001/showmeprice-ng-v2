@@ -16,6 +16,10 @@ import {
   generateListingSlug,
   type ListingValidationErrors,
 } from "@/lib/listings";
+import {
+  getSpecsForCategory,
+  parseSpecsFromFormData,
+} from "@/lib/categorySpecs";
 
 export interface ActionResult {
   errors?: ValidationErrors & {
@@ -797,6 +801,32 @@ async function getSellerBusiness(
   return business;
 }
 
+/**
+ * Resolve the spec schema for a category by id, falling back to the
+ * parent's schema (Phase D.7). Returns null when no schema applies.
+ */
+async function resolveCategorySpecsSchema(
+  supabase: ReturnType<typeof createClient>,
+  categoryId: string
+) {
+  const { data: cat } = await supabase
+    .from("categories")
+    .select("slug, parent_id")
+    .eq("id", categoryId)
+    .maybeSingle();
+  if (!cat) return null;
+  let parentSlug: string | null = null;
+  if (cat.parent_id) {
+    const { data: parent } = await supabase
+      .from("categories")
+      .select("slug")
+      .eq("id", cat.parent_id)
+      .maybeSingle();
+    parentSlug = parent?.slug ?? null;
+  }
+  return getSpecsForCategory(cat.slug, parentSlug);
+}
+
 // Loose UUID check — defends against malformed productId from the client.
 // (Storage RLS already restricts uploads to `{business_id}/...` so this is
 // belt-and-braces; we still want a clean error if someone tries to submit
@@ -888,6 +918,17 @@ export async function createListingAction(
     }
   }
 
+  // Phase D.7: parse + validate category-specific fields against the
+  // schema for the chosen category. Errors surface in _form (per-field
+  // surfacing would require widening ListingValidationErrors; the form
+  // header is fine for v2).
+  const specSchema = await resolveCategorySpecsSchema(supabase, categoryId);
+  const { specs: categorySpecs, error: specError } = parseSpecsFromFormData(
+    specSchema,
+    formData
+  );
+  if (specError) return { errors: { _form: specError } };
+
   const slug = generateListingSlug(title);
   const { data: product, error: productError } = await supabase
     .from("products")
@@ -905,6 +946,7 @@ export async function createListingAction(
       state_id: stateId,
       status: "active",
       published_at: new Date().toISOString(),
+      category_specs: categorySpecs,
     })
     .select("id")
     .single();
@@ -1021,6 +1063,17 @@ export async function updateListingAction(
     .map((r) => r.storage_path)
     .filter((p) => !submittedSet.has(p));
 
+  // Phase D.7: parse + validate category specs (same flow as
+  // createListingAction). Note: the schema is resolved from the FORM's
+  // category_id, not the DB's prior category — handles the edit case
+  // where the user changed the category to one with different specs.
+  const specSchema = await resolveCategorySpecsSchema(supabase, categoryId);
+  const { specs: categorySpecs, error: specError } = parseSpecsFromFormData(
+    specSchema,
+    formData
+  );
+  if (specError) return { errors: { _form: specError } };
+
   const { error: updateError } = await supabase
     .from("products")
     .update({
@@ -1030,6 +1083,7 @@ export async function updateListingAction(
       is_negotiable: negotiable,
       category_id: categoryId,
       state_id: stateId,
+      category_specs: categorySpecs,
     })
     .eq("id", productId);
   if (updateError) return { errors: { _form: updateError.message } };

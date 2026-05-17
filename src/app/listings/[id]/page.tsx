@@ -7,6 +7,10 @@ import { formatNaira, timeAgo } from "@/lib/listings";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { ListingImageGallery } from "@/components/listings/ListingImageGallery";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
+import {
+  getSpecsForCategory,
+  labelForSpec,
+} from "@/lib/categorySpecs";
 
 export const runtime = "edge";
 
@@ -21,7 +25,7 @@ export default async function ListingDetailPage({
     .from("products")
     .select(
       `
-      id, title, description, price_kobo, is_negotiable, status, created_at,
+      id, title, description, price_kobo, is_negotiable, status, created_at, category_specs,
       product_images ( storage_path, position ),
       categories ( id, name, slug, parent_id ),
       nigerian_states ( name, slug ),
@@ -279,6 +283,44 @@ export default async function ListingDetailPage({
                 <TrustChip label="ID verified" />
               </div>
             </Card>
+
+            {/* Specifications (D.7) — only renders if category_specs has
+                values. Labels resolve through the same per-category schema
+                used by the form, so they stay human-readable even when the
+                spec set evolves. */}
+            {(() => {
+              const specs = listing.category_specs as
+                | Record<string, string | number>
+                | null
+                | undefined;
+              if (!specs || Object.keys(specs).length === 0) return null;
+              const schema = getSpecsForCategory(
+                category?.slug,
+                parentCategory?.slug
+              );
+              return (
+                <div>
+                  <h2 className="text-sm font-medium text-ink mb-2">
+                    Specifications
+                  </h2>
+                  <dl className="text-sm space-y-1.5">
+                    {Object.entries(specs).map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="flex justify-between gap-2 border-b border-neutral-100 pb-1.5 last:border-b-0"
+                      >
+                        <dt className="text-ink-600">
+                          {labelForSpec(schema, key)}
+                        </dt>
+                        <dd className="text-ink text-right">
+                          {String(value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              );
+            })()}
 
             {/* Description */}
             <div>
