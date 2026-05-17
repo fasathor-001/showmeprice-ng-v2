@@ -23,13 +23,36 @@ export async function Header() {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200">
       <Container>
-        <div className="flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center text-lg font-medium">
+        <div className="flex items-center justify-between gap-4 h-16">
+          <Link href="/" className="flex items-center text-lg font-medium shrink-0">
             <span className="text-ink">ShowMePrice</span>
             <span className="text-teal-600">.ng</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm text-ink-600">
+          {/* Global search — submits to /marketplace?q=. Phase D.5: a fresh
+              search (state/category filters are reset). The marketplace page
+              itself has a richer in-context form that preserves filters. */}
+          <form
+            action="/marketplace"
+            method="get"
+            className="hidden md:flex flex-1 max-w-md"
+            role="search"
+          >
+            <label className="flex flex-1 items-stretch bg-neutral-50 border border-neutral-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-teal-400 focus-within:border-teal-600 focus-within:bg-white">
+              <span className="pl-3 self-center text-neutral-400">
+                <HeaderSearchIcon />
+              </span>
+              <span className="sr-only">Search marketplace</span>
+              <input
+                type="search"
+                name="q"
+                placeholder="Search verified sellers…"
+                className="flex-1 bg-transparent border-0 outline-none text-sm text-ink placeholder:text-neutral-400 px-2.5 py-1.5 min-w-0"
+              />
+            </label>
+          </form>
+
+          <nav className="hidden lg:flex items-center gap-6 text-sm text-ink-600 shrink-0">
             <Link href="/marketplace" className="hover:text-ink transition-colors">
               Browse
             </Link>
@@ -37,11 +60,11 @@ export async function Header() {
               Categories
             </Link>
             <Link href="/sell" className="hover:text-ink transition-colors">
-              Sell on ShowMePrice
+              Sell
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {user ? (
               <UserMenu displayName={displayName ?? "Account"} email={user.email ?? ""} />
             ) : (
@@ -63,5 +86,24 @@ export async function Header() {
         </div>
       </Container>
     </header>
+  );
+}
+
+function HeaderSearchIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   );
 }
