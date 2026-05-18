@@ -439,3 +439,47 @@ Search the function body for the old name. If any rows return, either:
 - Listing pages (revalidated on mutation)
 - Category lists, state lists (revalidate hourly or on mutation)
 - Static marketing pages (build-time)
+
+## Supabase SQL Editor: partial-execution trap
+
+**Behavior:** the Supabase SQL Editor runs **only the highlighted text** when any text is selected, or **the entire editor contents** when nothing is selected. The behavior is invisible — there's no "currently running highlighted region" indicator before you click Run.
+
+**Failure mode:** paste a multi-statement BEGIN/COMMIT block, accidentally leave a selection from the paste action (or from scrolling-with-shift-click), click Run, and only the selected statements execute. The transaction wrapper may be inside or outside the selection in ways that aren't obvious — you might get a partial COMMIT of only the highlighted CREATE POLICY statements, or a syntax error from running a fragment, depending on what was selected.
+
+**Hit once during E.1.4.b** — only one `CREATE POLICY` landed before recovery. Recovery was clean (DROP + re-run the full block) because the policies are idempotent under the BEGIN wrapper.
+
+**Pre-Run check pattern:** before clicking Run on any multi-statement SQL block, verify the editor shows **blinking cursor only with no text selection**. If anything is highlighted, click somewhere neutral in the editor to deselect first. Especially important for BEGIN/COMMIT blocks where partial execution can leave inconsistent state.
+
+**Adjacent gotcha (banked during E.1.1):** the SQL Editor wraps verification queries in an implicit `LIMIT 100` unless "No limit" is toggled. Aggregate functions like `array_agg` fail with `42809: "array_agg" is an aggregate function` because the implicit LIMIT interacts badly with the aggregate. For aggregates in verification queries: either toggle "No limit", or rewrite as row-per-value form that doesn't need the aggregate.
+
+## Postgres auto-rewrite scope on column rename
+
+**Verified during E.1.4.b pre-check:** Postgres auto-rewrites column *references* in stored expressions on `ALTER TABLE ... RENAME COLUMN`. What gets auto-rewritten vs. needs manual cleanup:
+
+**Auto-rewritten by Postgres (no work needed):**
+- RLS policy bodies (`pg_policies.qual`, `pg_policies.with_check`)
+- CHECK constraint expressions
+- Generated column expressions
+- View definitions (regular views and materialized views)
+- Function bodies that reference columns by name in static SQL
+
+**NOT auto-rewritten (manual cleanup required):**
+- Constraint names — D-080 (e.g. `subscriptions_profile_id_profiles_id_fk` survives the rename of `profile_id → user_id`)
+- Index names — D-069 (e.g. `subscriptions_profile_idx` survives)
+- Function bodies that build SQL dynamically (`format()` / `||` / `EXECUTE`) — D-055 pg_proc scan still required
+- Comments in code / docs that reference column names
+
+**Pre-flight diagnostic trio for column renames** (run before the ALTER):
+```sql
+-- pg_proc: catches dynamic-SQL function bodies
+SELECT n.nspname, p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE pg_get_functiondef(p.oid) ILIKE '%<old_column_name>%';
+
+-- pg_indexes: catches index names
+SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname ILIKE '%<old_column_name>%';
+
+-- pg_constraint: catches FK/CHECK constraint names
+SELECT conname, conrelid::regclass FROM pg_constraint WHERE conname ILIKE '%<old_column_name>%';
+```
+
+Policy bodies don't need a separate scan — Postgres has us covered there.

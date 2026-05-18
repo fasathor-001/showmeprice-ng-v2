@@ -884,7 +884,7 @@ Twelve custom enums in the `public` schema.
 
 ### `subscriptions`
 - `subscriptions_admin_read` (SELECT): admin only
-- `subscriptions_self_read` (SELECT): `auth.uid() = profile_id` ← **STALE: policy body references the old `profile_id` column. E.1.4 must rewrite this to `auth.uid() = user_id` or RLS will silently break for all Pro buyers reading their own subscription.**
+- `subscriptions_self_read` (SELECT): `auth.uid() = user_id` (Phase E.1.4.b — Postgres auto-rewrote the policy body when E.1.1 renamed `profile_id → user_id`; the E.1.4.b DROP + recreate was therefore a no-op confirmation, not a fix. See D-080 scope clarification for the auto-rewrite finding.)
 
 **Notes:** No INSERT/UPDATE policies for sellers on `subscriptions` — subscription mutations happen exclusively via service role (Paystack webhook handler).
 

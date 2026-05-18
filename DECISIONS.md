@@ -834,6 +834,13 @@ Silent agreement (greenlighting the counter-proposal without naming the reversal
   WHERE conname ILIKE '%<old_column_name>%';
   ```
 
+**Scope clarification (banked during E.1.4.b execution):** Postgres auto-rewrites column *references* in RLS policy bodies on column rename — verified by E.1.4.b pre-check on `subscriptions_self_read`, whose `qual` already showed `auth.uid() = user_id` even though the policy was created against `profile_id` in Phase A. Post-rename hygiene scope therefore narrows:
+
+- ✅ **Auto-rewritten by Postgres on column rename** (no manual fix needed): RLS policy bodies (`pg_policies.qual`, `pg_policies.with_check`), CHECK constraint expressions, generated column expressions, view definitions, function bodies that reference columns by name in SQL (NOT in dynamic SQL strings).
+- ❌ **NOT auto-rewritten** (manual cleanup needed): constraint *names* (D-080), index *names* (D-069), function bodies that build SQL dynamically via `format()` / `||` / `EXECUTE` (D-055 pg_proc scan still required), comments in code that reference column names.
+
+The standing pre-flight diagnostic trio (pg_proc / pg_indexes / pg_constraint scans) catches the manual-cleanup cases. Policy bodies don't need a separate scan — Postgres has us covered there.
+
 ---
 
 ## D-081: Phase A `admin_audit_log` dropped in E.1.3.1; `admin_action_log` is canonical
