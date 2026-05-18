@@ -616,3 +616,44 @@ PKCE remains available for OAuth-style flows when those land in Phase F+ (Google
 **Decision:** SMS body copy must self-identify the brand. Don't write "Your ShowMePrice code is {{otp}}" assuming the sender ID will say "ShowMePrice" — write the body so the recipient knows it's from us regardless of the rendered sender ID. Example: "ShowMePrice.ng: your verification code is {{otp}}. Valid for 10 minutes. Never share."
 
 **Operational:** the body-includes-brand convention is cheap insurance against carrier substitution. Also helps if we ever switch SMS providers — body identity stays stable; sender ID is a moving part.
+
+---
+
+## D-069: Post-rename index hygiene — orphaned index names survive column renames
+
+**Context:** During E.1.1, `subscriptions.profile_id` was renamed to `user_id`. Postgres correctly auto-updated the index's column reference (the index `subscriptions_profile_idx` still functioned as a btree on `user_id`), but the index name itself didn't change. After E.1.1's own `CREATE INDEX subscriptions_user_idx ON subscriptions(user_id)` ran, the table ended up with two functionally identical indexes — one with a misleading post-rename name.
+
+**Decision:** Whenever a column is renamed, scan `pg_indexes` for any index name containing the old column name and either rename or drop it. Don't trust that an index is gone just because its column reference rotated — the name is independent metadata.
+
+**Diagnostic pattern:**
+```sql
+SELECT indexname FROM pg_indexes
+WHERE schemaname = 'public'
+  AND indexname ILIKE '%<old_column_name>%';
+```
+
+**Operational:** E.1.2 dropped `subscriptions_profile_idx` as cleanup. Bank this query alongside the pg_proc scan (MEMORY.md Phase E.1.0.1) — both are now standing pre-flight steps for any column rename.
+
+---
+
+## D-070: `reports` 7-day rate limit enforced in application layer, not schema
+
+**Context:** PHASE_E_SPEC.md §13 proposed enforcing the "1 report per reporter per target per 7 days" rule via a partial unique index: `WHERE created_at > NOW() - INTERVAL '7 days'`. Postgres rejects this — `NOW()` is not IMMUTABLE and cannot appear in a partial index predicate.
+
+**Decision:** Drop schema-level enforcement of the rate limit. The server action that creates a report performs a SELECT for prior reports by the same reporter against the same `(target_type, target_id)` within the last 7 days and rejects with a user-facing rate-limit error. The composite index `reports_reporter_target_idx ON reports(reporter_id, target_type, target_id, created_at)` makes that lookup cheap.
+
+**Trade-off:** application-level enforcement allows races (two concurrent report submissions could both pass the check). Acceptable for moderation — a duplicate report is low-cost noise, not a correctness issue, and admins dedupe in the review queue.
+
+**Operational:** the rate-limit check belongs in the report-creation server action, not in any RLS policy (RLS can't reference `NOW() - INTERVAL` for the same immutability reason).
+
+---
+
+## D-071: `price_history.changed_by` attributed via `NEW.seller_id`, not auth.uid()
+
+**Context:** E.1.2 added an AFTER UPDATE OF price_kobo trigger on `products` that writes to `price_history`. Triggers can't reliably resolve the request's `auth.uid()` without parsing `current_setting('request.jwt.claims', true)` — which works under PostgREST but is brittle under direct DB connections, edge migrations, and service-role writes.
+
+**Decision:** `changed_by` is populated from `NEW.seller_id` (the row's owner). Sellers can only edit their own listings under RLS, so `seller_id` is the actor in ~99% of price changes. Admin price overrides — the remaining 1% — are not the price_history canonical record; they're captured in `admin_action_log` with full admin attribution and the before/after `price_kobo` in metadata.
+
+**Trade-off:** the price_history feed shown to buyers in Phase F+ (price drop alerts) attributes the change to the seller even when an admin made it. Acceptable — buyers care about the price trajectory, not who pressed save.
+
+**Operational:** if we ever need true `auth.uid()` attribution in a trigger, the pattern is `(current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid` with a NULL fallback for service-role contexts. Documented here as a reference; not used in E.1.2.
