@@ -803,7 +803,7 @@ WHERE schemaname = 'public'
 
 ---
 
-## D-081: Phase A `admin_audit_log` dropped in favor of Phase E `admin_action_log`
+## D-081: Phase A `admin_audit_log` deprecated in favor of Phase E `admin_action_log` (physical drop deferred to Phase G+ review)
 
 **Context:** Phase A shipped `admin_audit_log` as a generic audit table (6 columns: `id`, `actor_id → profiles(id)`, `action TEXT`, `target TEXT`, `metadata JSONB`, `created_at`). Phase E.1.2 introduced `admin_action_log` (10 columns: `id`, `admin_id → admins(id)`, structured `target_type` + `target_id`, `action`, `reason`, `notes`, `metadata`, `case_id`, `created_at`). Both tables coexisted briefly after E.1.2.
 
@@ -813,16 +813,22 @@ WHERE schemaname = 'public'
 - Application code references: none documented in the agent's known files
 - Schema-level coupling: zero
 
-**Decision:** Drop `admin_audit_log` in a dedicated micro-migration (E.1.3.1) before E.1.4 RLS work. `admin_action_log` is canonical for all admin/moderation audit going forward.
+**Decision:**
+- **(a) Deprecate** — `admin_action_log` is canonical for all admin/moderation audit going forward. No new code writes to `admin_audit_log`.
+- **(b) Do NOT drop physically in Phase E.** The legacy table stays in the schema, preserving reversibility if the deprecation surfaces problems Phase F+ rollout reveals.
+- **(c) Defer admins-entity vs `profiles.role='admin'` unification to a separate Phase F+ decision** — not in scope for this decision or for Phase E.
+- **(d) Phase G+ review trigger:** at Phase G+ planning, re-evaluate `admin_audit_log` status. Two outcomes:
+  - If still 0 rows AND no Phase F+ code wrote to it → `DROP TABLE public.admin_audit_log;` at that point.
+  - Otherwise → migrate any historical rows to `admin_action_log` shape (map `actor_id` → `admin_id` via the unified admins model that Phase F+ will land, opaque `target TEXT` → structured `target_type` + `target_id` via best-effort parsing or `target_type = 'legacy'`, retain `action` and `metadata` verbatim), then DROP.
 
-**Reasoning:**
-1. Carrying both tables creates risk that future code writes to the wrong one, fragmenting the audit trail.
-2. Phase E §14 explicitly designs `admin_action_log` for case management (case_id), structured target lookup, and the separated `admins` entity (D-078 two-vendor architecture has admins as account managers for institutional accounts — they need to land in the same admin model).
-3. Zero rows + zero FK references = irreversibility cost is essentially zero.
-4. Phase A's `actor_id → profiles(id)` model assumed admins are profiles with `role='admin'`. Phase E's `admin_id → admins(id)` model uses the separated entity. The two-admin-model question is real but not in Phase E scope to fully unify — `is_admin(auth.uid())` continues to check `profiles.role = 'admin'` during the transition. Phase F+ owns full unification.
+**Reasoning for deprecate-not-drop:**
+1. Cost of carrying an empty unreferenced table: essentially zero — Postgres metadata only.
+2. Cost of an accidental drop that we later need to undo: non-trivial — migrations are easier to add than to retract, and the Phase G+ review forces a deliberate revisit anyway.
+3. Phase A's `actor_id → profiles(id)` model assumed admins are profiles with `role='admin'`. Phase E's `admin_id → admins(id)` model uses the separated entity. The two-admin-model question is real but not in Phase E scope to fully unify — `is_admin(auth.uid())` continues to check `profiles.role = 'admin'` during the transition.
 
 **Operational:**
-- E.1.3.1 micro-migration is a single `DROP TABLE public.admin_audit_log;` inside BEGIN/COMMIT with pre-flight row count and post-flight existence check.
-- The accompanying `admin_audit_log_admin_read` RLS policy drops automatically with the table.
-- ACTUAL_SCHEMA.md refresh post-E.1.3.1 documents the table as removed and references this decision.
-- E.1.4 RLS block writes `admin_action_log` policies fresh (no inheritance from the dropped legacy table).
+- ACTUAL_SCHEMA.md documents `admin_audit_log` with a `[DEPRECATED — see D-081]` marker. No column-level changes to the table.
+- The existing `admin_audit_log_admin_read` RLS policy stays in place (no rewrites in E.1.4).
+- E.1.4 RLS block writes fresh policies for `admin_action_log` independently.
+- Phase G+ planner: include `SELECT COUNT(*) FROM admin_audit_log` and the application-code scan for writes as a step-zero pre-flight when this decision is revisited.
+- Anti-cruft principle: every "keep this around for reversibility" decision should ship with a named future-phase review trigger. The review trigger is the difference between deferring and forgetting.
