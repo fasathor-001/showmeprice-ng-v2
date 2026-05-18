@@ -495,3 +495,24 @@ Map lives in `STATE_CITY_LABELS` (`src/lib/states.ts`). State dropdown elsewhere
 2. The category doesn't fit cleanly as a subcategory of an existing Tier 2 parent.
 
 **Operational:** if both gates pass, *also* propose demoting a current Tier 2 to Tier 3 to keep the count at 11. The ceiling forces explicit trade-offs rather than accumulating until the UI breaks.
+
+## D-054: Email confirmation uses token_hash flow (resolves K-011)
+
+**Context:** K-011 documented a real-world buyer-impact bug: cross-browser email confirmation fails because `@supabase/ssr` defaults to the PKCE flow. The Supabase client stores a `code_verifier` cookie in Browser A at signUp time; Browser B has no verifier when the user clicks the email link, so `exchangeCodeForSession()` fails and the user lands on `/sign-in?error=callback-failed`. Real Nigerian users frequently sign up on laptop and click email on phone.
+
+**Decision:** the email confirmation flow uses Supabase's `token_hash` mechanism (stateless OTP verification under the hood) rather than PKCE. Mirrors the D-027 password-reset pattern. Two pieces:
+
+1. **Supabase Dashboard → Authentication → Email Templates → "Confirm signup"**: change the URL in the template body from `{{ .ConfirmationURL }}` (PKCE-coupled `?code=...` form) to:
+   ```
+   {{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/dashboard
+   ```
+
+2. **`/auth/callback/route.ts`**: no code change needed — the `token_hash + type` branch already handles every email-link type via `supabase.auth.verifyOtp({ token_hash, type })` (D-027 work made this type-agnostic).
+
+PKCE remains available for OAuth-style flows when those land in Phase F+ (Google, Facebook sign-in). The token_hash path is specifically for email-link flows where same-browser cookie continuity isn't safe to assume.
+
+**Why this works cross-browser:** `verifyOtp` exchanges the server-side token_hash against Supabase's records — no client-side state required. Browser B can verify a Browser A token because Supabase, not the browser, owns the verification material.
+
+**Trade-off accepted:** token_hash is slightly less protected against email-interception attacks than PKCE (since an intercepted link is sufficient to verify, vs PKCE which requires the originating browser's cookie). The trade is correct for ShowMePrice — Nigerian buyers' cross-device email habit is a stronger reality than email-interception attack scenarios at v2 scale.
+
+**Operational:** the Dashboard change is owner-applied. No code deploys gated by this fix. Once the template is updated, K-011 is closed; smoke test by signing up in one browser and clicking the confirmation link in a different browser (or different incognito window).

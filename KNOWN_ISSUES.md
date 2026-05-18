@@ -77,18 +77,8 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Not blocking Phase C.5.** Identity verification + admin approval flow work correctly with the placeholders.
 
-### K-011 — Cross-browser PKCE email confirmation fails (medium)
+<!-- K-011 resolved per D-054 — see Resolved section below. -->
 
-**Context:** Supabase's default auth flow uses PKCE (Proof Key for Code Exchange). When users sign up, the Supabase client stores a "code verifier" in the browser. When they click the confirmation link, the callback expects the same verifier. If clicked in a different browser, mobile device, or after clearing cookies, the verifier is missing and the callback fails with `?error=callback-failed` redirected to `/sign-in`.
-
-**User impact:** Real-world. Users frequently sign up on laptop and check email on phone. They hit this and think the site is broken.
-
-**Fix options:**
-- (a) Switch from PKCE flow to implicit flow for email confirmation (less secure but cross-device).
-- (b) Add "Resend confirmation email" flow that lets users request a fresh email and trigger PKCE in current browser.
-- (c) Use Supabase Auth's magic-link variant which doesn't require PKCE verifier.
-
-**Priority:** Phase E or before public launch. Not blocking Phase C.5 completion (no real users yet). Add to public-launch checklist.
 
 ### K-010 — Orphan storage files on listing delete / image swap (low, deferred)
 
@@ -101,6 +91,14 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 **Fix when prioritised:** scheduled cleanup job that lists Storage objects under `product-images/{business_id}/{product_id}/` and removes any whose `product_id` no longer exists in `products`. Phase E or post-launch. Could run as a Supabase Edge Function on a schedule.
 
 ## Resolved or superseded
+
+### K-011 — Cross-browser PKCE email confirmation fails (RESOLVED)
+
+The Supabase Dashboard "Confirm signup" email template now uses `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/dashboard` instead of the PKCE-coupled `{{ .ConfirmationURL }}`. Application code in `/auth/callback/route.ts` already handles `token_hash + type=signup` via `supabase.auth.verifyOtp` (the D-027 password-reset work made the callback type-agnostic).
+
+The fix is server-state-verified rather than browser-cookie-coupled, so Browser A → email → Browser B works correctly. Trade-off documented in D-054: token_hash is slightly less protected against email-interception attacks than PKCE, but Nigerian buyers' cross-device email habit is the stronger reality.
+
+**Resolved:** D-054. Closed by owner Dashboard template update + the existing callback handler. No application-code commit required.
 
 ### K-007 — Two `/categories` links currently 404 (RESOLVED)
 
