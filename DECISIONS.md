@@ -834,6 +834,9 @@ Silent agreement (greenlighting the counter-proposal without naming the reversal
   WHERE conname ILIKE '%<old_column_name>%';
   ```
 
+**Additional Phase E constraint flagged for the maintenance window (banked during E.1.5):**
+- `filter_actions_log_rule_id_filter_rules_id_fk` — agent named this FK using Drizzle's `_<reftable>_<refcol>_fk` convention when adding it via ALTER TABLE in E.1.5. Phase E's other FKs (created inline in CREATE TABLE) auto-named as `_fkey` per Postgres default. Mixing the two conventions inside Phase E creates the same inconsistency D-080 is meant to clean up across phases. Rename target: `filter_actions_log_rule_id_fkey`.
+
 **Scope clarification (banked during E.1.4.b execution):** Postgres auto-rewrites column *references* in RLS policy bodies on column rename — verified by E.1.4.b pre-check on `subscriptions_self_read`, whose `qual` already showed `auth.uid() = user_id` even though the policy was created against `profile_id` in Phase A. Post-rename hygiene scope therefore narrows:
 
 - ✅ **Auto-rewritten by Postgres on column rename** (no manual fix needed): RLS policy bodies (`pg_policies.qual`, `pg_policies.with_check`), CHECK constraint expressions, generated column expressions, view definitions, function bodies that reference columns by name in SQL (NOT in dynamic SQL strings).

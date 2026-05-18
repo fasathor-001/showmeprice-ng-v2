@@ -452,6 +452,35 @@ Search the function body for the old name. If any rows return, either:
 
 **Adjacent gotcha (banked during E.1.1):** the SQL Editor wraps verification queries in an implicit `LIMIT 100` unless "No limit" is toggled. Aggregate functions like `array_agg` fail with `42809: "array_agg" is an aggregate function` because the implicit LIMIT interacts badly with the aggregate. For aggregates in verification queries: either toggle "No limit", or rewrite as row-per-value form that doesn't need the aggregate.
 
+## INSERT with explicit NULL on a NOT NULL DEFAULT column
+
+**Failure mode:** when a column is declared `NOT NULL DEFAULT <value>`, an INSERT statement that lists the column with an explicit `NULL` value will fail the NOT NULL check — the default is only applied when the column is **omitted** from the INSERT, not when it's explicitly NULL.
+
+```sql
+-- Column declared:
+metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+
+-- Fails:
+INSERT INTO tier_features (tier, feature_key, enabled, metadata)
+VALUES ('free', 'browse_listings', TRUE, NULL);
+-- ERROR: null value in column "metadata" of relation "tier_features"
+--        violates not-null constraint
+
+-- Passes (default applies):
+INSERT INTO tier_features (tier, feature_key, enabled)
+VALUES ('free', 'browse_listings', TRUE);
+
+-- Also passes (literal default):
+INSERT INTO tier_features (tier, feature_key, enabled, metadata)
+VALUES ('free', 'browse_listings', TRUE, '{}'::jsonb);
+```
+
+**Hit during E.1.5 tier_features seed** — agent listed `metadata` in the column list with `NULL` for baseline-feature rows; full transaction rolled back. Fix was NULL → `'{}'::jsonb`.
+
+**Rule of thumb:** for any column with `NOT NULL DEFAULT X`, the INSERT must either omit the column entirely (letting the default apply) or pass the literal default value. Never explicit NULL. When uncertain whether a column has `NOT NULL DEFAULT`, the safe pattern is to omit it from the INSERT and let the database apply the default — explicit values are only needed when overriding the default.
+
+**Pre-flight discipline:** when writing seed/migration INSERTs against a table you didn't just create, check `information_schema.columns` for `is_nullable` and `column_default` on every column being inserted. Five-second check, saves a full transaction rollback.
+
 ## Postgres auto-rewrite scope on column rename
 
 **Verified during E.1.4.b pre-check:** Postgres auto-rewrites column *references* in stored expressions on `ALTER TABLE ... RENAME COLUMN`. What gets auto-rewritten vs. needs manual cleanup:
