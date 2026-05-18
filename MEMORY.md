@@ -399,9 +399,30 @@ When the interaction model differs significantly across breakpoints (e.g., deskt
 
 **Pattern applies to:** any future header CTA where mobile needs different chrome (filters, notifications, account switching). Keep the state-owning component small and focused; let breakpoint-driven CSS handle the layout.
 
+### Pre-flight check for function/trigger references before column renames
+
+Phase E.1.0 renamed `profiles.whatsapp_number → profiles.phone`. The application-code rename was easy to find via grep. What grep missed: the `handle_new_user` trigger function lives in Supabase's pg_proc, not in our repo. The trigger INSERTed into `profiles.whatsapp_number`, so every signup threw a column-not-found error from the moment the rename landed until the trigger was hotfixed.
+
+**Operational:** before renaming any column in a migration, run this pg_proc scan against the database and confirm zero rows or all-known-and-handled rows:
+
+```sql
+SELECT n.nspname, p.proname
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE pg_get_functiondef(p.oid) ILIKE '%<old_column_name>%';
+```
+
+Search the function body for the old name. If any rows return, either:
+- (a) Update those functions in the same migration transaction (`CREATE OR REPLACE FUNCTION`), or
+- (b) Add a compatibility shim (COALESCE on the new and old metadata key, as we did in `handle_new_user`'s metadata read) so the trigger works with either column name during the rename window.
+
+**Why this matters:** Drizzle migrations track schema changes but **don't track function/trigger bodies**. The migration history sees the column rename; the trigger that referenced the old column is invisible to Drizzle's diff. The check has to live in the migration pre-flight, not in the Drizzle schema. Applies to: column renames, table renames, type changes that would break function calls.
+
+**Phase E.1.0 hotfix pattern (banked for re-use):** `CREATE OR REPLACE FUNCTION` is online — no table lock, no downtime. Apply it in the same SQL transaction as the column rename if possible. The Phase E.1.0 break was a few minutes of broken signups (no real users), but on a populated production database that's an outage.
+
 ## Naming conventions
 
-- Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `whatsapp_number`)
+- Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `phone`)
 - TypeScript variables: `camelCase`
 - React components: `PascalCase`
 - Route segments: `kebab-case`
