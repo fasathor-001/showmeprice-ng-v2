@@ -800,3 +800,29 @@ WHERE schemaname = 'public'
   FROM pg_constraint
   WHERE conname ILIKE '%<old_column_name>%';
   ```
+
+---
+
+## D-081: Phase A `admin_audit_log` dropped in favor of Phase E `admin_action_log`
+
+**Context:** Phase A shipped `admin_audit_log` as a generic audit table (6 columns: `id`, `actor_id → profiles(id)`, `action TEXT`, `target TEXT`, `metadata JSONB`, `created_at`). Phase E.1.2 introduced `admin_action_log` (10 columns: `id`, `admin_id → admins(id)`, structured `target_type` + `target_id`, `action`, `reason`, `notes`, `metadata`, `case_id`, `created_at`). Both tables coexisted briefly after E.1.2.
+
+**Investigation** (Phase E Stage 1 schema-refresh dump, DRIFT #4):
+- `admin_audit_log` row count: 0 (never written to in Phase A or C.5)
+- Foreign keys referencing `admin_audit_log`: 0
+- Application code references: none documented in the agent's known files
+- Schema-level coupling: zero
+
+**Decision:** Drop `admin_audit_log` in a dedicated micro-migration (E.1.3.1) before E.1.4 RLS work. `admin_action_log` is canonical for all admin/moderation audit going forward.
+
+**Reasoning:**
+1. Carrying both tables creates risk that future code writes to the wrong one, fragmenting the audit trail.
+2. Phase E §14 explicitly designs `admin_action_log` for case management (case_id), structured target lookup, and the separated `admins` entity (D-078 two-vendor architecture has admins as account managers for institutional accounts — they need to land in the same admin model).
+3. Zero rows + zero FK references = irreversibility cost is essentially zero.
+4. Phase A's `actor_id → profiles(id)` model assumed admins are profiles with `role='admin'`. Phase E's `admin_id → admins(id)` model uses the separated entity. The two-admin-model question is real but not in Phase E scope to fully unify — `is_admin(auth.uid())` continues to check `profiles.role = 'admin'` during the transition. Phase F+ owns full unification.
+
+**Operational:**
+- E.1.3.1 micro-migration is a single `DROP TABLE public.admin_audit_log;` inside BEGIN/COMMIT with pre-flight row count and post-flight existence check.
+- The accompanying `admin_audit_log_admin_read` RLS policy drops automatically with the table.
+- ACTUAL_SCHEMA.md refresh post-E.1.3.1 documents the table as removed and references this decision.
+- E.1.4 RLS block writes `admin_action_log` policies fresh (no inheritance from the dropped legacy table).
