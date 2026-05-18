@@ -775,3 +775,28 @@ WHERE schemaname = 'public'
 - Vendor SDKs (Paystack SDK, Korapay SDK) imported only inside the respective gateway implementations — never at app-route level. App code holds the interface, dependency-injected at the route handler.
 - Webhook handlers (Paystack webhook, Korapay webhook) live in vendor-specific route files and translate vendor payloads into interface-level events before passing to domain logic.
 - Tests mock the interface, not the SDK — Stage 2+ test suites stay vendor-agnostic.
+
+---
+
+## D-080: Post-rename FK constraint name hygiene — deferred to low-risk maintenance window
+
+**Context:** E.1.1 renamed `subscriptions.profile_id → user_id` and column references on `contact_reveals` (per D-055 reshape). Postgres correctly auto-updated each constraint's column reference, but the constraint *names* — baked at original-create time by Drizzle's `<table>_<col>_<reftable>_<refcol>_fk` convention — kept their pre-rename column names embedded. Surfaced during Phase E Stage 1 schema-refresh dump (DRIFT #1 + DRIFT #2):
+
+- `contact_reveals_product_id_products_id_fk` — constraint references the column now named `listing_id`
+- `subscriptions_profile_id_profiles_id_fk` — constraint references the column now named `user_id`
+- Plus the buyer/seller variants on `contact_reveals` (column names didn't rename, but the table touched in the reshape so flagged together).
+
+**Decision:** Cosmetic-only — constraints are functional and enforce the right invariants. Do NOT rename in Phase E (renaming a FK constraint requires `ALTER TABLE ... DROP CONSTRAINT ... ADD CONSTRAINT ...`, briefly losing FK enforcement). Defer to a dedicated low-risk maintenance window where:
+1. All affected tables are confirmed empty or low-traffic
+2. The rename runs inside a single transaction
+3. Phase F+ Drizzle schema-mirror generation produces the canonical names anyway, so the maintenance window may coincide with that work
+
+**Operational:**
+- Document the discrepancy in ACTUAL_SCHEMA.md alongside the affected tables so future readers don't misread the column name from the constraint name.
+- Add to the standing rename pre-flight (alongside D-055 pg_proc scan, D-069 index hygiene): scan `pg_constraint` for FK constraint names containing the old column name *before* the rename happens, plan the constraint-rename as part of the same migration if the table is large or high-traffic.
+- Diagnostic pattern:
+  ```sql
+  SELECT conname, conrelid::regclass AS table_name
+  FROM pg_constraint
+  WHERE conname ILIKE '%<old_column_name>%';
+  ```
