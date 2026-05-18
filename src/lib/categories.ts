@@ -26,8 +26,10 @@ export const TIER_1_FEATURED_SLUGS = [
 // + travel-luggage. Phase D.7.4: replaced food-beverages with two separate
 // Tier 2 parents — foodstuff (Nigerian retail vocabulary) and drinks.
 // Phase D.7.5: promoted perfume-fragrance to standalone Tier 2 (matches
-// Jiji / Jumia / dedicated Nigerian retailer conventions). 10 parents in
-// display order.
+// Jiji / Jumia / dedicated Nigerian retailer conventions).
+// Phase D.7.6: added building-materials (Jiji.ng has 52,165+ active
+// building-materials listings — major Nigerian commerce vertical).
+// 11 parents in display order.
 export const TIER_2_STANDARD_SLUGS = [
   "health",
   "baby-kids",
@@ -39,6 +41,7 @@ export const TIER_2_STANDARD_SLUGS = [
   "travel-luggage",
   "drinks",
   "perfume-fragrance",
+  "building-materials",
 ] as const;
 
 // Phase D.4.1: -2 (promoted) +7 (new) = 11 parents.
@@ -88,6 +91,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   foodstuff: "🍚",
   drinks: "🥤",
   "perfume-fragrance": "🌹",
+  "building-materials": "🧱",
   vehicles: "🚗",
   property: "🏠",
   sports: "⚽",

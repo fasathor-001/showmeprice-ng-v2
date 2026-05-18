@@ -163,6 +163,25 @@ async function seed() {
         "car perfume", "perfume oil",
         "mens fragrance", "womens fragrance", "unisex perfume",
       ] },
+      // Phase D.7.6: major Nigerian commerce vertical (Jiji.ng 52k+ active
+      // listings). Aliases are pure category synonyms — brand names
+      // (Dangote, Lafarge, Berger, Sadolin) match via title/description
+      // ilike per the D.7.3.1 architectural rule.
+      { name: "Building Materials & Supplies", slug: "building-materials", tier: 2, sort_order: 17, search_aliases: [
+        "building materials", "building supplies", "construction materials", "construction",
+        "cement", "concrete", "mortar", "grout",
+        "tile", "tiles", "ceramic", "porcelain", "marble", "granite",
+        "roofing", "roof", "roof sheet", "stone coated",
+        "door", "doors", "window", "windows",
+        "block", "blocks", "brick", "bricks", "hollow block",
+        "sand", "chippings", "gravel", "stone",
+        "iron rod", "rebar", "steel", "wire mesh", "reinforcement",
+        "pipe", "plumbing", "toilet", "wc", "faucet", "tap", "basin", "sink",
+        "wire", "cable", "wiring", "electrical", "socket", "switch", "breaker",
+        "paint", "primer", "varnish", "brush",
+        "pop", "ceiling", "gypsum", "pvc ceiling", "3d panel", "wall panel",
+        "waterproofing", "insulation",
+      ] },
 
       // Tier 3 — "more categories" drawer (11 parents post-D.4.1)
       { name: "Services", slug: "services", tier: 3, sort_order: 1, icon_name: "wrench" },
@@ -193,6 +212,9 @@ async function seed() {
   const foodstuff = topCategories.find((c) => c.slug === "foodstuff");
   const drinks = topCategories.find((c) => c.slug === "drinks");
   const perfume = topCategories.find((c) => c.slug === "perfume-fragrance");
+  const buildingMaterials = topCategories.find(
+    (c) => c.slug === "building-materials"
+  );
 
   if (
     fashion &&
@@ -204,7 +226,8 @@ async function seed() {
     vehicles &&
     foodstuff &&
     drinks &&
-    perfume
+    perfume &&
+    buildingMaterials
   ) {
     await db
       .insert(schema.categories)
@@ -285,9 +308,21 @@ async function seed() {
         { name: "Perfume Oils", slug: "perfume-oils", parent_id: perfume.id, sort_order: 6 },
         { name: "Deodorants & Antiperspirants", slug: "deodorants", parent_id: perfume.id, sort_order: 7 },
         { name: "Car Perfumes & Fresheners", slug: "car-perfumes", parent_id: perfume.id, sort_order: 8 },
+
+        // Building Materials & Supplies subs (10, Phase D.7.6)
+        { name: "Cement & Concrete", slug: "cement-concrete", parent_id: buildingMaterials.id, sort_order: 1 },
+        { name: "Tiles", slug: "tiles", parent_id: buildingMaterials.id, sort_order: 2 },
+        { name: "Roofing Materials", slug: "roofing-materials", parent_id: buildingMaterials.id, sort_order: 3 },
+        { name: "Doors & Windows", slug: "doors-windows", parent_id: buildingMaterials.id, sort_order: 4 },
+        { name: "Blocks, Bricks & Stones", slug: "blocks-bricks-stones", parent_id: buildingMaterials.id, sort_order: 5 },
+        { name: "Iron, Steel & Rods", slug: "iron-steel-rods", parent_id: buildingMaterials.id, sort_order: 6 },
+        { name: "Plumbing & Sanitary", slug: "plumbing-sanitary", parent_id: buildingMaterials.id, sort_order: 7 },
+        { name: "Electrical & Wiring", slug: "electrical-wiring", parent_id: buildingMaterials.id, sort_order: 8 },
+        { name: "Paint & Finishing", slug: "paint-finishing", parent_id: buildingMaterials.id, sort_order: 9 },
+        { name: "Ceiling & Interior", slug: "ceiling-interior", parent_id: buildingMaterials.id, sort_order: 10 },
       ])
       .onConflictDoNothing();
-    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks, Perfume & Fragrance");
+    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks, Perfume & Fragrance, Building Materials");
   } else {
     console.log("  - top categories already seeded; skipping sub-categories");
   }
