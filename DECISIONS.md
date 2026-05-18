@@ -735,6 +735,13 @@ WHERE schemaname = 'public'
 
 > **Owner: confirm wording** — if the prior framing of "schema design deferred" was more specific (e.g., named columns to add), send the canonical version.
 
+**Stage 2 PII discipline (banked during E.1.4 RLS planning):** when Stage 2 finalizes `kyc_documents` columns alongside Korapay Identity integration, raw provider response data (Korapay/Dojah confidence scores, biometric flags, full provider JSON envelopes) must NOT be exposed via the user-facing self-read policy. Three patterns to choose between at Stage 2 design time:
+1. **Split tables** — `kyc_documents` (user-facing summary: status, verified_at, document_type) + `kyc_documents_audit` (full provider response, admin-only RLS). Cleanest separation; doubles the row count per verification.
+2. **Views** — base table holds everything; a `kyc_documents_user` view strips audit columns and self-read policy applies to the view, not the base table.
+3. **Column-level RLS** — Postgres supports column-level grants (`GRANT SELECT (col1, col2) ON kyc_documents TO authenticated`). Self-read policy at row level + column grants gate which columns the user sees. Most fragile pattern (easy to miss new audit columns at ALTER time); also harder to express in Drizzle schema mirror.
+
+Lean toward (1) — split tables — for explicit separation of user-facing summary from audit payload. Don't action now; decide at Stage 2 alongside the column-shape finalization.
+
 ---
 
 ## D-076: BVN extension deferred to Phase F+ (NIN sufficient for Phase E trust model)
