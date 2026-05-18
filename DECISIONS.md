@@ -657,3 +657,32 @@ WHERE schemaname = 'public'
 **Trade-off:** the price_history feed shown to buyers in Phase F+ (price drop alerts) attributes the change to the seller even when an admin made it. Acceptable — buyers care about the price trajectory, not who pressed save.
 
 **Operational:** if we ever need true `auth.uid()` attribution in a trigger, the pattern is `(current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid` with a NULL fallback for service-role contexts. Documented here as a reference; not used in E.1.2.
+
+---
+
+## D-072: `escrow_orders` → `orders` data migration deferred to Phase G+
+
+**Context:** Phase A shipped `escrow_orders` (12 columns) as a placeholder for future fulfillment. Phase E ships the canonical fulfillment schema as a set of empty tables (`orders`, `order_status_history`, `shipping_quotes`, `escrow_transactions`, `shipping_addresses`, `delivery_partners`). D-059 retained `escrow_orders` rather than dropping or renaming it, so both shapes co-exist in production through Stage 1.
+
+**Decision:** No data migration in Phase E. `escrow_orders` remains untouched (any rows preserved, schema unchanged). The new Phase E `orders` + `escrow_transactions` start empty and stay empty until Phase G+ ships fulfillment. Phase G+ owns the migration.
+
+**Migration map for the Phase G+ engineer** (P6 diagnostic captured during E.1.3 pre-flight):
+
+| Phase A `escrow_orders` column | Phase E target | Notes |
+|---|---|---|
+| `id` | `orders.id` | preserve UUID |
+| `product_id` | `orders.listing_id` | column renamed |
+| `buyer_id` | `orders.buyer_id` | direct |
+| `seller_id` | `orders.seller_id` | direct |
+| `amount_kobo` | `orders.amount_kobo` + `escrow_transactions.amount_kobo` | denormalized into both |
+| `currency` (enum) | (none) | NGN-only; drop the enum reference, hardcode NGN in app |
+| `status` | `orders.status` + `escrow_transactions.status` | needs status-value remap |
+| `paystack_transaction_reference` | `escrow_transactions.provider_reference` (with `payment_provider = 'paystack'`) | provider locked in Phase A; Phase E externalizes |
+| `shipping_note` | (none in current Phase E schema) | preserve in `orders` metadata JSONB if added, or `order_status_history.reason` |
+| `dispute_reason` | `order_status_history.reason` (on status='disputed' transition) | inline → externalized |
+| `created_at` | `orders.created_at` | direct |
+| `updated_at` | (derived from `order_status_history`) | drop column |
+
+**Operational:**
+- Drop `escrow_orders` after Phase G+ migration is verified end-to-end on production.
+- If Phase A `escrow_orders` has zero rows at Phase G+ start (which is likely — Phase A never shipped checkout), the "migration" is just `DROP TABLE escrow_orders` and we skip the column-mapping work entirely. Bank the check `SELECT COUNT(*) FROM escrow_orders;` as Phase G+ pre-flight step zero.
