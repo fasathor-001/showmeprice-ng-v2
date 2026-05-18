@@ -778,6 +778,32 @@ WHERE schemaname = 'public'
 
 ---
 
+## D-079: Decision-flow consistency discipline — owner must explicitly acknowledge reversals
+
+**Context:** During Phase E Stage 1, the `admin_audit_log` resolution went through two opposite framings in adjacent turns (May 2026):
+1. Owner proposed "deprecate but don't DROP, add Phase G+ review trigger"
+2. Agent counter-proposed "DROP cleanly, zero rows = zero risk"
+3. Owner greenlit the DROP migration in the next turn without explicitly acknowledging the reversal from (1) to (2)
+4. The DROP shipped
+5. Subsequent owner turn re-asserted the original "deprecate, don't DROP" framing as if (2)–(4) hadn't happened
+
+Net cost: D-081 was banked three times in the doc — original DROP framing, then deprecate-not-drop with Phase G+ review trigger, then DROP-final reflecting shipped reality. Three commits on the same decision, each contradicting the previous, when one explicit acknowledgement at step 3 would have kept the decision log linear.
+
+**Decision:** When the agent counter-proposes against the owner's prior recommendation, the owner must explicitly acknowledge the reversal in the next response before greenlighting — not silently agree by proceeding. Required surface format:
+
+> "Confirmed — reversing my prior recommendation [original framing] in favor of [counter-proposal] for reasons X, Y."
+
+Silent agreement (greenlighting the counter-proposal without naming the reversal) creates contradictory entries in the decision log.
+
+**Operational:**
+- The discipline binds the owner side of the planner ↔ owner ↔ agent loop. The agent's responsibility is to propose alternatives with reasoning, not to verify the owner read the reasoning before greenlighting.
+- The agent should still draft its decisions defensively — when shipping a decision that contradicts the most recent owner framing, include a brief "Reversing prior framing of X in favor of Y based on owner greenlight in [turn]" header in the commit message and DECISIONS.md entry. Catches the discrepancy at write-time when the cost of fixing is minutes, not at production-discrepancy time when it's a doc-rewrite cycle.
+- This discipline applies to both the owner and the agent equally — if the owner reverses a position the agent banked, the same acknowledgement format applies. Reversals are fine; silent reversals are not.
+
+**Banked retroactively after the admin_audit_log incident.** D-079 was the placeholder slot that stayed open through D-080/D-081 banking; reserved deliberately for whichever workflow lesson the Stage 1 cycle surfaced. This was it.
+
+---
+
 ## D-080: Post-rename FK constraint name hygiene — deferred to low-risk maintenance window
 
 **Context:** E.1.1 renamed `subscriptions.profile_id → user_id` and column references on `contact_reveals` (per D-055 reshape). Postgres correctly auto-updated each constraint's column reference, but the constraint *names* — baked at original-create time by Drizzle's `<table>_<col>_<reftable>_<refcol>_fk` convention — kept their pre-rename column names embedded. Surfaced during Phase E Stage 1 schema-refresh dump (DRIFT #1 + DRIFT #2):
