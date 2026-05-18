@@ -686,3 +686,92 @@ WHERE schemaname = 'public'
 **Operational:**
 - Drop `escrow_orders` after Phase G+ migration is verified end-to-end on production.
 - If Phase A `escrow_orders` has zero rows at Phase G+ start (which is likely — Phase A never shipped checkout), the "migration" is just `DROP TABLE escrow_orders` and we skip the column-mapping work entirely. Bank the check `SELECT COUNT(*) FROM escrow_orders;` as Phase G+ pre-flight step zero.
+
+---
+
+## D-073: NIN verification flow is Pattern B (hybrid — verify at risk moments, not at signup)
+
+**Context:** Three patterns considered for when NIN verification happens in the buyer/seller lifecycle:
+- **Pattern A — sync at signup:** NIN required before account creation completes. Highest friction, lowest abandonment risk after signup.
+- **Pattern B — hybrid:** account creation works without NIN (phone OTP only). NIN gates specific high-trust actions: seller verification upgrade, contact reveal as buyer, Pro tier purchase. Buyers without NIN can browse, message, and use free-tier features.
+- **Pattern C — lazy:** NIN never proactively required; only triggered post-fraud-flag.
+
+**Decision:** Pattern B. Signup stays low-friction (phone-only) to maximize top-of-funnel conversion, then NIN gates the moments where verified identity matters most to the trust model — seller verification, Pro reveal, payment flows.
+
+**Operational:**
+- Buyers can complete the entire free-tier journey without NIN.
+- First NIN prompt for buyers: when they tap "Upgrade to Pro" or buy a credit pack.
+- First NIN prompt for sellers: when they apply for verified seller status (Phase C.5 flow).
+- NIN verification result stored in `kyc_documents` (schema in E.1.3, populated Stage 2+).
+
+> **Owner: confirm wording** — if the prior framing of Pattern B differs, send the canonical version and I'll edit.
+
+---
+
+## D-074: Vendor selection — Paystack for payments, Korapay for NIN; Dojah deprioritized
+
+**Context:** Phase E ships Pro tier monetization (Paystack) and identity verification for trust signals (NIN, eventually BVN). Vendor evaluation covered Paystack, Flutterwave, Monnify for payments; Dojah, VerifyMe, Smile ID, Prembly, Korapay Identity for NIN.
+
+**Decision:**
+- **Payments — Paystack primary.** Ubiquitous in NG developer ecosystem, Stripe-backed (acquisition completed 2020), spec-default in PHASE_E_SPEC.md, well-documented sandbox.
+- **NIN — Korapay Identity primary.** Self-serve dashboard request flow (request Identity service after Live Mode KYC approval), no sales-gated signup, transparent pricing.
+- **Dojah deprioritized** — sales-gated signup blocked self-serve evaluation. Re-evaluate as fallback if Korapay Identity approval is delayed (see D-077) or if Korapay's NIN endpoint reliability proves insufficient in Stage 2 integration testing.
+
+**Operational:**
+- Korapay account created; Live Mode KYC submitted; Identity service request pending Live Mode approval. Expected 1–3 business days for Live Mode, additional time for Identity service.
+- Paystack integration scaffolded in E.1.7 behind `PaymentGateway` interface (D-078).
+
+---
+
+## D-075: NIN schema design deferred to Stage 2 (post-Korapay integration)
+
+**Context:** E.1.3 created `kyc_documents` as an empty Phase H+ stub with minimal columns (`user_id`, `document_type`, `document_reference`, `verification_status`, `verified_at`). The full column shape depends on what Korapay Identity actually returns at API call time — confidence scores, metadata fields, photo URLs, response envelopes vary across NIN vendors.
+
+**Decision:** Don't lock the `kyc_documents` final shape until Korapay Identity is integrated and we've seen real API responses. Stage 2 NIN integration owns the schema finalization — at that point we either add columns via ALTER TABLE or accept the minimal shape if Korapay's response fits.
+
+**Operational:**
+- E.1.3's `kyc_documents` is intentionally under-specified. No app code reads from it in Stage 1.
+- Stage 2 NIN integration paste-back will include any required ALTERs to `kyc_documents` before any rows get written.
+
+> **Owner: confirm wording** — if the prior framing of "schema design deferred" was more specific (e.g., named columns to add), send the canonical version.
+
+---
+
+## D-076: BVN extension deferred to Phase F+ (NIN sufficient for Phase E trust model)
+
+**Context:** NIN (National Identification Number) is the primary identity document for individuals in Nigeria. BVN (Bank Verification Number) is the banking-tied identity document and is required for any flow that touches escrow, payouts, or financial settlement. Phase E's verified identity needs are: seller verification (NIN sufficient), contact reveal (NIN sufficient), Pro tier purchase (NIN sufficient for buyer trust).
+
+**Decision:** Ship Phase E with NIN-only via Korapay. Add BVN extension in Phase F+ when escrow / seller payouts / financial flows arrive.
+
+**Operational:**
+- Phase E `kyc_documents.document_type` accepts `'nin'` only in Stage 2.
+- Phase F+ Korapay integration adds BVN as a second `document_type`. Korapay Identity covers both, so the same vendor relationship extends.
+- If Korapay BVN endpoint proves unreliable in Phase F+ testing, re-evaluate fallback (Mono/Okra are BVN-specialized alternatives).
+
+---
+
+## D-077: Korapay approval-delay fallback — manual seller verification (Phase C.5 baseline)
+
+**Context:** Korapay Identity service requires (a) Live Mode KYC approval, then (b) Identity service request approval. Either gate could push past Stage 2 timeline. Phase E ships regardless of vendor timing.
+
+**Decision:** If Korapay Identity approval is not complete by the start of Stage 2 NIN integration work, Phase E ships with **manual seller verification only** — the existing Phase C.5 admin-reviewed flow. Auto-NIN moves to Phase F+ and `kyc_documents` stays empty through Phase E.
+
+**Operational:**
+- Stage 2 pre-flight: check Korapay Identity status. If approved → integrate. If not → skip NIN scope for Phase E, document the deferral in KNOWN_ISSUES.md, proceed to Stage 3.
+- Pattern B (D-073) still holds — sellers verify via the manual admin flow, buyers don't see a NIN prompt at all in Phase E if this fallback triggers.
+- Decision doesn't block any other Stage 2 work (signup, messaging, contact reveal all independent of NIN).
+
+---
+
+## D-078: Two-vendor architecture — `PaymentGateway` (Paystack-primary) + `NinVerifier` (Korapay-primary), both interface-first
+
+**Context:** Phase E uses two distinct third-party vendors for two distinct concerns. Both have non-trivial failure modes (carrier-side SMS issues, vendor downtime, API rate limits) and both have plausible future fallback vendors. Coupling app code directly to either vendor's SDK invites lock-in and makes Phase F+ vendor changes expensive.
+
+**Decision:** Interface-first scaffolding for both vendors:
+- **`PaymentGateway`** interface lands in E.1.7. Methods cover charge initiation, charge verification, refund, subscription create/cancel, webhook signature validation. `PaystackGateway` is the only Phase E implementation. `KorapayGateway` is named in code as the documented fallback target, not implemented in Phase E (no concrete Korapay payment work until BVN/escrow Phase F+).
+- **`NinVerifier`** interface scaffolded in Stage 2. Methods cover `verifyNin(nin, person_details)`, `getVerificationResult(verification_id)`. `KorapayNinVerifier` is the only Phase E implementation. `DojahNinVerifier` is the named fallback target, not implemented.
+
+**Operational:**
+- Vendor SDKs (Paystack SDK, Korapay SDK) imported only inside the respective gateway implementations — never at app-route level. App code holds the interface, dependency-injected at the route handler.
+- Webhook handlers (Paystack webhook, Korapay webhook) live in vendor-specific route files and translate vendor payloads into interface-level events before passing to domain logic.
+- Tests mock the interface, not the SDK — Stage 2+ test suites stay vendor-agnostic.
