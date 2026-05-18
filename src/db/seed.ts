@@ -70,25 +70,26 @@ async function seed() {
   const topCategories = await db
     .insert(schema.categories)
     .values([
-      // Tier 1 — featured on home page
-      { name: "Fashion & Apparel", slug: "fashion", tier: 1, sort_order: 1, icon_name: "shirt" },
-      { name: "Mobile Phones & Tablets", slug: "mobile-phones-tablets", tier: 1, sort_order: 2, icon_name: "smartphone" },
-      { name: "Hair & Wigs", slug: "hair-wigs", tier: 1, sort_order: 3, icon_name: "scissors" },
-      { name: "Beauty & Personal Care", slug: "beauty", tier: 1, sort_order: 4, icon_name: "sparkles" },
-      { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu" },
-      { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home" },
+      // Tier 1 — featured on home page. search_aliases (Phase D.7.2) hold
+      // common buyer terms; lookup is JSONB array containment, lowercased.
+      { name: "Fashion & Apparel", slug: "fashion", tier: 1, sort_order: 1, icon_name: "shirt", search_aliases: ["fashion", "clothes", "clothing", "dress", "wear", "outfit", "apparel", "style"] },
+      { name: "Mobile Phones & Tablets", slug: "mobile-phones-tablets", tier: 1, sort_order: 2, icon_name: "smartphone", search_aliases: ["phone", "phones", "mobile", "smartphone", "iphone", "samsung", "tecno", "infinix", "android", "ios"] },
+      { name: "Hair & Wigs", slug: "hair-wigs", tier: 1, sort_order: 3, icon_name: "scissors", search_aliases: ["wig", "wigs", "weave", "bundle", "extension", "frontal", "closure", "hair"] },
+      { name: "Beauty & Personal Care", slug: "beauty", tier: 1, sort_order: 4, icon_name: "sparkles", search_aliases: ["beauty", "skincare", "cosmetic", "makeup", "perfume", "fragrance", "lotion", "cream"] },
+      { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu", search_aliases: ["electronics", "electronic", "tv", "television", "gaming", "speaker", "audio", "solar", "console", "playstation", "xbox"] },
+      { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home", search_aliases: ["furniture", "home", "kitchen", "appliance", "decor", "fridge", "freezer", "cooker", "microwave"] },
 
       // Tier 2 — in main nav, not on hero (8 parents post-D.4.1)
-      { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 1, icon_name: "heart-pulse" },
-      { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 2, icon_name: "baby" },
-      { name: "Food & Drinks", slug: "food-beverages", tier: 2, sort_order: 3, icon_name: "utensils" },
-      { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car" },
+      { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 1, icon_name: "heart-pulse", search_aliases: ["health", "fitness", "supplement", "vitamin", "medicine", "wellness", "exercise", "workout"] },
+      { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 2, icon_name: "baby", search_aliases: ["baby", "kids", "children", "toy", "stroller", "diaper", "infant"] },
+      { name: "Food & Drinks", slug: "food-beverages", tier: 2, sort_order: 3, icon_name: "utensils", search_aliases: ["food", "drink", "beverage", "snack", "groceries", "wine", "juice"] },
+      { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car", search_aliases: ["car", "cars", "vehicle", "vehicles", "auto", "automobile", "tokunbo", "motor"] },
       // Promoted from Tier 3 in Phase D.4.1
-      { name: "Property", slug: "property", tier: 2, sort_order: 5 },
-      { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 6 },
+      { name: "Property", slug: "property", tier: 2, sort_order: 5, search_aliases: ["property", "house", "apartment", "rent", "land", "real estate", "flat", "duplex", "bungalow"] },
+      { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 6, search_aliases: ["sport", "sports", "gym", "fitness", "equipment", "exercise", "football", "basketball"] },
       // New Tier 2 parents in Phase D.4.1
-      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7 },
-      { name: "Travel & Luggage", slug: "travel-luggage", tier: 2, sort_order: 8 },
+      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7, search_aliases: ["computer", "laptop", "desktop", "pc", "monitor", "keyboard", "mouse", "hp", "dell"] },
+      { name: "Travel & Luggage", slug: "travel-luggage", tier: 2, sort_order: 8, search_aliases: ["travel", "luggage", "suitcase", "backpack", "bag"] },
 
       // Tier 3 — "more categories" drawer (11 parents post-D.4.1)
       { name: "Services", slug: "services", tier: 3, sort_order: 1, icon_name: "wrench" },

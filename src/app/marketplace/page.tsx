@@ -61,12 +61,32 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     ? (states.find((s) => s.slug === stateSlug) ?? null)
     : null;
 
+  // --- Search resolution (Phase D.7.2) ----------------------------------------
+  // Joined-table filters inside PostgREST .or() proved unreliable (D.7.1 bug —
+  // 'cars' search missed Cars-category listings). Replaced with a two-step
+  // resolution: (1) find matching category ids by name OR JSONB alias, (2)
+  // expand to subcategories of any matched parent. Then the products .or()
+  // does title/description ILIKE + category_id IN (...). Three queries total
+  // in the worst case, well within budget for the current taxonomy (~30 rows).
+  let matchedCategoryIds: string[] = [];
+  if (q) {
+    const lower = q.toLowerCase();
+    const { data: matched } = await supabase
+      .from("categories")
+      .select("id, parent_id")
+      .or(`name.ilike.%${q}%,search_aliases.cs.["${lower}"]`);
+    const directIds = (matched ?? []).map((c) => c.id);
+    if (directIds.length > 0) {
+      const { data: children } = await supabase
+        .from("categories")
+        .select("id")
+        .in("parent_id", directIds);
+      const childIds = (children ?? []).map((c) => c.id);
+      matchedCategoryIds = Array.from(new Set([...directIds, ...childIds]));
+    }
+  }
+
   // --- Build the listings query -----------------------------------------------
-  // categories(name) is a plain left-join embed so listings without a
-  // category aren't excluded — the joined-table .or() clause below still
-  // works because PostgREST treats a null categories row as not-matching
-  // on that branch, and the OR with title/description carries any
-  // category-less hits.
   let query = supabase
     .from("products")
     .select(
@@ -74,8 +94,7 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
       id, title, price_kobo, is_negotiable, created_at,
       product_images ( storage_path, position ),
       businesses!inner ( business_name, verification_status ),
-      nigerian_states ( name ),
-      categories ( name )
+      nigerian_states ( name )
     `
     )
     .eq("status", "active")
@@ -84,12 +103,14 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     .limit(PAGE_SIZE);
 
   if (q) {
-    // Match against title, description, AND the joined category name. The
-    // last clause uses PostgREST's joined-table filter syntax — requires
-    // categories(...) to be in the select (it is, above). D.7.1.
-    query = query.or(
-      `title.ilike.%${q}%,description.ilike.%${q}%,categories.name.ilike.%${q}%`
-    );
+    const orClauses = [
+      `title.ilike.%${q}%`,
+      `description.ilike.%${q}%`,
+    ];
+    if (matchedCategoryIds.length > 0) {
+      orClauses.push(`category_id.in.(${matchedCategoryIds.join(",")})`);
+    }
+    query = query.or(orClauses.join(","));
   }
   if (categoryIds) {
     query = query.in("category_id", categoryIds);
@@ -230,10 +251,49 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
                   stateName: selectedState?.name ?? null,
                 })}
               </p>
-              <p className="text-sm text-ink-600 mb-6">
-                Try different keywords, browse all categories, or be the first
-                to list something.
-              </p>
+              {/* Empty-state escape hatches (Phase D.7.2). When the buyer
+                  hit zero results AND a state filter is active, offer to
+                  drop the state filter. When nothing's filtered at all,
+                  point to /sell. Otherwise fall through to the generic
+                  browse / sell CTAs. */}
+              {hasFilters && stateSlug && q && (
+                <p className="text-sm text-ink-600 mb-6">
+                  <Link
+                    href={buildUrl({ state: "" })}
+                    className="text-teal-700 hover:text-teal-900 underline"
+                  >
+                    See results for &ldquo;{q}&rdquo; across Nigeria →
+                  </Link>
+                </p>
+              )}
+              {hasFilters && stateSlug && !q && (
+                <p className="text-sm text-ink-600 mb-6">
+                  <Link
+                    href={buildUrl({ state: "" })}
+                    className="text-teal-700 hover:text-teal-900 underline"
+                  >
+                    See all verified listings →
+                  </Link>
+                </p>
+              )}
+              {!hasFilters && (
+                <p className="text-sm text-ink-600 mb-6">
+                  Be the first to{" "}
+                  <Link
+                    href="/sell"
+                    className="text-teal-700 hover:text-teal-900 underline"
+                  >
+                    list something for sale
+                  </Link>
+                  .
+                </p>
+              )}
+              {hasFilters && !stateSlug && (
+                <p className="text-sm text-ink-600 mb-6">
+                  Try different keywords, browse all categories, or be the
+                  first to list something.
+                </p>
+              )}
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link
                   href="/categories"

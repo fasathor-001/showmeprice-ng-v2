@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  jsonb,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -26,6 +27,10 @@ export const categories = pgTable("categories", {
   sort_order: integer("sort_order").notNull().default(0),
   icon_name: text("icon_name"),
   tier: integer("tier").notNull().default(3),
+  // Phase D.7.2: free-form aliases buyers actually type. Lowercased
+  // strings; the marketplace search resolves matching categories via
+  // `cs.["<lower-of-query>"]` JSONB containment.
+  search_aliases: jsonb("search_aliases").notNull().default("[]"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
