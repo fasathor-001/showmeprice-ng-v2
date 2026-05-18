@@ -73,8 +73,21 @@ async function seed() {
       // Tier 1 — featured on home page. search_aliases (Phase D.7.2) hold
       // common buyer terms; lookup is JSONB array containment, lowercased.
       { name: "Fashion & Apparel", slug: "fashion", tier: 1, sort_order: 1, icon_name: "shirt", search_aliases: ["fashion", "clothes", "clothing", "dress", "wear", "outfit", "apparel", "style"] },
-      { name: "Mobile Phones & Tablets", slug: "mobile-phones-tablets", tier: 1, sort_order: 2, icon_name: "smartphone", search_aliases: ["phone", "phones", "mobile", "smartphone", "iphone", "samsung", "tecno", "infinix", "android", "ios"] },
-      { name: "Hair & Wigs", slug: "hair-wigs", tier: 1, sort_order: 3, icon_name: "scissors", search_aliases: ["wig", "wigs", "weave", "bundle", "extension", "frontal", "closure", "hair"] },
+      { name: "Mobile Phones & Tablets", slug: "mobile-phones-tablets", tier: 1, sort_order: 2, icon_name: "smartphone", search_aliases: [
+        "phone", "phones", "mobile", "smartphone", "tablet", "tablets",
+        "iphone", "iphone 15", "iphone 14", "iphone 13", "iphone 12", "iphone 11", "iphone x", "iphone pro", "iphone max", "iphone se",
+        "samsung", "galaxy", "galaxy s", "galaxy note", "galaxy a", "galaxy z", "galaxy fold", "galaxy flip",
+        "tecno", "infinix", "itel", "redmi", "xiaomi", "huawei", "oppo", "vivo", "oneplus", "google pixel", "nokia",
+        "android", "ios",
+        "earbuds", "airpods", "headphones", "charger", "powerbank", "screen protector", "case", "tempered glass", "smartwatch", "apple watch",
+      ] },
+      { name: "Hair & Wigs", slug: "hair-wigs", tier: 1, sort_order: 3, icon_name: "scissors", search_aliases: [
+        "wig", "wigs", "weave", "weavon", "bundle", "bundles", "extension", "extensions", "frontal", "closure", "lace", "lace front", "lace closure",
+        "hair", "human hair", "synthetic hair", "virgin hair", "raw hair",
+        "brazilian", "peruvian", "indian", "malaysian", "vietnamese", "mongolian", "cambodian",
+        "ponytail", "braid", "braids", "kinky", "curly", "straight", "body wave", "deep wave", "loose wave", "water wave", "jerry curl",
+        "edge control", "hair cream", "shampoo", "conditioner", "leave-in",
+      ] },
       { name: "Beauty & Personal Care", slug: "beauty", tier: 1, sort_order: 4, icon_name: "sparkles", search_aliases: ["beauty", "skincare", "cosmetic", "makeup", "perfume", "fragrance", "lotion", "cream"] },
       { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu", search_aliases: ["electronics", "electronic", "tv", "television", "gaming", "speaker", "audio", "solar", "console", "playstation", "xbox"] },
       { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home", search_aliases: ["furniture", "home", "kitchen", "appliance", "decor", "fridge", "freezer", "cooker", "microwave"] },
@@ -83,12 +96,38 @@ async function seed() {
       { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 1, icon_name: "heart-pulse", search_aliases: ["health", "fitness", "supplement", "vitamin", "medicine", "wellness", "exercise", "workout"] },
       { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 2, icon_name: "baby", search_aliases: ["baby", "kids", "children", "toy", "stroller", "diaper", "infant"] },
       { name: "Food & Drinks", slug: "food-beverages", tier: 2, sort_order: 3, icon_name: "utensils", search_aliases: ["food", "drink", "beverage", "snack", "groceries", "wine", "juice"] },
-      { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car", search_aliases: ["car", "cars", "vehicle", "vehicles", "auto", "automobile", "tokunbo", "motor"] },
+      { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car", search_aliases: [
+        "car", "cars", "vehicle", "vehicles", "auto", "automobile", "motor",
+        "tokunbo", "fairly used", "foreign used", "naija used", "nigerian used", "uk used",
+        "sedan", "suv", "pickup", "truck", "van", "bus", "coupe", "wagon", "minivan", "minibus",
+        "keke", "keke napep", "tricycle", "three-wheeler", "three wheeler",
+        "motorcycle", "bike", "okada", "scooter",
+        "toyota", "corolla", "camry", "highlander", "hilux", "sienna", "rav4", "land cruiser", "hiace", "yaris", "avalon", "avensis", "rush", "prado", "fortuner", "venza", "tacoma",
+        "honda", "accord", "civic", "pilot", "crv", "cr-v", "city", "odyssey",
+        "lexus", "rx 350", "rx350", "es 350", "es350", "gx", "lx", "is",
+        "mercedes", "mercedes-benz", "benz", "g wagon", "g-wagon", "g-class", "c-class", "e-class", "s-class", "gle", "glk", "ml",
+        "hyundai", "sonata", "elantra", "tucson", "santa fe",
+        "kia", "rio", "sportage", "sorento",
+        "nissan", "altima", "sentra", "rogue", "pathfinder", "murano",
+        "ford", "edge", "explorer", "f150",
+        "bmw", "3 series", "5 series", "x5", "x3",
+        "audi", "a4", "a6", "q5", "q7",
+        "land rover", "range rover", "range", "discovery",
+        "volkswagen", "vw", "golf", "passat", "jetta", "touareg",
+        "peugeot", "207", "307", "508",
+        "bajaj", "tvs", "piaggio", "yamaha", "suzuki", "qlink",
+      ] },
       // Promoted from Tier 3 in Phase D.4.1
       { name: "Property", slug: "property", tier: 2, sort_order: 5, search_aliases: ["property", "house", "apartment", "rent", "land", "real estate", "flat", "duplex", "bungalow"] },
       { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 6, search_aliases: ["sport", "sports", "gym", "fitness", "equipment", "exercise", "football", "basketball"] },
       // New Tier 2 parents in Phase D.4.1
-      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7, search_aliases: ["computer", "laptop", "desktop", "pc", "monitor", "keyboard", "mouse", "hp", "dell"] },
+      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7, search_aliases: [
+        "computer", "laptop", "desktop", "pc", "monitor", "keyboard", "mouse",
+        "hp", "dell", "lenovo", "asus", "acer", "apple", "macbook", "macbook pro", "macbook air", "mac", "imac",
+        "thinkpad", "elitebook", "probook", "pavilion", "inspiron", "xps", "spectre", "envy",
+        "windows", "macos", "chromebook", "gaming laptop",
+        "ssd", "hdd", "hard drive", "ram", "memory", "graphics card", "gpu", "cpu", "processor",
+      ] },
       { name: "Travel & Luggage", slug: "travel-luggage", tier: 2, sort_order: 8, search_aliases: ["travel", "luggage", "suitcase", "backpack", "bag"] },
 
       // Tier 3 — "more categories" drawer (11 parents post-D.4.1)
@@ -116,8 +155,9 @@ async function seed() {
   const electronics = topCategories.find((c) => c.slug === "electronics");
   const compAcc = topCategories.find((c) => c.slug === "computer-accessories");
   const travel = topCategories.find((c) => c.slug === "travel-luggage");
+  const vehicles = topCategories.find((c) => c.slug === "vehicles");
 
-  if (fashion && mobile && hair && electronics && compAcc && travel) {
+  if (fashion && mobile && hair && electronics && compAcc && travel && vehicles) {
     await db
       .insert(schema.categories)
       .values([
@@ -158,9 +198,17 @@ async function seed() {
         { name: "Suitcases", slug: "suitcases", parent_id: travel.id, sort_order: 1 },
         { name: "Backpacks & Travel Bags", slug: "backpacks-bags", parent_id: travel.id, sort_order: 2 },
         { name: "Travel Accessories", slug: "travel-accessories", parent_id: travel.id, sort_order: 3 },
+
+        // Automotive subs (4). cars/motorcycles/vehicle-parts existed in live
+        // DB before the seed knew about them — backfilling here so a fresh
+        // env matches. Tricycles & Keke added in Phase D.7.3.
+        { name: "Cars", slug: "cars", parent_id: vehicles.id, sort_order: 1 },
+        { name: "Motorcycles", slug: "motorcycles", parent_id: vehicles.id, sort_order: 2 },
+        { name: "Parts & Accessories", slug: "vehicle-parts", parent_id: vehicles.id, sort_order: 3 },
+        { name: "Tricycles & Keke", slug: "tricycles", parent_id: vehicles.id, sort_order: 4 },
       ])
       .onConflictDoNothing();
-    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage");
+    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive");
   } else {
     console.log("  - top categories already seeded; skipping sub-categories");
   }
