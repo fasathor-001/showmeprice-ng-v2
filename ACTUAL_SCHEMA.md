@@ -41,10 +41,16 @@ A seller's business profile. One per user (no FK uniqueness constraint enforces 
 | **verification_status** | verification_status (enum) | NO | `'unsubmitted'` |
 | rejection_reason | text | YES | — |
 | is_disabled | boolean | NO | false |
+| **seller_tier** | text | NO | `'free'` (Phase E.1.0; backfilled to `'verified'` for businesses where `verification_status='verified'`) |
+| **seller_listing_limit** | integer | YES | — (Phase E.1.0; null = unlimited. Phase F+ enforces per-tier limits) |
+| **seller_reply_quota** | integer | YES | — (Phase E.1.0; null = unlimited. Phase F+ enforces per-tier reply quotas) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
-**Notes:** Column is `business_name`, NOT `name`. Default for `verification_status` was changed from `'pending'` to `'unsubmitted'` during Phase C.5 P.1.
+**Notes:**
+- Column is `business_name`, NOT `name`. Default for `verification_status` was changed from `'pending'` to `'unsubmitted'` during Phase C.5 P.1.
+- `seller_tier` (Phase E.1.0) tracks the seller's tier — `'free'`, `'verified'` (post-identity-verification, baseline), with Phase F+ adding `'pro_seller'`/`'premium_seller'` and Phase G+ adding `'enterprise_seller'`. Distinct from the buyer-side `profiles.tier` (a seller can be a Pro buyer in their other capacity).
+- `seller_listing_limit` / `seller_reply_quota` are nullable and unenforced in Phase E (tracking-only schema). Phase F+ enforces per-tier ceilings.
 
 ### `categories`
 
@@ -60,6 +66,7 @@ Top-level + sub-categories. Post-Phase-D: 28 top-level (6 Tier 1 + 11 Tier 2 + 1
 | icon_name | text | YES | — |
 | **tier** | integer | NO | 3 (Phase D.1) |
 | **search_aliases** | jsonb | NO | `'[]'::jsonb` (Phase D.7.2) |
+| **category_features** | jsonb | NO | `'{}'::jsonb` (Phase E.1.0; per-category feature flags — warning banners, high-value flags, required-field hints. Phase E uses for property warning banner migration from hardcoded; Phase F+ for category-specific Pro pricing) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
@@ -169,16 +176,28 @@ User profiles. One-to-one with `auth.users`. Created automatically via `handle_n
 |---|---|---|---|
 | id | uuid → auth.users(id) CASCADE | NO | — (PK matches auth) |
 | display_name | text | NO | — |
-| handle | text | YES | — |
-| whatsapp_number | text | NO | — |
+| handle | text | YES | — (UNIQUE when set) |
+| **phone** | text | NO | — (UNIQUE; renamed from `whatsapp_number` in Phase E.1.0) |
 | user_type | user_type (enum) | NO | `'buyer'` |
 | role | user_role (enum) | YES | NULL |
 | avatar_path | text | YES | — |
 | is_disabled | boolean | NO | false |
+| **verification_status** | text[] | NO | `'{}'::text[]` (Phase E.1.0) |
+| **auth_providers** | text[] | NO | `'{}'::text[]` (Phase E.1.0) |
+| **full_name** | text | YES | — (Phase E.1.0) |
+| **state_id** | uuid → nigerian_states(id) | YES | — (Phase E.1.0) |
+| **tier** | text | NO | `'free'` (Phase E.1.0; values `'free'`/`'pro'`/`'premium'`/`'institution'`) |
+| **tier_started_at** | timestamptz | YES | — (Phase E.1.0) |
+| **tier_expires_at** | timestamptz | YES | — (Phase E.1.0) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
-**Notes:** `role` is nullable; `NULL` means "regular user." Only admins have `role = 'admin'`. The `freeze_profile_role` trigger prevents non-admins from changing this column. `handle` is unused in current code.
+**Notes:**
+- `role` is nullable; `NULL` means "regular user." Only admins have `role = 'admin'`. The `freeze_profile_role` trigger prevents non-admins from changing this column. `handle` is unused in current code.
+- `phone` (renamed from `whatsapp_number` in Phase E.1.0 / D-055) is the buyer's primary contact phone in E.164-no-plus format. In Nigerian context this is also the buyer's WhatsApp number — the UI may still surface it under "WhatsApp:" but the column name is canonical `phone`.
+- `verification_status` array tracks completed verifications. Phase E.1 sets `'phone_verified'` and optionally `'email_verified'`. Phase F+ adds `'google_verified'` / `'facebook_verified'`. Phase H+ adds `'bvn_verified'` / `'nin_verified'` for high-value transactions.
+- `auth_providers` array tracks which sign-in methods are linked. Phase E.1: `['termii_phone']`. Phase F+: `['termii_phone', 'google']` etc.
+- `tier` drives Pro-feature gating. Default `'free'`. Phase E populates `'pro'` on subscription/credit-pack purchase. `tier_started_at` / `tier_expires_at` track lifecycle; `tier_expires_at` is NULL for free.
 
 ### `seller_verifications`
 
@@ -232,23 +251,28 @@ Pro tier paid subscriptions. Phase G populates this via Paystack.
 
 ## Enums
 
-Eight custom enums in the `public` schema.
+Twelve custom enums in the `public` schema (8 from Phases A/C.5, 3 new in Phase E.1.0, 1 reserved `id_document_type` from P.1 P-migration).
 
 | Enum | Values |
 |---|---|
 | `currency` | `NGN` |
 | `escrow_order_status` | `initiated`, `funded`, `shipped`, `delivered`, `released`, `disputed`, `refunded`, `cancelled` |
+| `id_document_type` | `nin_slip`, `drivers_license`, `voters_card`, `international_passport` (Phase C.5 P.1) |
 | `product_status` | `draft`, `active`, `sold`, `archived` |
 | `subscription_status` | `active`, `past_due`, `cancelled`, `expired` |
 | `subscription_tier` | `free`, `pro` |
 | `user_role` | `admin` |
 | `user_type` | `buyer`, `seller` |
 | `verification_status` | `unverified`, `unsubmitted`, `pending`, `verified`, `rejected` |
+| **`notification_event`** | `new_message`, `seller_reply`, `listing_sold`, `price_drop`, `verification_status_change`, `pro_renewal_upcoming`, `pro_renewal_succeeded`, `pro_renewal_failed`, `pro_subscription_ending`, `report_action_taken`, `admin_message`, `listing_reported`, `listing_hidden` (Phase E.1.0) |
+| **`report_target_type`** | `listing`, `user`, `message` (Phase E.1.0) |
+| **`report_status`** | `new`, `in_review`, `resolved`, `dismissed` (Phase E.1.0) |
 
 **Notes:**
 - `verification_status` does NOT contain `'suspended'` despite the original journal claim. Any spec references to `'suspended'` are dead code.
 - `user_role` has only `'admin'` — there's no "seller" or "buyer" role. Use `user_type` for that distinction.
 - `unverified` is a dormant value (Phase A's original default before P.1 changed it to `'unsubmitted'`).
+- Phase E intentionally uses `text` (not enum) for new tier-related columns (`profiles.tier`, `businesses.seller_tier`) to allow tier additions without enum-alter migrations. The pre-existing `subscription_tier` enum is unused going forward; Phase E.1.1's reworked `subscriptions` table uses `plan_code text` instead.
 
 ---
 

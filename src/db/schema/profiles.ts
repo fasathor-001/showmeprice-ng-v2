@@ -7,8 +7,10 @@ export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(),
   display_name: text("display_name").notNull(),
   handle: text("handle").unique(),
-  // D-009: E.164 without "+".
-  whatsapp_number: text("whatsapp_number").notNull(),
+  // D-009: E.164 without "+". Renamed from whatsapp_number in Phase E.1.0
+  // (D-055) — the column holds the user's primary contact phone, which in
+  // Nigerian context is typically their WhatsApp number.
+  phone: text("phone").notNull().unique(),
   user_type: userTypeEnum("user_type").notNull().default("buyer"),
   role: userRoleEnum("role"),
   avatar_path: text("avatar_path"),

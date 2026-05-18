@@ -19,7 +19,7 @@ export default async function DashboardPage() {
   const [{ data: profile }, { data: business }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("display_name, whatsapp_number")
+      .select("display_name, phone")
       .eq("id", user.id)
       .single(),
     supabase
@@ -64,9 +64,9 @@ export default async function DashboardPage() {
           <Card>
             <h2 className="text-sm font-medium text-ink mb-1">Your account</h2>
             <p className="text-xs text-ink-600 mb-3">{user.email}</p>
-            {profile?.whatsapp_number && (
+            {profile?.phone && (
               <p className="text-xs text-ink-600">
-                WhatsApp: +{profile.whatsapp_number}
+                WhatsApp: +{profile.phone}
               </p>
             )}
           </Card>

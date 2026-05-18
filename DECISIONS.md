@@ -516,3 +516,103 @@ PKCE remains available for OAuth-style flows when those land in Phase F+ (Google
 **Trade-off accepted:** token_hash is slightly less protected against email-interception attacks than PKCE (since an intercepted link is sufficient to verify, vs PKCE which requires the originating browser's cookie). The trade is correct for ShowMePrice — Nigerian buyers' cross-device email habit is a stronger reality than email-interception attack scenarios at v2 scale.
 
 **Operational:** the Dashboard change is owner-applied. No code deploys gated by this fix. Once the template is updated, K-011 is closed; smoke test by signing up in one browser and clicking the confirmation link in a different browser (or different incognito window).
+
+## D-055: Phase E schema-collision resolutions (ALTER-in-place over DROP-and-recreate)
+
+**Context:** the Phase E spec defines four tables/columns that collide with existing Phase A/C.5/D schema. The collisions weren't drift in spec writing — they were the spec adopting names/shapes that align with the broader Phase E vocabulary (e.g., `phone` over `whatsapp_number`) while the existing schema reflects earlier Phase A conventions.
+
+**Decision:** four resolutions, all favouring **ALTER in place** over DROP-and-recreate so existing FK constraint names and audit history are preserved.
+
+1. **`subscriptions`** (Phase A placeholder vs Phase E lifecycle):
+   ALTER in place. Rename `profile_id → user_id`, add ten lifecycle columns (`payment_provider`, `provider_subscription_code`, `plan_code`, `started_at`, `current_period_start`, `current_period_end`, `cancel_at_period_end`, `cancelled_at`, `payment_method`, `created_at`). Existing FK constraint `subscriptions_profile_id_profiles_id_fk` will need renaming or replacing as part of the ALTER — handled in E.1.1.
+
+2. **`contact_reveals`** (Phase A vs Phase E):
+   ALTER in place. Rename `product_id → listing_id`, add `credit_used` + `payment_id` + `revealed_at`, drop `channel` and `ip_hash` (Phase E spec doesn't use them; Phase H+ analytics can re-add via a separate audit table if needed).
+
+3. **`profiles.whatsapp_number → phone`**:
+   Column rename. Single source of truth — the column already held E.164-no-plus phone numbers; the name now matches Phase E's vocabulary throughout the app. Unique constraint added to enforce one-account-per-phone at the DB layer.
+
+4. **`states` (spec text) vs `nigerian_states` (actual table)**:
+   Use the actual name. Spec was drift on the writer's side; no code path references `states`.
+
+**Rationale for the consistent ALTER-in-place choice:** existing rows have no production data (test accounts only), but the existing FK constraint names live on across other tables. DROP-and-recreate would force cascading constraint renames; ALTER preserves them. Trade-off is moot at v2 scale where retention is "zero real users yet"; the discipline matters for future migrations on tables that DO carry production data.
+
+**Operational:** the `handle_new_user` trigger function (Phase A) INSERTs into `profiles.whatsapp_number`. After the column rename, the trigger fails. Owner SQL update needed in conjunction with the E.1.0 application code rename — without it, every new signup throws a column-not-found error.
+
+## D-056: Phase E phone OTP — Path A (Supabase Send SMS Hook + Termii) pending validations
+
+**Context:** Phase E §4 requires phone-OTP signup via Termii. Two paths considered: (A) Supabase Auth's `signInWithOtp({ phone })` with Termii wired as a custom SMS provider via Supabase's Send SMS Hook, (B) bypass Supabase Auth's phone flow entirely and roll a custom OTP table.
+
+**Decision:** Path A, pending two validations the owner must complete before Stage 2 implementation begins.
+
+**Rationale:** Path B duplicates ~150 LOC that Supabase Auth already battle-tests (OTP hashing, replay prevention, attempt counting, expiry, resend rate-limit). Path A keeps `auth.users` as the single user-record source of truth, sessions/JWT/RLS work transparently, and the synthetic-email trap of Path B is avoided. Supabase Send SMS Hook is GA (post-2024), not beta, and the payload contract is stable.
+
+**Validations required before Stage 2 lock-in:**
+
+1. **Termii API latency p95 < 4s** measured from a Cloudflare Pages Edge route. Supabase's Send SMS Hook has a hard **5-second timeout**; if Termii's response under load exceeds 4s, the hook fails and signup throws. Mitigation if validation fails: move the hook to a non-edge runtime, OR fall back to Path B with our own queue + retry semantics.
+
+2. **Sender ID "ShowMePrice" whitelisted on DND/transactional route across MTN, Glo, Airtel, 9mobile.** Termii sender ID approval is 1–5 business days on MTN/Airtel; Glo and 9mobile frequently reject custom alphanumeric IDs and substitute `INFINITI` or a numeric shortcode. Until "ShowMePrice" is whitelisted on all four, Stage 2 ships against Termii's pre-approved `SecureOTP` sender ID — UX copy mustn't reference the displayed brand until approval lands.
+
+**Cost note:** Supabase's hosted phone auth gates `signInWithOtp({ phone })` behind the **Pro plan ($25/mo)**. Must be provisioned before Stage 2. (Documented separately as D-062.)
+
+## D-059: escrow_orders retained alongside Phase E orders + escrow_transactions
+
+**Context:** Phase A created `escrow_orders` as a forward-looking table for buyer-paid-escrow workflows. Phase E spec §18 defines `orders` + `escrow_transactions` as separate empty-schema tables for the same use case. The two designs have overlapping but distinct shapes — `orders` tracks the lifecycle, `escrow_transactions` tracks the money custody.
+
+**Decision:** keep `escrow_orders` as-is, add Phase E's `orders` and `escrow_transactions` alongside as empty tables. No data migration. Phase G+ (when the escrow flow actually ships) chooses one and migrates.
+
+**Rationale:** none of the three tables are populated. Forcing a reconciliation now is premature when Phase G+ will revisit the design anyway. The conservative path is "keep all three table definitions, let Phase G+ pick the winner."
+
+**Operational:** documented in `ACTUAL_SCHEMA.md` so future planners know the duplication is intentional, not drift.
+
+## D-060: Termii fallback sender ID to SecureOTP during ShowMePrice approval window
+
+**Context:** D-056's second validation depends on "ShowMePrice" sender ID approval across all four Nigerian carriers. The approval window is 1–7 business days; Glo and 9mobile sometimes reject custom alphanumeric IDs entirely.
+
+**Decision:** Stage 2 buyer-auth ships against Termii's pre-approved `SecureOTP` sender ID, not "ShowMePrice." Switch to "ShowMePrice" only after the four-carrier whitelist is confirmed by Termii.
+
+**Operational:** SMS template body must not say "from ShowMePrice" — it must use neutral copy like "Your code is {{otp}}. Valid for 10 minutes." The branding lives in the body content (mentions of ShowMePrice as the brand the OTP is for), not in the sender ID surface, until carrier whitelisting completes.
+
+## D-061: Termii OTP transport via `/api/sms/otp/send`, not generic `/api/sms/send`
+
+**Context:** Termii exposes two SMS endpoints. The generic `/api/sms/send` routes via Promotional/DND rails; MTN's 8pm–8am WAT promotional blackout silently drops OTP messages, and Promotional route drops to DND-enabled numbers (common on MTN). Termii's `/api/sms/otp/send` routes via DND/transactional rails by default, with built-in pin generation, attempt counting, and TTL.
+
+**Decision:** use `/api/sms/otp/send` for all signup and verification OTP delivery. The generic endpoint is reserved for future Pro-tier SMS notifications (Phase E §9) where messages are non-time-critical and DND consent applies.
+
+**Operational:** Termii's OTP endpoint handles pin generation server-side. When we wire it under Supabase's Send SMS Hook (D-056), we'll either (a) pass through Supabase's pre-generated code or (b) use Termii's pin generation and configure Supabase to accept the verification result. Path (a) is simpler; path (b) is more robust against network failures. Stage 2 picks during implementation.
+
+## D-062: Supabase Pro plan required for Phase E phone auth
+
+**Context:** Supabase hosted's `signInWithOtp({ phone })` feature is gated behind the **Pro plan ($25/mo)** regardless of which SMS provider sends the message (Twilio, Vonage, custom via Send SMS Hook).
+
+**Decision:** owner provisions Supabase Pro plan before Stage 2 ships. Cost is a fixed monthly line item.
+
+**Operational:** the Pro plan also unlocks: Send SMS Hook (custom SMS provider), Send Email Hook (custom email provider for future Phase F+ template control), MFA Phone hook, and increased database/storage limits. Phase E's Termii integration depends on the Send SMS Hook specifically.
+
+## D-063: 60-second resend lockout + "still on the way" UX for Nigerian SMS latency
+
+**Context:** Nigerian carrier SMS delivery latency regularly hits 30 seconds to 5 minutes, especially MTN under peak load. A signup UX that locks the user out after 1 OTP attempt or 30-second resend window will produce abandonment.
+
+**Decision:** Stage 2 OTP UX:
+- Resend button disabled for 60 seconds after first send.
+- Copy: "Code on the way. Didn't get it? Resend in 60s."
+- After resend available, allow 3 resends per phone per hour (Termii rate limit gives headroom).
+- On 3rd failed verification attempt, force a fresh OTP request (not just retry the same code).
+
+**Operational:** Supabase's Send SMS Hook + `verifyOtp` already implement attempt counting and resend rate limits server-side. The UX layer just needs to surface the right copy and disable controls during the lockout window.
+
+## D-064: Phone OTP costs budgeted at ~3× successful signups
+
+**Context:** Termii SMS cost on DND/transactional route is ~NGN 2.50–4 per send. Typos, resends, undelivered (carrier outages), and abandonment mean total OTP sends per successful signup average ~3×.
+
+**Decision:** Phase E launch budget assumes ~3 SMS attempts per successful buyer signup. At a planning target of 1,000 buyer signups/month, that's ~3,000 SMS attempts ≈ NGN 7,500–12,000/month before Pro-tier SMS notifications. Pro-tier SMS adds variable cost per Pro subscriber (max 5 SMS/buyer/day per D-spec §9).
+
+**Operational:** monthly Termii spend tracked as a Phase E launch KPI. If actual ratio exceeds 5× attempts/signup, investigate carrier delivery quality or sender-ID approval status before increasing budget.
+
+## D-065: Glo + 9mobile sender ID fragility — copy must not depend on displayed brand
+
+**Context:** Termii's sender ID approval is reliable on MTN and Airtel but inconsistent on Glo and 9mobile. Even after approval, Glo or 9mobile sometimes substitute the displayed brand with `INFINITI` or a numeric shortcode. Users on those carriers may see OTPs arrive from an unfamiliar sender.
+
+**Decision:** SMS body copy must self-identify the brand. Don't write "Your ShowMePrice code is {{otp}}" assuming the sender ID will say "ShowMePrice" — write the body so the recipient knows it's from us regardless of the rendered sender ID. Example: "ShowMePrice.ng: your verification code is {{otp}}. Valid for 10 minutes. Never share."
+
+**Operational:** the body-includes-brand convention is cheap insurance against carrier substitution. Also helps if we ever switch SMS providers — body identity stays stable; sender ID is a moving part.

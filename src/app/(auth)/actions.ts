@@ -81,12 +81,14 @@ export async function signUpAction(
     options: {
       // Keys must match handle_new_user trigger's reads:
       //   raw_user_meta_data->>'display_name'
-      //   raw_user_meta_data->>'whatsapp_number'
+      //   raw_user_meta_data->>'phone' (renamed from 'whatsapp_number' in
+      //     Phase E.1.0 — the trigger still falls back to the old key for
+      //     any in-flight signup at the moment of switchover).
       // user_type / business_name / business_state_id are consumed by
       // /auth/callback after email confirmation; the trigger ignores them.
       data: {
         display_name: displayName,
-        whatsapp_number: normalized,
+        phone: normalized,
         user_type: userType,
         ...(userType === "seller"
           ? {
