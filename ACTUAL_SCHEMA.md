@@ -48,18 +48,25 @@ A seller's business profile. One per user (no FK uniqueness constraint enforces 
 
 ### `categories`
 
-Top-level + sub-categories. 14 top-level + 13 sub-categories seeded.
+Top-level + sub-categories. Post-Phase-D: 28 top-level (6 Tier 1 + 11 Tier 2 + 11 Tier 3) + 75 sub-categories = 103 rows total. See "Complete category taxonomy" section below for the inventory.
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | name | text | NO | — |
-| slug | text | NO | — |
+| slug | text | NO | — (UNIQUE) |
 | parent_id | uuid → categories(id) RESTRICT | YES | — |
 | sort_order | integer | NO | 0 |
 | icon_name | text | YES | — |
+| **tier** | integer | NO | 3 (Phase D.1) |
+| **search_aliases** | jsonb | NO | `'[]'::jsonb` (Phase D.7.2) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
+
+**Notes:**
+- `tier` (added Phase D.1) classifies top-level parents: 1 = home-page featured, 2 = `/categories` index standard, 3 = "Other categories" disclosure drawer. Subcategories carry the default value 3 — tier is semantically meaningful for top-level rows only.
+- `search_aliases` (added Phase D.7.2) is a JSONB array of lowercased buyer-intent terms. Per D-049/D-050, contains category-level synonyms only; brand/model names match via title/description ilike instead. The marketplace search resolver checks containment via PostgREST's `cs.["<lower-of-query>"]` operator.
+- `icon_name` is vestigial post-D.4.1 — `getCategoryEmoji()` keys on `slug` instead. New rows leave it NULL.
 
 ### `contact_reveals`
 
@@ -101,9 +108,14 @@ Phase H feature. Buyer pays via escrow, seller ships, buyer confirms, money rele
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| name | text | NO | — |
-| iso_code | text | NO | — |
+| name | text | NO | — (UNIQUE) |
+| **slug** | text | NO | — (UNIQUE; Phase D.1) |
+| iso_code | text | NO | — (UNIQUE) |
 | created_at | timestamptz | NO | now() |
+
+**Notes:**
+- `slug` (added Phase D.1) is the URL-friendly identifier used throughout the app — `?state=lagos`, `?state=akwa-ibom`. Seeded with `lower(replace(name, ' ', '-'))` per row, with explicit overrides for FCT → `abuja`, `Akwa Ibom` → `akwa-ibom`, `Cross River` → `cross-river`.
+- `FEATURED_STATE_SLUGS` (in `src/lib/states.ts`) defines the 9 featured states for dropdown ordering and dynamic chip ranking.
 
 ### `product_images`
 
@@ -140,11 +152,14 @@ Marketplace listings.
 | status | product_status (enum) | NO | `'draft'` |
 | view_count | integer | NO | 0 |
 | is_featured | boolean | NO | false |
+| **category_specs** | jsonb | YES | — (Phase D.7) |
 | published_at | timestamptz | YES | — |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
-**Notes:** `slug` is NOT NULL and has NO default — every insert must provide one. Phase C's `createListingAction` does NOT set `slug` and would fail. Default `status` is `'draft'`, not `'active'` — Phase C explicitly sets `'active'` on insert which is valid (the enum allows it). `published_at` is intended to be set when status transitions from draft → active, but Phase C never sets it.
+**Notes:**
+- `slug` is NOT NULL and has NO default — every insert must provide one. Phase C's `createListingAction` does NOT set `slug` and would fail. Default `status` is `'draft'`, not `'active'` — Phase C explicitly sets `'active'` on insert which is valid (the enum allows it). `published_at` is intended to be set when status transitions from draft → active, but Phase C never sets it.
+- `category_specs` (added Phase D.7) is per-listing JSONB matching the active category's spec schema (`src/lib/categorySpecs.ts`). Phones get `{condition: "UK-used"}`, vehicles get `{year: 2018, mileage_km: 35000}`, property gets `{property_type, bedrooms, bathrooms}`, etc. Subcategories inherit their parent's schema via `getSpecsForCategory(slug, parentSlug)`.
 
 ### `profiles`
 
@@ -388,7 +403,7 @@ The `seller_verifications` table demonstrates both — `business_id_businesses_i
 
 ## Unique Constraints
 
-Seven unique constraints in the `public` schema (separate from FK constraints).
+Eight unique constraints in the `public` schema (separate from FK constraints).
 
 | Constraint | Table | Columns | Meaning |
 |---|---|---|---|
@@ -397,6 +412,7 @@ Seven unique constraints in the `public` schema (separate from FK constraints).
 | `categories_slug_unique` | categories | slug | Category slugs globally unique. |
 | `nigerian_states_iso_code_unique` | nigerian_states | iso_code | State ISO codes unique. |
 | `nigerian_states_name_unique` | nigerian_states | name | State names unique. |
+| `nigerian_states_slug_unique` | nigerian_states | slug | State slugs globally unique (Phase D.1). |
 | `products_slug_unique` | products | slug | Listing slugs globally unique. `generateListingSlug()` must produce unique output (random 4-char suffix). |
 | `profiles_handle_unique` | profiles | handle | User handles unique when set (column is nullable). |
 
@@ -404,6 +420,136 @@ Seven unique constraints in the `public` schema (separate from FK constraints).
 - Seller signup: business INSERT fails with constraint violation if user already has a business (good — enforces 1:1 owner→business)
 - Listing creation: slug must be unique across the table. Random suffix in `generateListingSlug()` makes collision astronomically rare but not impossible. Retry on conflict if needed.
 - Profile setup: any future "claim your handle" flow needs to handle the unique constraint on collision.
+
+---
+
+## Storage Buckets
+
+Three buckets in Supabase Storage. All have explicit RLS policies; service role bypasses for admin signed-URL generation only.
+
+### `verification-id-documents` (Phase C.5 P.3)
+
+**Public:** NO. Strict private bucket for seller ID documents (NIN slip, driver's license, voter's card, international passport).
+**File size limit:** 10 MB.
+**Allowed MIME types:** `image/jpeg`, `image/png`, `image/webp`, `application/pdf`.
+**Folder structure:** `{user_id}/<filename>`.
+**RLS policies (3):**
+- `verification_id_documents_owner_select` — authenticated user reads their own folder (`(storage.foldername(name))[1] = auth.uid()::text`).
+- `verification_id_documents_owner_insert` — same folder check on INSERT.
+- `verification_id_documents_admin_select` — admin reads any object (`is_admin(auth.uid())`).
+
+### `verification-selfies` (Phase C.5 P.3)
+
+**Public:** NO. Strict private bucket for ID-holding selfies.
+**File size limit:** 5 MB.
+**Allowed MIME types:** `image/jpeg`, `image/png`, `image/webp`.
+**Folder structure:** `{user_id}/<filename>`.
+**RLS policies (3):** same shape as `verification-id-documents` (`verification_selfies_owner_select`, `verification_selfies_owner_insert`, `verification_selfies_admin_select`).
+
+### `product-images` (Phase D.2 P.1)
+
+**Public:** YES. Public-read bucket for marketplace product images — listings render via `<img>` without signed URLs.
+**File size limit:** 5 MB.
+**Allowed MIME types:** `image/jpeg`, `image/png`, `image/webp`.
+**Folder structure:** `{business_id}/{product_id}/<filename>`.
+**RLS policies (3):**
+- `product_images_owner_insert` — INSERT requires the business folder match the authenticated user's owned business (`EXISTS businesses WHERE owner_id = auth.uid() AND id::text = (storage.foldername(name))[1]`).
+- `product_images_owner_delete` — same business-ownership check on DELETE.
+- `product_images_public_select` — anyone can SELECT (the bucket is public).
+
+**Render boundary:** `storage_path` (relative) becomes a public URL via `getProductImagePublicUrl(path)` in `src/lib/storage.ts`. Never use the raw `storage_path` value as `<img src>`.
+
+---
+
+## Complete category taxonomy (post-D.7.6)
+
+**Top-level totals:** 6 Tier 1 + 11 Tier 2 + 11 Tier 3 = **28 parents**. Subcategories: **75 rows**. Total: **103 category rows**.
+
+### Tier 1 — featured on home page (6)
+
+| Slug | Name |
+|---|---|
+| `fashion` | Fashion & Apparel |
+| `mobile-phones-tablets` | Mobile Phones & Tablets |
+| `hair-wigs` | Hair & Wigs |
+| `beauty` | Beauty & Personal Care |
+| `electronics` | Electronics & Gadgets |
+| `home-living` | Home & Furniture |
+
+### Tier 2 — `/categories` index (11)
+
+| Slug | Name | sort_order |
+|---|---|---|
+| `health` | Health & Wellness | 7 |
+| `baby-kids` | Baby & Kids | 8 |
+| `foodstuff` | Foodstuff & Groceries | 9 |
+| `vehicles` | Automotive | 10 |
+| `property` | Property | 11 |
+| `sports` | Sports & Fitness | 12 |
+| `computer-accessories` | Computer & Accessories | 13 |
+| `travel-luggage` | Travel & Luggage | 14 |
+| `drinks` | Drinks & Beverages | 15 |
+| `perfume-fragrance` | Perfume & Fragrance | 16 |
+| `building-materials` | Building Materials & Supplies | 17 |
+
+### Tier 3 — "Other categories" disclosure (11)
+
+| Slug | Name |
+|---|---|
+| `services` | Services |
+| `books-media` | Books & Media |
+| `pets` | Pets |
+| `industrial` | Industrial & Business |
+| `office-supplies` | Office Supplies & Equipment |
+| `tools-hardware` | Tools & Hardware |
+| `garden-outdoor` | Garden & Outdoor |
+| `musical-instruments` | Musical Instruments |
+| `arts-crafts` | Arts & Crafts |
+| `photography-equipment` | Photography Equipment |
+| `religious-items` | Religious Items |
+
+### Subcategories (75 total)
+
+| Parent | Subs | Slugs |
+|---|---|---|
+| Fashion & Apparel | 6 | `mens-clothing`, `womens-clothing`, `kids-clothing`, `traditional-ankara`, `shoes`, `accessories-fashion` |
+| Mobile Phones & Tablets | 5 | `smartphones-new`, `smartphones-used`, `tablets`, `phone-accessories`, `smart-wearables` |
+| Hair & Wigs | 5 | `human-hair-bundles`, `wigs`, `hair-extensions`, `closures-frontals`, `hair-care-products` |
+| Electronics & Gadgets | 1 | `electronics-accessories` |
+| Computer & Accessories | 6 | `laptops`, `desktops-workstations`, `monitors`, `keyboards-mice`, `storage-drives`, `computer-accessories-misc` |
+| Travel & Luggage | 3 | `suitcases`, `backpacks-bags`, `travel-accessories` |
+| Automotive | 4 | `cars`, `motorcycles`, `vehicle-parts`, `tricycles` |
+| Foodstuff & Groceries | 10 | `grains-rice`, `spices-seasonings`, `cooking-oils`, `beans-legumes`, `tubers-flour`, `fresh-produce`, `frozen-foods`, `packaged-bakery`, `snacks-confectionery`, `baby-food` |
+| Drinks & Beverages | 7 | `alcohol-spirits`, `wine`, `beer`, `soft-drinks`, `juices`, `water`, `coffee-tea` |
+| Perfume & Fragrance | 8 | `perfume-men`, `perfume-women`, `perfume-unisex`, `perfume-oud`, `body-sprays`, `perfume-oils`, `deodorants`, `car-perfumes` |
+| Building Materials & Supplies | 10 | `cement-concrete`, `tiles`, `roofing-materials`, `doors-windows`, `blocks-bricks-stones`, `iron-steel-rods`, `plumbing-sanitary`, `electrical-wiring`, `paint-finishing`, `ceiling-interior` |
+
+Beauty & Personal Care, Home & Furniture, and Tier 2's other parents currently carry no subcategories; future product-launch demand may add them.
+
+**Aliases:** 14 Tier 1+2 categories carry `search_aliases` JSONB arrays (Phase D.7.2 onwards). The marketplace search resolver (`/marketplace?q=...`) checks name match OR alias containment OR title/description match in a single `.or()` clause, then fans out to subcategories of any matched parent (`category_id IN (...)`). See `src/app/marketplace/page.tsx`.
+
+---
+
+## Migration history (Phase D)
+
+All Phase D `ALTER TABLE` migrations included `NOTIFY pgrst, 'reload schema'` at the end of the SQL block to refresh PostgREST's schema cache. Without the NOTIFY, schema changes don't surface to API clients until Supabase's automatic cache refresh ticks (60s+).
+
+Verifying queries paired with each migration:
+
+| Phase | Change | Verification approach |
+|---|---|---|
+| D.1 | `nigerian_states.slug` + `categories.tier` | `information_schema.columns` row count |
+| D.4.1 | tier promotions + 7 new T3 + `tier`-aware `categories.is_featured` deferral | `SELECT slug, tier FROM categories ...` |
+| D.7 | `products.category_specs jsonb` | `information_schema.columns` data_type check |
+| D.7.2 | `categories.search_aliases jsonb` + 14-category seed | `jsonb_array_length` per row |
+| D.7.3 | Tricycles subcategory + 4-category alias expansion | `count(*)` on subs + `jsonb_array_length` |
+| D.7.3.1 | Alias narrowing (brand removal) | `jsonb_array_length` after-state |
+| D.7.4 | `food-beverages` replaced by `foodstuff` + `drinks` + 17 subs | pre-flight `count(*)` listings, post check 9 T2 rows |
+| D.7.5 | `perfume-fragrance` Tier 2 + 8 subs | 10 T2 rows, 8 children, alias counts |
+| D.7.6 | `building-materials` Tier 2 + 10 subs | 11 T2 rows, 10 children, 63 aliases |
+
+Pattern banked as a working-practice rule in `MEMORY.md`: every owner SQL pre-flight should include an inline verification query the owner pastes back as proof of application.
+
 ---
 
 ## Schema gaps relative to project journal

@@ -384,3 +384,114 @@ The soft gate model resembles Jiji's; the hard gate resembles a stricter version
 **Decision:** `/listings/new` shows a verification gate page when seller's business is not verified. `createListingAction` also gates server-side as defense in depth. Gate copy varies by state (unsubmitted/pending/rejected) with appropriate CTAs.
 
 **Alternative considered:** allow draft creation with `status='draft'` for pre-verified sellers, auto-publish on approval. Deferred — adds complexity without proportional value at v2 launch.
+
+## D-042: Categories taxonomy structure — three-tier system
+
+**Context:** Phase D needed a category taxonomy that matched how Nigerian buyers actually shop. Initial Phase A seeds were placeholder generic categories. D-042 codifies the rebuild around Jiji/Jumia volume patterns and dedicated retailer conventions.
+
+**Decision:** Three-tier system surfaced through `categories.tier` (integer, NOT NULL DEFAULT 3):
+- **Tier 1 (6 featured parents):** home page priority cards. Fashion & Apparel, Mobile Phones & Tablets, Hair & Wigs, Beauty & Personal Care, Electronics & Gadgets, Home & Furniture.
+- **Tier 2 (11 standard parents):** visible in `/categories` index but not on home grid. Health & Wellness, Baby & Kids, Foodstuff & Groceries, Automotive, Property, Sports & Fitness, Computer & Accessories, Travel & Luggage, Drinks & Beverages, Perfume & Fragrance, Building Materials & Supplies.
+- **Tier 3 (11 disclosed parents):** behind an "Other categories" `<details>` disclosure on the categories index. Services, Books & Media, Pets, Industrial & Business, Office Supplies, Tools & Hardware, Garden & Outdoor, Musical Instruments, Arts & Crafts, Photography Equipment, Religious Items.
+
+**Why:** Tier choice driven by Nigerian e-commerce volume signals (Jiji listing counts, dedicated retailer presence) and the home page's discovery budget (one screen-height of cards, ~6 entries before density degrades).
+
+**Subcategory inheritance:** subcategories don't carry a meaningful `tier` value — they're displayed alongside their parent. Default 3 keeps the column NOT NULL without semantic weight at the sub level.
+
+## D-043: Featured states with dynamic city chips
+
+**Context:** Home page needs a discovery affordance for the most-trafficked states. Hardcoded ordering risked feeling stale; pure-listing-count ordering risked an empty row at launch.
+
+**Decision:** 9 featured states ranked by `FEATURED_STATE_SLUGS` (Lagos, Abuja, Rivers, Delta, Oyo, Enugu, Kaduna, Anambra, Kano). Home Hero chips render dynamically by verified-active listing count via `getFeaturedCityChips()` in `src/lib/states.ts`; hardcoded order pads when fewer than 9 states have listings.
+
+**City labels:** chip display name overrides the state name where the commerce-recognized city differs:
+- Rivers → "Port Harcourt"
+- Delta → "Warri" (over Asaba — better-known commerce hub)
+- Oyo → "Ibadan"
+- Anambra → "Onitsha" (over Awka — commerce centre)
+
+Map lives in `STATE_CITY_LABELS` (`src/lib/states.ts`). State dropdown elsewhere keeps the canonical state names — chip labels are buyer-facing only.
+
+## D-044: Hard-delete listings with confirmation page
+
+**Context:** Sellers can delete their listings. Inline confirmation modals would mix destructive actions with the listings grid; dedicated confirmation pages are the C.5 pattern for irreversible actions (verification submission, signup, admin approval).
+
+**Decision:** `/listings/[id]/delete` renders a dedicated server-component confirmation page (title + primary image + image count + Cancel/Confirm). Submit POSTs to `deleteListingAction` which removes Storage objects then DB-deletes the product (product_images cascade via FK ON DELETE CASCADE). Hard-delete — no soft-delete column. Pattern from Phase C.5's "critical actions deserve dedicated confirmation pages" lesson.
+
+## D-045: JSONB category_specs for per-category dynamic fields
+
+**Context:** Different categories need different listing fields (phones need Condition; vehicles need Year + Mileage; fashion needs Size + Color; property needs type/bedrooms/bathrooms). Static columns on `products` for every possible field would balloon the schema; new fields would need migrations.
+
+**Decision:** Add `products.category_specs jsonb` (nullable). Schema-in-code (`src/lib/categorySpecs.ts`) defines per-category field sets; application validates submitted values against the schema before INSERT/UPDATE. Subcategories inherit parent's schema via `getSpecsForCategory(slug, parentSlug)` fallback.
+
+**Trade-off:** DB doesn't enforce shape — application is authoritative. Right call when shape is evolving rapidly. Future Phase J reputation/reviews might warrant promoting frequently-queried specs to columns; the JSONB stays as a flexible overflow.
+
+## D-046: Foodstuff / Drinks split and Nigerian taxonomy alignment
+
+**Context:** Phase D's initial taxonomy had a single "Food & Drinks" Tier 2 parent. Research (Olubrooklyn Foods, AgroHandlers, SundryAgro, Bodija/Balogun markets) showed "foodstuff" is the canonical Nigerian retail term for groceries, and that drinks operate as a separate vertical with clear alcoholic/non-alcoholic split.
+
+**Decision:** Phase D.7.4 deleted `food-beverages` (count check confirmed 0 listings) and replaced with two Tier 2 parents:
+- **Foodstuff & Groceries** (10 subs): Grains & Rice, Spices & Seasonings, Cooking Oils, Beans & Legumes, Tubers & Flour, Fresh Produce, Frozen Foods, Packaged & Bakery, Snacks & Confectionery, Baby Food.
+- **Drinks & Beverages** (7 subs): Alcohol & Spirits, Wine, Beer, Soft Drinks, Juices, Water, Coffee & Tea.
+
+**Why:** matches Nigerian retail vocabulary. Buyers searching "foodstuff" arrive at the right category by name; "drinks" gets dedicated wine/beer/spirits sub-navigation.
+
+## D-047: Perfume promoted to Tier 2
+
+**Context:** Initial taxonomy buried perfume under Beauty. Research showed Perfume operates as a standalone vertical in Nigerian e-commerce — Jiji has Fragrance as top-level, Jumia at `/fragrances/`, dedicated retailers (Fragrances.com.ng, The Scents Store).
+
+**Decision:** Phase D.7.5 promoted `perfume-fragrance` to Tier 2 (sort_order 16) with 8 subcategories: Men's, Women's, Unisex, Arabian/Oud, Body Sprays, Perfume Oils, Deodorants & Antiperspirants, Car Perfumes & Fresheners.
+
+**Side effect:** Beauty aliases narrowed — `perfume`, `fragrance`, `cologne` dropped from Beauty's `search_aliases` so the queries route to the new dedicated category. Beauty's replacement aliases lean into product-type vocabulary (lipstick, mascara, foundation, soap, body wash).
+
+## D-048: Building Materials added to Tier 2
+
+**Context:** Jiji.ng has 52,165+ active building-materials listings nationwide (Abuja alone has 3,000+). Major Nigerian brands (Dangote Cement, Lafarge, Berger Paints, Sadolin, Nigerite, West African Ceramics) dominate the local market.
+
+**Decision:** Phase D.7.6 added `building-materials` Tier 2 (sort_order 17) with 10 subcategories: Cement & Concrete, Tiles, Roofing Materials, Doors & Windows, Blocks Bricks & Stones, Iron Steel & Rods, Plumbing & Sanitary, Electrical & Wiring, Paint & Finishing, Ceiling & Interior. 63-entry search_aliases including Nigerian-specific terms (`pop` for plaster-of-paris ceiling, `3d panel`).
+
+## D-049: Search alias-purity rule
+
+**Context:** Phase D.7.2 added a `categories.search_aliases jsonb` column to support synonym-based search (Nigerian terminology like "tokunbo", "fairly used", "fashion"). The implementation resolves matching categories first, then includes all subcategory listings via `category_id IN (...)`. D.7.3 expanded aliases to include brand and model names (Toyota, iPhone, MacBook); D.7.3 smoke testing surfaced that "toyota" returned every Cars-subcategory listing — way over-broad.
+
+**Decision:** `search_aliases` holds category-level synonyms only. Brand and model names never go in aliases — those match via `title.ilike.%q%` and `description.ilike.%q%` against real listing text in the same `.or()` clause. A term goes in `search_aliases` only when it describes the category itself ("rice", "spice", "wine", "beer", "perfume", "fragrance"), never when it identifies a specific maker ("Maggi", "Coke", "Toyota", "iPhone").
+
+**Why:** aliases trigger subcategory expansion (the whole point of the alias system). Brand-term aliases would silently broaden every brand-name search to all listings in the category, masking the brand-specific matches the buyer actually wanted.
+
+## D-050: Alias-purity refinement (the oud test)
+
+**Context:** D.7.5 needed to add aliases for Perfume & Fragrance. "Oud", "agarwood", "oriental", "arabian oud" sit in an ambiguous zone — they originated as descriptors of specific perfume types but are now used by Nigerian buyers as scent-category descriptions (e.g., "I want an oud perfume" doesn't mean a specific brand).
+
+**Decision:** brand-derived terms can be aliases IF their primary Nigerian usage is category-descriptive rather than brand-identification. The test: **does the term primarily describe the category, or identify the maker?**
+- "Oud" describes a scent type across many brands → in.
+- "Maggi" refers to a specific seasoning brand → out.
+
+**Why:** D-049's binary rule (no brand terms ever) would have excluded oud, but oud functions as a scent-type category in Nigerian buyer vocabulary. The refinement keeps the architectural intent (no over-broad expansion) while honouring real usage patterns.
+
+**Operational:** when in doubt, exclude. Better to miss a borderline alias and fix later than to pollute the alias set with brand crossovers that re-introduce the over-broad-expansion bug.
+
+## D-051: Mobile search overlay pattern
+
+**Context:** Phase D.5 added a global header search bar visible at `md+` breakpoints. Phase D.5.1 hid the input below `md` (to make room for navigation). Phase D.7.3 smoke testing revealed mobile users had no search affordance at all.
+
+**Decision:** mobile (<md) shows a magnifying-glass icon button in the header. Tap opens a fixed-position overlay anchored to the top with the search input pre-focused. ESC, backdrop click, or dedicated X button all dismiss. Desktop (≥md) keeps the inline form unchanged. State lives in `src/components/layout/HeaderSearch.tsx` (client component); the rest of the header stays server-rendered.
+
+**Why:** the search input is a primary affordance on a marketplace; an icon-overlay is the e-commerce convention for mobile (Amazon, eBay, Jiji all use it). Keeping the open/close state inside a focused client component preserves server-side rendering for the surrounding header.
+
+## D-052: Dynamic feature lists with hardcoded fallback
+
+**Context:** Several Phase D features ranked entries by user-data (e.g., home page city chips ordered by listing count). At launch, listing volume is sparse — a pure-data-driven ranking would produce a near-empty UI.
+
+**Decision:** pattern for affordances driven by user data that may be sparse early — query top N entries by some real-data metric (listing count, search frequency, etc.); pad with a hardcoded fallback order if fewer than N entries have data. Implemented in `getFeaturedCityChips()` (`src/lib/states.ts`): top 9 states by verified-active listing count, padded with `FEATURED_STATE_SLUGS` order when listings are sparse.
+
+**Why:** never let "we don't have data yet" produce a broken-looking UI. Pad first, evolve to pure-data as volume grows. The hardcoded fallback is editorial; the data ordering is editorial-with-evidence.
+
+## D-053: Tier 2 density ceiling at 11
+
+**Context:** Phase D ended with Tier 2 at 11 categories (started at 4 in D.4.1). Each addition was justified by Nigerian buyer-demand data, but the home page's "Browse by category" and `/categories` index grids approach visual density limits around 10-12 entries.
+
+**Decision:** hard ceiling at 11 Tier 2 categories. Future Tier 2 additions need to clear two gates:
+1. Nigerian buyer-demand data justifies standalone status (Jiji listing volume, dedicated retailer presence, search frequency).
+2. The category doesn't fit cleanly as a subcategory of an existing Tier 2 parent.
+
+**Operational:** if both gates pass, *also* propose demoting a current Tier 2 to Tier 3 to keep the count at 11. The ceiling forces explicit trade-offs rather than accumulating until the UI breaks.

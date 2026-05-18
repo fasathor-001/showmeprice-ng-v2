@@ -57,20 +57,8 @@ If the password reset was triggered because someone else had access to the accou
 
 **Not blocking for Phase B.7.** Add to Phase I (polish) or sooner if abuse surfaces.
 
-### K-007 — Two `/categories` links currently 404 (low)
+<!-- K-007 resolved in Phase D.4 — see Resolved section below. -->
 
-Phase C ships with two UI links pointing at `/categories` (no slug):
-
-1. Home page "Popular categories" section, "View all →" link
-2. Category page breadcrumb, "← All categories" link
-
-Both return 404 (the Phase B.6.1 explicit not-found page). A user clicking either gets a "Page not found / Go home" interstitial rather than a category overview.
-
-**Severity:** low. Both links are secondary navigation; primary discovery is via the home page Popular Categories tiles (which work) and the marketplace browse (which works). A buyer hitting the 404 can click "Go home" or use the header nav to recover.
-
-**Fix:** build a `/categories` index page that lists all 14 top-level categories with their icons (similar to home page Popular Categories but showing all 14, not the truncated 7). About 20 minutes of work.
-
-**Scheduled:** Phase C.5 (next phase). Not blocking Phase C launch.
 
 ### K-009 — seller_verifications banking columns hold placeholder values (medium)
 
@@ -102,7 +90,21 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Priority:** Phase E or before public launch. Not blocking Phase C.5 completion (no real users yet). Add to public-launch checklist.
 
+### K-010 — Orphan storage files on listing delete / image swap (low, deferred)
+
+`product_images` rows are removed from the DB when a listing is deleted or an image is swapped during edit, but the corresponding Storage objects are removed via best-effort `storage.remove()` calls. If the Storage delete fails (transient network issue, RLS edge case), the row is gone but the file persists — an orphan.
+
+**Severity:** low. Storage objects cost is negligible at v2 scale. No correctness impact (listings render via DB-driven `storage_path` lookups; orphans aren't referenced).
+
+**Acknowledged:** Phase D.7.2 explicitly notes the orphan risk in `updateListingAction` and `deleteListingAction` Storage cleanup code paths.
+
+**Fix when prioritised:** scheduled cleanup job that lists Storage objects under `product-images/{business_id}/{product_id}/` and removes any whose `product_id` no longer exists in `products`. Phase E or post-launch. Could run as a Supabase Edge Function on a schedule.
+
 ## Resolved or superseded
+
+### K-007 — Two `/categories` links currently 404 (RESOLVED)
+
+Phase C shipped with home-page "View all" and category-page "← All categories" links pointing at `/categories` (no slug), both returning 404. Phase D.4 built the `/categories` index page (`src/app/categories/page.tsx`) — three-tier grid (6 Tier 1 cards prominent, 11 Tier 2 standard, 11 Tier 3 in `<details>` disclosure). Resolved in commit `ad35321`.
 
 ### K-008 — Phase C listing CRUD broken on actual schema (RESOLVED)
 

@@ -260,6 +260,145 @@ The verification state machine has five states derived from two database signals
 
 **Operational:** when the same multi-signal state derivation appears in 2+ pages, extract it. The cost is one helper file; the benefit is a single source of truth for state mapping. Phase C.5 caught a latent bug in `/sell` during the extraction (was reading only one signal, was mislabeling pending sellers as "Verification needed").
 
+### `revalidatePath` ban on Cloudflare edge runtime — keep re-banking it
+
+Phase C.5.6.0 documented that `revalidatePath` is broken on Cloudflare Pages edge (silent failures + visible 500s). Phase D had to refresh-bank this lesson multiple times because the pattern tried to creep back in via copy-paste from older code. **The rule:** never call `revalidatePath` in any server action. Rely on `redirect()` for navigation-driven freshness; the destination page re-fetches naturally.
+
+Lookout for it during code review: any `import { revalidatePath } from "next/cache"` is a smell. The import line should not exist in any new server-action file.
+
+### `ON CONFLICT (slug) DO NOTHING` for idempotent migration INSERTs
+
+Multiple Phase D sections (D.4.1 most visibly) hit `duplicate key violates unique constraint "categories_slug_unique"` errors when the owner retried a SQL block. The errors weren't from the migration failing — first attempts succeeded; subsequent attempts hit the already-inserted rows.
+
+**Operational:** SQL migration blocks that INSERT into tables with unique constraints should always use `INSERT ... ON CONFLICT (slug) DO NOTHING` (or the relevant unique-column conflict target). Makes the block safely re-runnable; failed-and-retried runs produce no noise.
+
+### Slug-keyed lookups, not icon_name-keyed
+
+Phase D.4.1 caught that `getCategoryEmoji()` was keyed on `categories.icon_name` — but the column had stale or NULL values on rows added via raw `ALTER TABLE` / `INSERT` instead of through the Drizzle seed (where the icon_name was originally specified). The fallback emoji `🏷️` was rendering for new Tier-2/Tier-3 categories.
+
+**Fix:** refactored the lookup to key on slug (canonical, always present, the actual identifier the rest of the app uses). `icon_name` stayed in the schema as vestigial — kept the column NOT NULL where it was, populated NULL on new rows, no readers consult it. Could be dropped in a future cleanup migration but no urgency.
+
+**Lesson:** when a column's value depends on the path that created the row (Drizzle seed vs raw SQL), don't read it for runtime UI. Read the columns that the unique constraint enforces (slug is always set; it's the URL identifier).
+
+### Header-vs-page UI duplication audit when adding global affordances
+
+Phase D.5 added a global header search. Phase D.5.1 caught that the home page Hero and `/marketplace` page each had their own search inputs from earlier phases. Three search bars on two pages — confusing.
+
+**Operational:** adding global UI requires auditing every page for redundant local versions. Don't trust that "old code will get cleaned up later" — explicit removal as part of the same commit as the addition.
+
+**Banked example:** when adding the global header search, the same commit (or an immediate follow-up) should drop the Hero search input and any page-level keyword inputs. Page-level filters that aren't keyword (state filter, category filter) can stay.
+
+### Dynamic feature lists with hardcoded fallback
+
+Phase D.6.2 pattern: query top N entries by some real-data metric (listing count, search frequency, etc.), pad with a hardcoded fallback order if fewer than N entries have data. Prevents "looks broken at launch" while enabling data-driven evolution.
+
+**Implementation:** `getFeaturedCityChips()` in `src/lib/states.ts` returns up to 9 city chips. Top entries by `count(products WHERE verified)`; padded with `FEATURED_STATE_SLUGS` order when listings are sparse.
+
+**Pattern applies to:** featured listings (could pad with most-recent if Featured isn't curated yet), trending categories (pad with Tier 1 order if no clicks-data exists), etc.
+
+### JSONB for evolving schemas
+
+Phase D used JSONB columns in two places: `products.category_specs` (D.7 — per-category dynamic fields) and `categories.search_aliases` (D.7.2 — array of alias strings). Both share a trade-off: DB doesn't enforce shape, application is authoritative.
+
+**When the trade is right:** rapid iteration on shape (added fields, removed fields, reordered fields). No migrations on every change. Postgres JSONB supports indexing if specific paths need fast filtering later.
+
+**When the trade is wrong:** when the data is queried by exact path frequently or when DB-level constraints matter for correctness. Promote frequently-queried JSONB fields to columns when patterns stabilise.
+
+### Agent-vs-DB state divergence — verify before assuming
+
+Phase D Section 7 caught that the agent's mental model of `Vehicles` subcategories was empty (because earlier seed work hadn't tracked any), but the live DB had three children (cars, motorcycles, vehicle-parts). They'd been added via a SQL action that the seed file wasn't updated for.
+
+**Operational:** the agent reads slugs / relationships from migrations and seed files; the live DB may differ. Before designing a feature that depends on "this table has rows X, Y, Z" — verify with a DB query. Especially when the data is curated (categories, states) and may have been touched outside the seed.
+
+**Workflow hook:** when a section spec assumes a particular schema or data shape, include a verification query at the top of the section's pre-flight that the owner runs and pastes back. Done routinely throughout Phase D.
+
+### PostgREST joined-table filter inside `.or()` is unreliable
+
+Phase D.7.1 added `categories.name.ilike.%q%` as a third clause inside the products `.or()` filter (alongside title.ilike and description.ilike). The clause silently failed to evaluate — searching "cars" missed Cars-subcategory listings even though the SQL query string looked correct.
+
+**Fix (D.7.2):** two-step server-side resolution. Step 1: query `categories` separately for slugs/aliases matching the query, collect IDs. Step 2: products query uses `category_id.in.(uuid1,uuid2,...)` inside `.or()` — a clean IN clause that PostgREST handles reliably.
+
+**Lesson:** PostgREST `.or()` with joined-table filters is grammatically valid but practically fragile. The safe pattern is to resolve the joined-table matches into a list of IDs in a separate query, then filter on the foreign key with `.in.()`. Worst case adds one round trip; predictable and debuggable.
+
+### Search alias-purity: aliases are category synonyms, not brand identifiers
+
+D-049 is the architectural rule; D-050 is the refinement. Banking the working pattern here for fast reference:
+
+**Aliases in `search_aliases`:** terms that mean "give me everything in this category." Examples: rice, spice, wine, beer, perfume, fragrance, vehicle, automobile.
+
+**Never in aliases:** brand names, model names, product line names. Examples: Toyota, Honda, iPhone 15, Galaxy, MacBook Pro, ThinkPad, Maggi, Coke. These match via `title.ilike` and `description.ilike` against real listing text.
+
+**Borderline cases (the oud test):** does the term primarily describe the category, or identify the maker?
+- "Oud" describes a scent type across many brands → in.
+- "Maggi" refers to a specific seasoning brand → out.
+
+When in doubt, exclude. Easier to add aliases later (no migration; just an UPDATE) than to surgically remove ones that polluted the search.
+
+### `cs.["value"]` syntax for JSONB array containment in PostgREST
+
+`search_aliases.cs.["car"]` checks "does the JSONB array contain the literal string 'car'?" Safe to use inside `.or()` because the bracketed single-value payload contains no commas to confuse the top-level `.or()` parser.
+
+**Multi-word values:** `cs.["car perfume"]` works — the space is preserved as part of the JSON string literal. Supabase JS handles URL encoding (space → `%20`) transparently. Verified with "g wagon", "car perfume", "construction materials" aliases.
+
+**Don't use:** `cs.[a, b, c]` — multiple values in a single `cs.` filter would inject commas the `.or()` parser interprets as filter separators. Use multiple separate `.or()` clauses or expand to `cs.["a"],cs.["b"],cs.["c"]`.
+
+### Read-time aggregation as scale watchpoint
+
+Phase D.6.2's `getFeaturedCityChips()` runs 1–3 queries per home render (categories lookup, optional children fan-out, products aggregation). Fine at v2 scale (~30-category taxonomy, low listing volume). Banked as a scale watchpoint — promote to a Postgres function or materialised view if either listing volume or home-page traffic grows enough that the queries' aggregate cost matters.
+
+**Lesson:** read-time aggregation is the right starting point. Premature materialisation is a worse problem than read-time-query overhead at v2 scale. But document the watchpoint at the time you write the helper, so the future-you who hits the scale wall knows where to look.
+
+### Storage path is not a URL — convert at render boundary
+
+Phase D.2's real image uploads stored bucket-relative paths in `product_images.storage_path` (e.g., `{business_id}/{product_id}/0-{timestamp}.png`). Phase D.2.1 caught that six render sites were passing the raw path directly as `<img src>` — the browser treated the path as relative to the current route and 404'd.
+
+**Fix:** `getProductImagePublicUrl(path)` helper in `src/lib/storage.ts` constructs the full public URL from the path + `NEXT_PUBLIC_SUPABASE_URL`. Every `<img>` site that consumes `product_images.storage_path` wraps through the helper.
+
+**Lesson:** if a column holds a *path* (relative identifier) rather than a *URL* (absolute resource locator), the conversion to URL has to happen at the render boundary. Naming the helper after the conversion (`getProductImagePublicUrl`, not `imgUrl`) makes the intent obvious at every call site. Adding a similar storage column in the future? Add a similar helper at the same time.
+
+### Category-restructure count-check before DELETE
+
+Phase D.7.4 split `food-beverages` into two new Tier 2 categories. The migration DELETEd the old category before INSERTing the replacements. Pre-flight count-check confirmed 0 listings under `food-beverages` so the DELETE was safe.
+
+**Operational:** any category restructure (DELETE / replace / merge) requires this query first:
+
+```sql
+SELECT count(*) FROM products
+WHERE category_id IN (SELECT id FROM categories WHERE slug = '<old-slug>'
+                      OR parent_id = (SELECT id FROM categories WHERE slug = '<old-slug>'));
+```
+
+If `count > 0`, plan a migration UPDATE to move those listings to a replacement category before the DELETE. Don't assume count is 0 even early in a project's life — manual test listings accumulate.
+
+### Taxonomy research first — Nigerian conventions beat generic e-commerce assumptions
+
+Phase D's most impactful taxonomy decisions came from explicit Nigerian-market research:
+- D.7.4 "foodstuff" terminology (Olubrooklyn, AgroHandlers, Bodija/Balogun markets).
+- D.7.5 Perfume as standalone Tier 2 (Jiji, Jumia, Fragrances.com.ng, The Scents Store all surface it top-level).
+- D.7.6 Building Materials volume (Jiji.ng has 52,165+ active listings).
+
+**Operational:** before designing a category structure, check how Jiji, Jumia, and dedicated Nigerian retailers categorize it. Their data reflects what Nigerian buyers actually look for; generic e-commerce assumptions (Western taxonomy patterns, Amazon's hierarchy) regularly miss the local mark.
+
+### Build gates catch syntax; smoke catches runtime
+
+Every Phase D section (and most Phase C.5 sections before it) had at least one follow-up commit triggered by smoke-test discovery:
+- D.2 → D.2.1 (storage path render bug)
+- D.3 → D.3.1 (gallery sizing + Hero dropdown)
+- D.4 → D.4.1 (tier promotions)
+- D.5 → D.5.1 (duplicate search bars)
+- D.6 → D.6.1 → D.6.2 (city chip refinements)
+- D.7 → D.7.1 → D.7.2 → D.7.3 → D.7.3.1 → D.7.4 → D.7.5 → D.7.6
+
+**Operational:** plan for at least one follow-up per section that involves runtime behaviour, file I/O, redirects, or external service interaction. Don't expect first-commit perfection. The discipline of "build green + smoke + follow-up" holds quality without expecting infallibility.
+
+### Mobile-overlay pattern for breakpoint-conditional UI
+
+When the interaction model differs significantly across breakpoints (e.g., desktop inline form vs mobile icon-button overlay), encapsulate both modes in a single focused client component. The parent (a server component like the Header) just renders the client component; the client component branches on breakpoint via Tailwind responsive classes plus runtime state for the overlay.
+
+**Working example:** `src/components/layout/HeaderSearch.tsx` (Phase D.7.3.1). Desktop renders the inline form. Mobile renders an icon button plus a conditional overlay. Open/close state lives entirely inside the client component; the Header stays server-rendered.
+
+**Pattern applies to:** any future header CTA where mobile needs different chrome (filters, notifications, account switching). Keep the state-owning component small and focused; let breakpoint-driven CSS handle the layout.
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `whatsapp_number`)
