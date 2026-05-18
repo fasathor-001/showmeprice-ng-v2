@@ -62,6 +62,11 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     : null;
 
   // --- Build the listings query -----------------------------------------------
+  // categories(name) is a plain left-join embed so listings without a
+  // category aren't excluded — the joined-table .or() clause below still
+  // works because PostgREST treats a null categories row as not-matching
+  // on that branch, and the OR with title/description carries any
+  // category-less hits.
   let query = supabase
     .from("products")
     .select(
@@ -69,7 +74,8 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
       id, title, price_kobo, is_negotiable, created_at,
       product_images ( storage_path, position ),
       businesses!inner ( business_name, verification_status ),
-      nigerian_states ( name )
+      nigerian_states ( name ),
+      categories ( name )
     `
     )
     .eq("status", "active")
@@ -78,7 +84,12 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     .limit(PAGE_SIZE);
 
   if (q) {
-    query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
+    // Match against title, description, AND the joined category name. The
+    // last clause uses PostgREST's joined-table filter syntax — requires
+    // categories(...) to be in the select (it is, above). D.7.1.
+    query = query.or(
+      `title.ilike.%${q}%,description.ilike.%${q}%,categories.name.ilike.%${q}%`
+    );
   }
   if (categoryIds) {
     query = query.in("category_id", categoryIds);
