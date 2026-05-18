@@ -94,12 +94,24 @@ async function seed() {
       { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu", search_aliases: ["electronics", "electronic", "tv", "television", "gaming", "speaker", "audio", "solar", "console", "playstation", "xbox"] },
       { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home", search_aliases: ["furniture", "home", "kitchen", "appliance", "decor", "fridge", "freezer", "cooker", "microwave"] },
 
-      // Tier 2 — in main nav, not on hero (8 parents post-D.4.1)
-      { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 1, icon_name: "heart-pulse", search_aliases: ["health", "fitness", "supplement", "vitamin", "medicine", "wellness", "exercise", "workout"] },
-      { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 2, icon_name: "baby", search_aliases: ["baby", "kids", "children", "toy", "stroller", "diaper", "infant"] },
-      { name: "Food & Drinks", slug: "food-beverages", tier: 2, sort_order: 3, icon_name: "utensils", search_aliases: ["food", "drink", "beverage", "snack", "groceries", "wine", "juice"] },
+      // Tier 2 — in main nav, not on hero (9 parents post-D.7.4).
+      // sort_order values mirror the live DB exactly (7-15 range) so the
+      // seed is a faithful source-of-truth, not a sequence-clean rewrite.
+      { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 7, icon_name: "heart-pulse", search_aliases: ["health", "fitness", "supplement", "vitamin", "medicine", "wellness", "exercise", "workout"] },
+      { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 8, icon_name: "baby", search_aliases: ["baby", "kids", "children", "toy", "stroller", "diaper", "infant"] },
+      // Phase D.7.4: food-beverages split into Foodstuff & Groceries
+      // (Nigerian retail vocabulary) and Drinks & Beverages.
+      { name: "Foodstuff & Groceries", slug: "foodstuff", tier: 2, sort_order: 9, search_aliases: [
+        "foodstuff", "food", "groceries", "grocery", "raw food",
+        "rice", "beans", "garri", "yam", "cassava", "semovita", "flour",
+        "oil", "palm oil", "vegetable oil", "olive oil", "groundnut oil",
+        "pepper", "spice", "spices", "seasoning",
+        "tomato", "onion", "plantain",
+        "frozen", "snack", "snacks", "biscuit", "bread", "pasta",
+        "baby food", "formula", "cereal", "cereals",
+      ] },
       // Phase D.7.3.1: category-level synonyms only — no brand/model names.
-      { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car", search_aliases: [
+      { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 10, icon_name: "car", search_aliases: [
         "car", "cars", "vehicle", "vehicles", "auto", "automobile", "motor",
         "tokunbo", "fairly used", "foreign used", "naija used", "nigerian used", "uk used",
         "sedan", "suv", "pickup", "truck", "van", "bus", "coupe", "wagon", "minivan", "minibus",
@@ -107,19 +119,28 @@ async function seed() {
         "motorcycle", "bike", "okada", "scooter",
       ] },
       // Promoted from Tier 3 in Phase D.4.1
-      { name: "Property", slug: "property", tier: 2, sort_order: 5, search_aliases: ["property", "house", "apartment", "rent", "land", "real estate", "flat", "duplex", "bungalow"] },
-      { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 6, search_aliases: ["sport", "sports", "gym", "fitness", "equipment", "exercise", "football", "basketball"] },
+      { name: "Property", slug: "property", tier: 2, sort_order: 11, search_aliases: ["property", "house", "apartment", "rent", "land", "real estate", "flat", "duplex", "bungalow"] },
+      { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 12, search_aliases: ["sport", "sports", "gym", "fitness", "equipment", "exercise", "football", "basketball"] },
       // New Tier 2 parents in Phase D.4.1
       // Phase D.7.3.1: stripped specific brands/model lines (HP, Dell, Lenovo,
       // ThinkPad, Pavilion, etc.). macbook / imac stay because buyers use them
       // generically to mean 'Apple laptop / desktop' rather than as a brand.
-      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7, search_aliases: [
+      { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 13, search_aliases: [
         "computer", "laptop", "desktop", "pc", "monitor", "keyboard", "mouse",
         "macbook", "imac",
         "windows", "macos", "chromebook", "gaming laptop",
         "ssd", "hdd", "hard drive", "ram", "memory", "graphics card", "gpu", "cpu", "processor",
       ] },
-      { name: "Travel & Luggage", slug: "travel-luggage", tier: 2, sort_order: 8, search_aliases: ["travel", "luggage", "suitcase", "backpack", "bag"] },
+      { name: "Travel & Luggage", slug: "travel-luggage", tier: 2, sort_order: 14, search_aliases: ["travel", "luggage", "suitcase", "backpack", "bag"] },
+      { name: "Drinks & Beverages", slug: "drinks", tier: 2, sort_order: 15, search_aliases: [
+        "drink", "drinks", "beverage", "beverages",
+        "water", "sachet water", "bottled water", "sparkling water",
+        "juice", "juices", "smoothie",
+        "soda", "soft drink", "cola",
+        "alcohol", "wine", "red wine", "white wine", "champagne", "sparkling",
+        "beer", "spirits", "vodka", "gin", "whisky", "whiskey", "brandy", "rum",
+        "coffee", "tea", "herbal tea", "energy drink",
+      ] },
 
       // Tier 3 — "more categories" drawer (11 parents post-D.4.1)
       { name: "Services", slug: "services", tier: 3, sort_order: 1, icon_name: "wrench" },
@@ -147,8 +168,20 @@ async function seed() {
   const compAcc = topCategories.find((c) => c.slug === "computer-accessories");
   const travel = topCategories.find((c) => c.slug === "travel-luggage");
   const vehicles = topCategories.find((c) => c.slug === "vehicles");
+  const foodstuff = topCategories.find((c) => c.slug === "foodstuff");
+  const drinks = topCategories.find((c) => c.slug === "drinks");
 
-  if (fashion && mobile && hair && electronics && compAcc && travel && vehicles) {
+  if (
+    fashion &&
+    mobile &&
+    hair &&
+    electronics &&
+    compAcc &&
+    travel &&
+    vehicles &&
+    foodstuff &&
+    drinks
+  ) {
     await db
       .insert(schema.categories)
       .values([
@@ -197,9 +230,30 @@ async function seed() {
         { name: "Motorcycles", slug: "motorcycles", parent_id: vehicles.id, sort_order: 2 },
         { name: "Parts & Accessories", slug: "vehicle-parts", parent_id: vehicles.id, sort_order: 3 },
         { name: "Tricycles & Keke", slug: "tricycles", parent_id: vehicles.id, sort_order: 4 },
+
+        // Foodstuff & Groceries subs (10, Phase D.7.4)
+        { name: "Grains & Rice", slug: "grains-rice", parent_id: foodstuff.id, sort_order: 1 },
+        { name: "Spices & Seasonings", slug: "spices-seasonings", parent_id: foodstuff.id, sort_order: 2 },
+        { name: "Cooking Oils", slug: "cooking-oils", parent_id: foodstuff.id, sort_order: 3 },
+        { name: "Beans & Legumes", slug: "beans-legumes", parent_id: foodstuff.id, sort_order: 4 },
+        { name: "Tubers & Flour", slug: "tubers-flour", parent_id: foodstuff.id, sort_order: 5 },
+        { name: "Fresh Produce", slug: "fresh-produce", parent_id: foodstuff.id, sort_order: 6 },
+        { name: "Frozen Foods", slug: "frozen-foods", parent_id: foodstuff.id, sort_order: 7 },
+        { name: "Packaged & Bakery", slug: "packaged-bakery", parent_id: foodstuff.id, sort_order: 8 },
+        { name: "Snacks & Confectionery", slug: "snacks-confectionery", parent_id: foodstuff.id, sort_order: 9 },
+        { name: "Baby Food", slug: "baby-food", parent_id: foodstuff.id, sort_order: 10 },
+
+        // Drinks & Beverages subs (7, Phase D.7.4)
+        { name: "Alcohol & Spirits", slug: "alcohol-spirits", parent_id: drinks.id, sort_order: 1 },
+        { name: "Wine", slug: "wine", parent_id: drinks.id, sort_order: 2 },
+        { name: "Beer", slug: "beer", parent_id: drinks.id, sort_order: 3 },
+        { name: "Soft Drinks", slug: "soft-drinks", parent_id: drinks.id, sort_order: 4 },
+        { name: "Juices", slug: "juices", parent_id: drinks.id, sort_order: 5 },
+        { name: "Water", slug: "water", parent_id: drinks.id, sort_order: 6 },
+        { name: "Coffee & Tea", slug: "coffee-tea", parent_id: drinks.id, sort_order: 7 },
       ])
       .onConflictDoNothing();
-    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive");
+    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks");
   } else {
     console.log("  - top categories already seeded; skipping sub-categories");
   }
