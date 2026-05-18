@@ -90,7 +90,16 @@ async function seed() {
         "body wave", "deep wave", "loose wave", "water wave", "jerry curl",
         "edge control", "hair cream", "shampoo", "conditioner", "leave-in",
       ] },
-      { name: "Beauty & Personal Care", slug: "beauty", tier: 1, sort_order: 4, icon_name: "sparkles", search_aliases: ["beauty", "skincare", "cosmetic", "makeup", "perfume", "fragrance", "lotion", "cream"] },
+      // Phase D.7.5: perfume/fragrance/cologne removed — they now live in
+      // their own Tier 2 'perfume-fragrance' category. Beauty aliases
+      // expanded with product-type vocabulary that's clearly Beauty rather
+      // than Fragrance (lipstick, mascara, foundation, soap, body wash).
+      { name: "Beauty & Personal Care", slug: "beauty", tier: 1, sort_order: 4, icon_name: "sparkles", search_aliases: [
+        "beauty", "skincare", "cosmetic", "makeup", "lotion", "cream",
+        "soap", "body wash", "shampoo", "conditioner",
+        "lipstick", "mascara", "foundation", "concealer",
+        "moisturizer", "serum", "facewash", "exfoliator",
+      ] },
       { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu", search_aliases: ["electronics", "electronic", "tv", "television", "gaming", "speaker", "audio", "solar", "console", "playstation", "xbox"] },
       { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home", search_aliases: ["furniture", "home", "kitchen", "appliance", "decor", "fridge", "freezer", "cooker", "microwave"] },
 
@@ -141,6 +150,19 @@ async function seed() {
         "beer", "spirits", "vodka", "gin", "whisky", "whiskey", "brandy", "rum",
         "coffee", "tea", "herbal tea", "energy drink",
       ] },
+      // Phase D.7.5: standalone Tier 2 (matches Jiji/Jumia conventions).
+      // 'oud' / 'agarwood' / 'oriental' included as scent-descriptive
+      // aliases — Nigerian usage treats them as scent categories, not
+      // brand identifiers (refinement of the D.7.3.1 alias-purity rule).
+      { name: "Perfume & Fragrance", slug: "perfume-fragrance", tier: 2, sort_order: 16, search_aliases: [
+        "perfume", "perfumes", "fragrance", "fragrances", "scent", "scents",
+        "cologne", "eau de toilette", "edt", "eau de parfum", "edp",
+        "body spray", "body mist", "body perfume",
+        "oud", "agarwood", "oriental", "arabian oud",
+        "deodorant", "deodorants", "antiperspirant",
+        "car perfume", "perfume oil",
+        "mens fragrance", "womens fragrance", "unisex perfume",
+      ] },
 
       // Tier 3 — "more categories" drawer (11 parents post-D.4.1)
       { name: "Services", slug: "services", tier: 3, sort_order: 1, icon_name: "wrench" },
@@ -170,6 +192,7 @@ async function seed() {
   const vehicles = topCategories.find((c) => c.slug === "vehicles");
   const foodstuff = topCategories.find((c) => c.slug === "foodstuff");
   const drinks = topCategories.find((c) => c.slug === "drinks");
+  const perfume = topCategories.find((c) => c.slug === "perfume-fragrance");
 
   if (
     fashion &&
@@ -180,7 +203,8 @@ async function seed() {
     travel &&
     vehicles &&
     foodstuff &&
-    drinks
+    drinks &&
+    perfume
   ) {
     await db
       .insert(schema.categories)
@@ -251,9 +275,19 @@ async function seed() {
         { name: "Juices", slug: "juices", parent_id: drinks.id, sort_order: 5 },
         { name: "Water", slug: "water", parent_id: drinks.id, sort_order: 6 },
         { name: "Coffee & Tea", slug: "coffee-tea", parent_id: drinks.id, sort_order: 7 },
+
+        // Perfume & Fragrance subs (8, Phase D.7.5)
+        { name: "Men's Perfume", slug: "perfume-men", parent_id: perfume.id, sort_order: 1 },
+        { name: "Women's Perfume", slug: "perfume-women", parent_id: perfume.id, sort_order: 2 },
+        { name: "Unisex Perfume", slug: "perfume-unisex", parent_id: perfume.id, sort_order: 3 },
+        { name: "Arabian / Oud Perfume", slug: "perfume-oud", parent_id: perfume.id, sort_order: 4 },
+        { name: "Body Sprays", slug: "body-sprays", parent_id: perfume.id, sort_order: 5 },
+        { name: "Perfume Oils", slug: "perfume-oils", parent_id: perfume.id, sort_order: 6 },
+        { name: "Deodorants & Antiperspirants", slug: "deodorants", parent_id: perfume.id, sort_order: 7 },
+        { name: "Car Perfumes & Fresheners", slug: "car-perfumes", parent_id: perfume.id, sort_order: 8 },
       ])
       .onConflictDoNothing();
-    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks");
+    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks, Perfume & Fragrance");
   } else {
     console.log("  - top categories already seeded; skipping sub-categories");
   }
