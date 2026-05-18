@@ -73,19 +73,21 @@ async function seed() {
       // Tier 1 — featured on home page. search_aliases (Phase D.7.2) hold
       // common buyer terms; lookup is JSONB array containment, lowercased.
       { name: "Fashion & Apparel", slug: "fashion", tier: 1, sort_order: 1, icon_name: "shirt", search_aliases: ["fashion", "clothes", "clothing", "dress", "wear", "outfit", "apparel", "style"] },
+      // Phase D.7.3.1: stripped brand / model names — those should match
+      // via title/description, not broaden a search to a whole category.
+      // Aliases here are category-level synonyms only.
       { name: "Mobile Phones & Tablets", slug: "mobile-phones-tablets", tier: 1, sort_order: 2, icon_name: "smartphone", search_aliases: [
         "phone", "phones", "mobile", "smartphone", "tablet", "tablets",
-        "iphone", "iphone 15", "iphone 14", "iphone 13", "iphone 12", "iphone 11", "iphone x", "iphone pro", "iphone max", "iphone se",
-        "samsung", "galaxy", "galaxy s", "galaxy note", "galaxy a", "galaxy z", "galaxy fold", "galaxy flip",
-        "tecno", "infinix", "itel", "redmi", "xiaomi", "huawei", "oppo", "vivo", "oneplus", "google pixel", "nokia",
         "android", "ios",
-        "earbuds", "airpods", "headphones", "charger", "powerbank", "screen protector", "case", "tempered glass", "smartwatch", "apple watch",
+        "earbuds", "airpods", "headphones", "charger", "powerbank",
+        "screen protector", "case", "tempered glass", "smartwatch",
       ] },
       { name: "Hair & Wigs", slug: "hair-wigs", tier: 1, sort_order: 3, icon_name: "scissors", search_aliases: [
-        "wig", "wigs", "weave", "weavon", "bundle", "bundles", "extension", "extensions", "frontal", "closure", "lace", "lace front", "lace closure",
+        "wig", "wigs", "weave", "weavon", "bundle", "bundles",
+        "extension", "extensions", "frontal", "closure", "lace", "lace front", "lace closure",
         "hair", "human hair", "synthetic hair", "virgin hair", "raw hair",
-        "brazilian", "peruvian", "indian", "malaysian", "vietnamese", "mongolian", "cambodian",
-        "ponytail", "braid", "braids", "kinky", "curly", "straight", "body wave", "deep wave", "loose wave", "water wave", "jerry curl",
+        "ponytail", "braid", "braids", "kinky", "curly", "straight",
+        "body wave", "deep wave", "loose wave", "water wave", "jerry curl",
         "edge control", "hair cream", "shampoo", "conditioner", "leave-in",
       ] },
       { name: "Beauty & Personal Care", slug: "beauty", tier: 1, sort_order: 4, icon_name: "sparkles", search_aliases: ["beauty", "skincare", "cosmetic", "makeup", "perfume", "fragrance", "lotion", "cream"] },
@@ -96,35 +98,24 @@ async function seed() {
       { name: "Health & Wellness", slug: "health", tier: 2, sort_order: 1, icon_name: "heart-pulse", search_aliases: ["health", "fitness", "supplement", "vitamin", "medicine", "wellness", "exercise", "workout"] },
       { name: "Baby & Kids", slug: "baby-kids", tier: 2, sort_order: 2, icon_name: "baby", search_aliases: ["baby", "kids", "children", "toy", "stroller", "diaper", "infant"] },
       { name: "Food & Drinks", slug: "food-beverages", tier: 2, sort_order: 3, icon_name: "utensils", search_aliases: ["food", "drink", "beverage", "snack", "groceries", "wine", "juice"] },
+      // Phase D.7.3.1: category-level synonyms only — no brand/model names.
       { name: "Automotive", slug: "vehicles", tier: 2, sort_order: 4, icon_name: "car", search_aliases: [
         "car", "cars", "vehicle", "vehicles", "auto", "automobile", "motor",
         "tokunbo", "fairly used", "foreign used", "naija used", "nigerian used", "uk used",
         "sedan", "suv", "pickup", "truck", "van", "bus", "coupe", "wagon", "minivan", "minibus",
         "keke", "keke napep", "tricycle", "three-wheeler", "three wheeler",
         "motorcycle", "bike", "okada", "scooter",
-        "toyota", "corolla", "camry", "highlander", "hilux", "sienna", "rav4", "land cruiser", "hiace", "yaris", "avalon", "avensis", "rush", "prado", "fortuner", "venza", "tacoma",
-        "honda", "accord", "civic", "pilot", "crv", "cr-v", "city", "odyssey",
-        "lexus", "rx 350", "rx350", "es 350", "es350", "gx", "lx", "is",
-        "mercedes", "mercedes-benz", "benz", "g wagon", "g-wagon", "g-class", "c-class", "e-class", "s-class", "gle", "glk", "ml",
-        "hyundai", "sonata", "elantra", "tucson", "santa fe",
-        "kia", "rio", "sportage", "sorento",
-        "nissan", "altima", "sentra", "rogue", "pathfinder", "murano",
-        "ford", "edge", "explorer", "f150",
-        "bmw", "3 series", "5 series", "x5", "x3",
-        "audi", "a4", "a6", "q5", "q7",
-        "land rover", "range rover", "range", "discovery",
-        "volkswagen", "vw", "golf", "passat", "jetta", "touareg",
-        "peugeot", "207", "307", "508",
-        "bajaj", "tvs", "piaggio", "yamaha", "suzuki", "qlink",
       ] },
       // Promoted from Tier 3 in Phase D.4.1
       { name: "Property", slug: "property", tier: 2, sort_order: 5, search_aliases: ["property", "house", "apartment", "rent", "land", "real estate", "flat", "duplex", "bungalow"] },
       { name: "Sports & Fitness", slug: "sports", tier: 2, sort_order: 6, search_aliases: ["sport", "sports", "gym", "fitness", "equipment", "exercise", "football", "basketball"] },
       // New Tier 2 parents in Phase D.4.1
+      // Phase D.7.3.1: stripped specific brands/model lines (HP, Dell, Lenovo,
+      // ThinkPad, Pavilion, etc.). macbook / imac stay because buyers use them
+      // generically to mean 'Apple laptop / desktop' rather than as a brand.
       { name: "Computer & Accessories", slug: "computer-accessories", tier: 2, sort_order: 7, search_aliases: [
         "computer", "laptop", "desktop", "pc", "monitor", "keyboard", "mouse",
-        "hp", "dell", "lenovo", "asus", "acer", "apple", "macbook", "macbook pro", "macbook air", "mac", "imac",
-        "thinkpad", "elitebook", "probook", "pavilion", "inspiron", "xps", "spectre", "envy",
+        "macbook", "imac",
         "windows", "macos", "chromebook", "gaming laptop",
         "ssd", "hdd", "hard drive", "ram", "memory", "graphics card", "gpu", "cpu", "processor",
       ] },
