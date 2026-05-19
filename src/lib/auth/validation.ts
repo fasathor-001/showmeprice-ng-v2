@@ -4,14 +4,17 @@ export interface SignUpFormData {
   email: string;
   password: string;
   displayName: string;
-  whatsappNumber: string;
+  // Renamed from whatsappNumber in Phase E.1.0 (D-055) to align with the
+  // profiles.phone column. UI label remains "WhatsApp number" since the
+  // column holds the user's WhatsApp number in NG context.
+  phone: string;
 }
 
 export interface ValidationErrors {
   email?: string;
   password?: string;
   displayName?: string;
-  whatsappNumber?: string;
+  phone?: string;
 }
 
 export function validateEmail(email: string): string | undefined {
@@ -48,7 +51,7 @@ export function validateSignUpForm(data: SignUpFormData): ValidationErrors {
     email: validateEmail(data.email),
     password: validatePassword(data.password),
     displayName: validateDisplayName(data.displayName),
-    whatsappNumber: validateWhatsAppNumber(data.whatsappNumber),
+    phone: validateWhatsAppNumber(data.phone),
   };
 }
 

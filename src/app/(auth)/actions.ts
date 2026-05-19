@@ -39,13 +39,17 @@ export async function signUpAction(
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
   const displayName = String(formData.get("displayName") ?? "").trim();
-  const whatsappNumber = String(formData.get("whatsappNumber") ?? "").trim();
+  // Renamed from whatsappNumber in Phase E.1.0 (D-055) — form field, action
+  // var, validator field, error key, and handle_new_user metadata key all
+  // converge on 'phone'. UI label remains "WhatsApp number" since the column
+  // holds the user's WhatsApp number in NG context.
+  const phone = String(formData.get("phone") ?? "").trim();
   const userType = String(formData.get("userType") ?? "buyer");
   const businessName = String(formData.get("businessName") ?? "").trim();
   const businessStateId = String(formData.get("businessStateId") ?? "");
 
   // Defense in depth: re-run client-side validation server-side.
-  const errors = validateSignUpForm({ email, password, displayName, whatsappNumber }) as ActionResult["errors"];
+  const errors = validateSignUpForm({ email, password, displayName, phone }) as ActionResult["errors"];
   if (userType !== "buyer" && userType !== "seller") {
     return { errors: { _form: "Invalid account type" } };
   }
@@ -61,8 +65,8 @@ export async function signUpAction(
     return { errors };
   }
 
-  const normalized = normalizeNigerianWhatsApp(whatsappNumber);
-  if (!normalized) return { errors: { whatsappNumber: "Invalid WhatsApp number" } };
+  const normalized = normalizeNigerianWhatsApp(phone);
+  if (!normalized) return { errors: { phone: "Invalid WhatsApp number" } };
 
   const supabase = createClient();
   const origin =
@@ -82,8 +86,9 @@ export async function signUpAction(
       // Keys must match handle_new_user trigger's reads:
       //   raw_user_meta_data->>'display_name'
       //   raw_user_meta_data->>'phone' (renamed from 'whatsapp_number' in
-      //     Phase E.1.0 — the trigger still falls back to the old key for
-      //     any in-flight signup at the moment of switchover).
+      //     Phase E.1.0; trigger retains a COALESCE fallback to the old key
+      //     as belt-and-braces for any legacy clients still posting the old
+      //     name, but Phase E and later signup paths post 'phone' directly).
       // user_type / business_name / business_state_id are consumed by
       // /auth/callback after email confirmation; the trigger ignores them.
       data: {

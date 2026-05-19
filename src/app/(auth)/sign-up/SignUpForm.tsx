@@ -101,20 +101,26 @@ export function SignUpForm({ states }: Props) {
       </div>
 
       <div>
+        {/*
+          Form field name + id are `phone` (renamed from `whatsappNumber` in
+          Phase E.1.0 to align with profiles.phone). UI label remains
+          "WhatsApp number" since the column holds the user's WhatsApp
+          number in NG context (D-055).
+        */}
         <label
-          htmlFor="whatsappNumber"
+          htmlFor="phone"
           className="block text-sm font-medium text-ink mb-1.5"
         >
           WhatsApp number
         </label>
         <Input
-          id="whatsappNumber"
-          name="whatsappNumber"
+          id="phone"
+          name="phone"
           type="tel"
           autoComplete="tel"
           inputMode="numeric"
           required
-          error={state.errors?.whatsappNumber}
+          error={state.errors?.phone}
           placeholder="0801 234 5678"
         />
         <p className="mt-1.5 text-xs text-ink-600">
