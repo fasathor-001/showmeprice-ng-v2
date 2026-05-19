@@ -358,6 +358,9 @@ table.numeric th:not(:first-child) {
   body {
     background: white;
     font-size: 10pt;
+    /* Prevent single-line orphans / widows at page breaks */
+    orphans: 3;
+    widows: 3;
   }
 
   .container {
@@ -367,37 +370,108 @@ table.numeric th:not(:first-child) {
     box-shadow: none;
   }
 
-  h1, h2, h3 {
+  /* Headings should never end up alone at the bottom of a page —
+     and h2 (chapter) should always start with content beneath it */
+  h1, h2, h3, h4 {
     page-break-after: avoid;
+    break-after: avoid;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
+  /* Major sections (h2) prefer to start a fresh page unless they
+     comfortably fit on the current one. `auto` here lets the browser
+     decide; we don't force a break, but we ensure the heading +
+     ~3 lines of content stay together */
   h2 {
     page-break-before: auto;
+    break-before: auto;
   }
 
-  table, .callout, .card {
+  /* Keep blocks together — these are the chunks that look broken
+     when split across pages */
+  table,
+  .callout,
+  .card,
+  .metric,
+  blockquote {
     page-break-inside: avoid;
+    break-inside: avoid;
   }
 
+  /* Grids (used for side-by-side cards) shouldn't break mid-grid */
+  .grid-2,
+  .grid-3 {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Table rows should never split mid-row */
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Table headers repeat on each page when a table does span pages */
+  thead {
+    display: table-header-group;
+  }
+
+  tbody {
+    display: table-row-group;
+  }
+
+  /* Paragraph keep-together for short paragraphs (≤4 lines) */
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Lede paragraph + lists should try to stay with the heading above */
+  .lede,
+  ul,
+  ol {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* TOC always gets its own page so the document flow restarts cleanly */
   .toc {
     page-break-after: always;
+    break-after: page;
   }
 
+  /* Cover takes a full page */
   .cover {
     min-height: 9in;
     display: flex;
     flex-direction: column;
     justify-content: center;
     page-break-after: always;
+    break-after: page;
     border: none;
   }
 
+  /* Links print as black with no underline (URL appended in some browsers;
+     keep the URL hidden for a clean look) */
   a {
     color: var(--ink);
     text-decoration: none;
   }
+  a[href^="http"]::after,
+  a[href^="#"]::after {
+    content: '';
+  }
 
+  /* OWNER TODO callouts get a strong border in print so they're
+     impossible to miss before sending to investors */
   .callout.placeholder {
     border: 2px solid var(--rose-600);
+  }
+
+  /* Document footer pinned to the bottom of the last page */
+  .doc-footer {
+    page-break-before: avoid;
+    break-before: avoid;
   }
 }

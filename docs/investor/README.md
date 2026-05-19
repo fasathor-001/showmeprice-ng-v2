@@ -2,6 +2,8 @@
 
 Three documents for pre-seed fundraising, plus a shared stylesheet. All HTML, print-optimized to produce clean PDFs via browser print.
 
+**Current version: v2 (Pre-Seed Round 2026).** Reflects the restructured monetization model: 3-tier buyer ladder (Free → Pro → Diaspora → Institution), eliminated Premium Buyer subscription, two-tier escrow (Lite ₦25K-50K + Standard ₦50K+), buyer-gated escrow access, realistic NG B2C SaaS conversion benchmarks. See "What changed v1 → v2" section at the bottom of this README.
+
 ## Files
 
 | File | Purpose | Length |
@@ -104,3 +106,37 @@ Before sending to investors, **verify each market figure against its current sou
 ## Version control
 
 These files are committed to the main repository alongside the application code. Every edit to investor materials gets a git commit so you can roll back to a prior pitch version if needed.
+
+## What changed v1 → v2
+
+**Restructured monetization (per assessment of the original plan against Nigerian B2C SaaS benchmarks):**
+
+- **Buyer tiers: 4 → 3 + Diaspora.** Eliminated Premium Buyer (₦7,500/mo) subscription tier — NG buyers don't pre-pay subscriptions for optional escrow access. Replaced with: Free (escrow pay-per-use), Pro (₦5K/mo + 33% escrow discount), Diaspora ($15/mo + delivery coordination), Institution (custom).
+- **Two-tier escrow.** Added Lite Escrow (₦500 flat on ₦25K–₦50K transactions) below the existing Standard tier (1.5%+₦100 on ₦50K+). Expands TAM into mid-value categories (fashion, beauty, electronics under ₦50K) where scams are common.
+- **Buyer-gated escrow, not seller-gated.** Sellers don't need a paid plan to receive escrow orders — keeps supply maximal.
+- **Pro Buyer gets 33% escrow discount** (1.0%+₦100 vs 1.5%+₦100 standard). Subscription tier becomes more compelling for active buyers.
+- **Credit packs expanded.** Added ₦500 trial pack and increased pack sizes (4/10/25 reveals). Expected to be the dominant buyer revenue stream by transaction count in Year 1.
+- **Boost pricing revised upward** (₦2,500/₦5K/₦9K for 3/7/14-day, up from ₦1K/₦2,500/₦4,500). Pricing reflects actual seller margin economics on phones/electronics.
+- **Featured Seller eligibility-gated** on verification + reply rate ≥70% + zero open reports — preserves trust positioning.
+- **Fast Payout (Phase F).** 0.5% fee for 24hr settlement to Pro+ sellers; ShowMePrice carries float.
+
+**Realistic financial projections:**
+
+- **Pro conversion: 1.5% Year 1** (was 3%) — matches PiggyVest / Cowrywise NG B2C SaaS benchmarks.
+- **Annual plan mix: 12%** (was ~30%) — NG buyers prefer monthly commitment.
+- **Subscription retention: 4 months Y1, 6+ months Y2+** (was implied 12 months).
+- **Unit economics net of Paystack processor fees** (~1.5% capped ₦2,000) — gross numbers were overstated in v1.
+- **Escrow disclosed as break-even by design** — trust feature, not profit center. Margin enters positive territory with Phase F+ Fast Payout.
+- **Year 3 base case: ~₦945M ARR** (was ~₦933M). Upside: ~₦3.4B. Conservative: ~₦294M.
+
+**Document polish:**
+
+- All three docs gained a "Pre-Seed Round 2026" identifier in titles and on covers.
+- Print CSS hardened: orphans/widows controls, table-row keep-together, grid keep-together, h2/h3 page-break-after-avoid, header repeats on multi-page tables. Should eliminate awkward page breaks from v1.
+- One-pager added Diaspora segment + realistic Y3 ARR metric.
+- Business plan §8 fully rewritten with restructured tier tables.
+- Business plan §11 financial projection tables rebuilt with realistic-base / conservative / upside columns; payment processor netting shown explicitly; revenue mix evolution callout added.
+- Business plan §12 expanded to 6 unit-economics blocks (Pro Buyer / Credit packs / Escrow / Pro Seller / Diaspora / Boosts) all net of Paystack + dispute cost.
+- Pitch deck slide 8 (Business Model) restructured to 9-row stream table reflecting the new tiers.
+- Pitch deck slide 9 (Unit Economics) split into 6 tile blocks; escrow honestly disclosed as break-even.
+- Pitch deck slide 13 (Financials) revised to "Realistic Base Case" with NG SaaS benchmark footnote.
