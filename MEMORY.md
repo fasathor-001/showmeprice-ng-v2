@@ -512,3 +512,49 @@ SELECT conname, conrelid::regclass FROM pg_constraint WHERE conname ILIKE '%<old
 ```
 
 Policy bodies don't need a separate scan — Postgres has us covered there.
+
+---
+
+## Banked Principles
+
+Six non-negotiable architecture rules. These are not lessons learned in flight — they are upfront design commitments that constrain every monetization, product, and platform decision. Any new feature, decision, or change must respect all six. If a proposal violates one, the proposal is wrong, not the principle.
+
+### Principle 1: Escrow is buyer-gated, never seller-gated.
+
+A seller never needs a paid plan for buyers to access escrow protection. Seller must be active, verified, and payout-ready — these are operational requirements, not monetization gates. Free Sellers can and do receive escrow-protected orders. Banked: D-082, D-091.
+
+This principle exists because the alternative — requiring sellers to pay for escrow — collapses supply. Sellers don't enroll, buyers can't protect themselves, trust loop fails. By inverting the gating to buyer-side, we make protection universally available while preserving subscription value via discounted rates (D-086).
+
+### Principle 2: Verification is earned, not bought.
+
+A seller can be Free + Verified, or Pro + Not yet verified. Verification badges and paid-tier badges are independent display elements. Verification badges appear more prominently than payment-tier badges so the market signal is trust-first. Banked: D-088 framing, D-091 verification application scope.
+
+A paid seller is not automatically a trusted seller. Marketing copy that implies "Pro Seller = Verified Seller" is wrong and damages brand. The two are orthogonal axes.
+
+### Principle 3: Free Sellers must always receive buyer messages.
+
+No conversion-forcing on this. If free sellers cannot receive buyer messages, the marketplace dies — supply collapses, no buyer demand survives. Banked: D-091.
+
+Free Sellers get: profile, listings, in-app inbox, full buyer message access, verification application, report/block tools, mark-as-sold flow. Future paid tiers add tools (analytics, boosts, response metrics, storefront customization) — they do not gate the core inbound communication path.
+
+### Principle 4: Paid promotion never overrides trust quality.
+
+Boost ranking considers verification status, listing quality, response rate, report history, freshness, plan tier, AND boost status — boost alone cannot push bad sellers to top. Featured Seller placement is gated on verification + reply rate ≥70% + zero open reports (no exceptions, even at higher boost spend).
+
+Banked: D-091 boost eligibility, and the Featured Seller restriction documented in MONETIZATION-PLAN.md.
+
+The rule is simple: a verified seller with good reply rate beats an unverified seller with high boost spend. Pay-to-rank is incompatible with trust-first marketplaces.
+
+### Principle 5: Prices must always be visible.
+
+"DM for price" is not allowed on any listing. The platform name commits the product to a principle: ShowMePrice. The `products.price_kobo` column is `NOT NULL` and listing creation forms require a price field; there is no path to publish a listing without a visible price.
+
+This principle is structural — it shapes search relevance, comparison shopping, buyer expectations, and the trust positioning. A platform where buyers must ask for prices is functionally just an Instagram DM funnel; we are not building that.
+
+### Principle 6: Trust & safety operates equally regardless of tier.
+
+Operational response speed varies by tier; dispute fairness does not. All escrow disputes get the same review regardless of who pays. Banked: D-089.
+
+Concretely: a Free Buyer's complaint against a Pro Seller is investigated with the same evidentiary rigor as a Pro Buyer's complaint against a Free Seller. Case reviewers see tier metadata segregated from the evidence-review surface to prevent unconscious bias. Public-facing copy: *"We respond faster to Pro members; we resolve every dispute the same way."*
+
+This principle protects the trust-first brand thesis from being undermined by paid tier perks — a marketplace that sells dispute outcomes is not a trust-first marketplace.
