@@ -2,7 +2,7 @@
 
 Three documents for pre-seed fundraising, plus a shared stylesheet. All HTML, print-optimized to produce clean PDFs via browser print.
 
-**Current version: v2 (Pre-Seed Round 2026).** Reflects the restructured monetization model: 3-tier buyer ladder (Free → Pro → Diaspora → Institution), eliminated Premium Buyer subscription, two-tier escrow (Lite ₦25K-50K + Standard ₦50K+), buyer-gated escrow access, realistic NG B2C SaaS conversion benchmarks. See "What changed v1 → v2" section at the bottom of this README.
+**Current version: v2.0 (Pre-Seed Round 2026).** Reflects the locked v2.0 monetization model per `MONETIZATION-PLAN.md` and decisions D-082 through D-092: 3-tier buyer ladder (Free → Pro → Diaspora → Institution), eliminated Premium Buyer subscription, single-tier escrow with Pro Buyer discount (1.5% standard / 1.2% Pro), buyer-gated escrow access, Pro Buyer launch promo (₦3,000/mo first 3 months), credit pack tiers locked at 1/3/9/20 reveals, tiered reveal caps (10/25 daily), seller monetization deferred to Phase F. See "What changed v1 → v2" section at the bottom of this README.
 
 ## Files
 
@@ -111,23 +111,25 @@ These files are committed to the main repository alongside the application code.
 
 **Restructured monetization (per assessment of the original plan against Nigerian B2C SaaS benchmarks):**
 
-- **Buyer tiers: 4 → 3 + Diaspora.** Eliminated Premium Buyer (₦7,500/mo) subscription tier — NG buyers don't pre-pay subscriptions for optional escrow access. Replaced with: Free (escrow pay-per-use), Pro (₦5K/mo + 33% escrow discount), Diaspora ($15/mo + delivery coordination), Institution (custom).
-- **Two-tier escrow.** Added Lite Escrow (₦500 flat on ₦25K–₦50K transactions) below the existing Standard tier (1.5%+₦100 on ₦50K+). Expands TAM into mid-value categories (fashion, beauty, electronics under ₦50K) where scams are common.
-- **Buyer-gated escrow, not seller-gated.** Sellers don't need a paid plan to receive escrow orders — keeps supply maximal.
-- **Pro Buyer gets 33% escrow discount** (1.0%+₦100 vs 1.5%+₦100 standard). Subscription tier becomes more compelling for active buyers.
-- **Credit packs expanded.** Added ₦500 trial pack and increased pack sizes (4/10/25 reveals). Expected to be the dominant buyer revenue stream by transaction count in Year 1.
+- **Buyer tiers: 4 → 3 + Diaspora.** Eliminated Premium Buyer (₦7,500/mo) subscription tier per D-082 — NG buyers don't pre-pay subscriptions for optional escrow access. Replaced with: Free (escrow pay-per-use at 1.5% + ₦100), Pro (₦5K/mo with **20%** escrow discount → 1.2% + ₦100 per D-086), Diaspora ($15/mo + delivery coordination), Institution (custom).
+- **Pro Buyer launch promo:** ₦3,000/month first 3 months per D-087. Annual unchanged at ₦45K.
+- **Reveal caps:** 10/day new Pro Buyers (first 30 days), 25/day established Pro (per D-083). Prevents contact-harvesting attack vector. Free Buyers get 1 free reveal at signup (D-084).
+- **Credit packs locked at 1/3/9/20 reveals** per D-085 (was 4/10/25 in v1 draft): Trial ₦500 (1), Small ₦1,500 (3), Medium ₦3,500 (9), Large ₦7,000 (20).
+- **Single-tier escrow with Pro discount** per D-082 + D-086. Standard 1.5% + ₦100 available to all buyers including Free; Pro Buyers get **20% discount** → 1.2% + ₦100. The "two-tier Lite + Standard" framing seen in some intermediate drafts was rejected — not in the locked v2.0 plan.
+- **Buyer-gated escrow, not seller-gated** per D-082. Sellers don't need a paid plan to receive escrow orders — keeps supply maximal.
 - **Boost pricing revised upward** (₦2,500/₦5K/₦9K for 3/7/14-day, up from ₦1K/₦2,500/₦4,500). Pricing reflects actual seller margin economics on phones/electronics.
-- **Featured Seller eligibility-gated** on verification + reply rate ≥70% + zero open reports — preserves trust positioning.
+- **Featured Seller eligibility-gated** on verification + reply rate ≥70% + zero open reports per Banked Principle 4 — preserves trust positioning.
 - **Fast Payout (Phase F).** 0.5% fee for 24hr settlement to Pro+ sellers; ShowMePrice carries float.
 
-**Realistic financial projections:**
+**Financial projections (per Sprint 1.6 reconciliation to canonical v2.0 figures):**
 
-- **Pro conversion: 1.5% Year 1** (was 3%) — matches PiggyVest / Cowrywise NG B2C SaaS benchmarks.
-- **Annual plan mix: 12%** (was ~30%) — NG buyers prefer monthly commitment.
-- **Subscription retention: 4 months Y1, 6+ months Y2+** (was implied 12 months).
-- **Unit economics net of Paystack processor fees** (~1.5% capped ₦2,000) — gross numbers were overstated in v1.
-- **Escrow disclosed as break-even by design** — trust feature, not profit center. Margin enters positive territory with Phase F+ Fast Payout.
-- **Year 3 base case: ~₦945M ARR** (was ~₦933M). Upside: ~₦3.4B. Conservative: ~₦294M.
+- **Year 1 base case: ₦1.14M/month** by year-end (₦13.7M annualized).
+- **Year 2 base case: ₦18.55M/month** (₦223M annualized; Phase F live).
+- **Year 3 base case: ~₦1.01B ARR**. Stretch: ~₦2.19B. Conservative: ~₦331M.
+- **Pro Buyer conversion (Y1/Y2/Y3 base case):** 2.5% / 3.5% / 4.0%.
+- **Annual subscription mix:** ~12% — NG buyers prefer monthly commitment.
+- **Pro Buyer subscription retention Y1:** ~8 months (PiggyVest / Cowrywise NG B2C SaaS benchmarks).
+- **Sensitivity disclosure:** projections robust to ±15% variation in individual pricing inputs. Pricing refined post-Phase-E based on real-world data per Validation Disclosure (`MONETIZATION-PLAN.md` §12).
 
 **Document polish:**
 

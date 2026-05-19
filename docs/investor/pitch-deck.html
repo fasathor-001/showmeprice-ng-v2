@@ -488,11 +488,10 @@ body {
       <tr><th>Stream</th><th>Pricing</th><th>Phase</th><th>Logic</th></tr>
     </thead>
     <tbody>
-      <tr><td><strong>Pro Buyer subscription</strong></td><td>₦5,000/mo · ₦45,000/yr</td><td><span class="pill">E</span></td><td>Contact reveal + SMS alerts + 33% escrow discount</td></tr>
-      <tr><td><strong>Contact reveal credit packs</strong></td><td>₦500 / ₦1,500 / ₦3,500 / ₦7,000</td><td><span class="pill">E</span></td><td>Pay-per-use for occasional buyers (96% margin)</td></tr>
-      <tr><td><strong>Diaspora Buyer</strong></td><td>$15/mo · $150/yr</td><td><span class="pill">E</span></td><td>USD payment + delivery coord + recipient verification</td></tr>
-      <tr><td><strong>Lite Escrow</strong></td><td>₦500 flat · ₦25K–50K txns</td><td><span class="pill">E</span></td><td>Mid-value protection (fashion, electronics, used phones)</td></tr>
-      <tr><td><strong>Standard Escrow</strong></td><td>1.5% + ₦100 · ₦50K+ txns</td><td><span class="pill">E</span></td><td>High-value full-dispute coverage. Pro buyers: 1.0% + ₦100</td></tr>
+      <tr><td><strong>Pro Buyer subscription</strong></td><td>₦5,000/mo · ₦45,000/yr · ₦3,000/mo launch promo (3 months)</td><td><span class="pill">E</span></td><td>Contact reveal (10/25 daily cap) + SMS alerts + 20% escrow discount</td></tr>
+      <tr><td><strong>Credit reveal packs</strong></td><td>₦500/1 · ₦1,500/3 · ₦3,500/9 · ₦7,000/20</td><td><span class="pill">E</span></td><td>Pay-per-use for occasional buyers (96% margin)</td></tr>
+      <tr><td><strong>Diaspora Buyer</strong></td><td>$15/mo · $150/yr</td><td><span class="pill">E</span></td><td>USD payment + delivery coord + recipient verification (delivery = Phase G)</td></tr>
+      <tr><td><strong>Escrow</strong></td><td>1.5% + ₦100 standard · 1.2% + ₦100 Pro · ₦50K+ txns</td><td><span class="pill">E</span></td><td>Pay-per-use, buyer-gated. Free Sellers can receive escrow orders.</td></tr>
       <tr><td><strong>Pro Seller subscription</strong></td><td>₦7,500/mo · ₦75,000/yr</td><td><span class="pill warn">F</span></td><td>50 listings, boosts, analytics with measurable lift</td></tr>
       <tr><td><strong>Listing boosts</strong></td><td>₦2,500 / ₦5K / ₦9K (3/7/14d)</td><td><span class="pill warn">F</span></td><td>Trust-gated visibility — verified sellers only for top slots</td></tr>
       <tr><td><strong>Premium Seller + Institution</strong></td><td>₦15-20K/mo · Custom</td><td><span class="pill muted">F+/G</span></td><td>Storefront, bulk upload, branches, API</td></tr>
@@ -518,8 +517,8 @@ body {
         <strong>Net rev:</strong> ₦4,925 (after Paystack)<br />
         <strong>SMS + ops cost:</strong> ~₦400/mo<br />
         <strong>Gross margin:</strong> <strong style="color:var(--teal-700);">~88%</strong><br />
-        <strong>Retention Y1:</strong> ~4 months<br />
-        <strong>LTV / CAC:</strong> ₦18K / &lt; ₦4K = <strong style="color:var(--teal-700);">4.5x</strong>
+        <strong>Retention Y1:</strong> ~8 months<br />
+        <strong>LTV / CAC:</strong> ~₦39K / &lt; ₦4K = <strong style="color:var(--teal-700);">~10x</strong>
       </p>
     </div>
     <div class="tile">
@@ -672,27 +671,35 @@ body {
      SLIDE 13 — Financial Projections
      ==================================================== -->
 <section class="slide">
-  <h3>Financial Projections — Realistic Base Case</h3>
-  <h2>~₦945M ARR by Year 3. Grounded in NG consumer SaaS benchmarks.</h2>
-  <table class="numeric" style="margin-top:12px;font-size:10.5pt;">
+  <h3>Financial Projections — Base Case</h3>
+  <h2>~₦1.01B ARR by Year 3. Pricing per MONETIZATION-PLAN.md v2.0.</h2>
+  <table class="numeric" style="margin-top:10px;font-size:10pt;">
     <thead>
-      <tr><th style="text-align:left;">Metric</th><th>Year 1</th><th>Year 2</th><th>Year 3</th></tr>
+      <tr><th style="text-align:left;">Metric</th><th>Year 1 (validation)</th><th>Year 2 (Phase F live)</th><th>Year 3 (trust network)</th></tr>
     </thead>
     <tbody>
       <tr><td><strong>Active sellers</strong></td><td>750</td><td>5,000</td><td>20,000</td></tr>
-      <tr><td><strong>Active buyers (cumulative)</strong></td><td>15,000</td><td>120,000</td><td>600,000</td></tr>
-      <tr><td><strong>Monthly active buyers (EOY)</strong></td><td>5,000</td><td>40,000</td><td>180,000</td></tr>
-      <tr><td><strong>Pro conversion %</strong></td><td>1.5%</td><td>2.5%</td><td>3.0%</td></tr>
-      <tr><td><strong>Paying Pro buyers</strong></td><td>75</td><td>1,000</td><td>5,400</td></tr>
-      <tr><td><strong>Diaspora Buyer subscribers</strong></td><td>—</td><td>200</td><td>1,000</td></tr>
-      <tr><td><strong>Pro Seller users (Phase F)</strong></td><td>—</td><td>300</td><td>1,600</td></tr>
-      <tr><td><strong>Monthly escrow txns (combined tiers)</strong></td><td>110</td><td>1,500</td><td>6,000</td></tr>
-      <tr><td><strong>Monthly revenue (EOY)</strong></td><td>₦738K</td><td>₦14.85M</td><td><strong style="color:var(--teal-700);">₦78.77M</strong></td></tr>
-      <tr style="background:var(--teal-50);"><td><strong>Annualized run-rate (EOY)</strong></td><td>₦8.9M</td><td>₦178M</td><td><strong style="color:var(--teal-700);">₦945M</strong></td></tr>
+      <tr><td><strong>Monthly active buyers</strong></td><td>5,000</td><td>40,000</td><td>180,000</td></tr>
+      <tr><td><strong>Pro Buyer conversion</strong></td><td>2.5%</td><td>3.5%</td><td>4.0%</td></tr>
+      <tr><td><strong>Paying Pro buyers</strong></td><td>125</td><td>1,400</td><td>7,200</td></tr>
+      <tr><td><strong>Paying Pro Sellers (Phase F)</strong></td><td>—</td><td>500</td><td>2,500</td></tr>
+      <tr><td><strong>Monthly escrow transactions</strong></td><td>85</td><td>1,000</td><td>4,200</td></tr>
+      <tr style="background:var(--teal-50);font-weight:700;"><td>Monthly revenue (EOY, base case)</td><td>₦1.14M</td><td>₦18.55M</td><td><strong style="color:var(--teal-700);">₦84.51M</strong></td></tr>
+      <tr style="background:var(--teal-50);"><td>Annualized run-rate (EOY, base case)</td><td>₦13.7M</td><td>₦223M</td><td><strong style="color:var(--teal-700);">₦1.01B ARR</strong></td></tr>
     </tbody>
   </table>
-  <p style="margin-top:14px;color:var(--ink-500);font-size:10.5pt;">
-    Realistic base reflects 1.5–3% Pro conversion, 12% annual mix, 4–8 month subscription retention — matching PiggyVest / Cowrywise NG B2C benchmarks. <strong>Conservative case:</strong> Y3 ~₦294M ARR. <strong>Upside case:</strong> Y3 ~₦3.4B ARR (requires upper-decile execution + strong Diaspora segment + Phase G logistics on time). Full sensitivity in the business plan.
+  <table class="numeric" style="margin-top:10px;font-size:9.5pt;">
+    <thead>
+      <tr><th style="text-align:left;">Scenario ranges (monthly EOY)</th><th>Conservative</th><th>Base</th><th>Stretch</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Year 1</td><td>₦251K</td><td><strong>₦1.14M</strong></td><td>₦3.83M</td></tr>
+      <tr><td>Year 2</td><td>₦5.31M</td><td><strong>₦18.55M</strong></td><td>₦51.34M</td></tr>
+      <tr><td>Year 3 (ARR)</td><td>₦331M</td><td><strong>₦1.01B</strong></td><td>₦2.19B</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:8px;color:var(--ink-500);font-size:9pt;">
+    Projections robust to ±15% variation in individual pricing inputs (sensitivity disclosure). Pricing will be refined post-Phase-E based on real-world conversion, retention, and uptake data. Full assumptions in the business plan.
   </p>
   <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>13 / 16</span></div>
 </section>
