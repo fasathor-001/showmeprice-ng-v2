@@ -31,6 +31,17 @@ export const categories = pgTable("categories", {
   // strings; the marketplace search resolves matching categories via
   // `cs.["<lower-of-query>"]` JSONB containment.
   search_aliases: jsonb("search_aliases").notNull().default("[]"),
+
+  // Phase E.1.0: per-category feature flags driving warning banners,
+  // high-value markers, and required-field hints. Examples:
+  //   {"warning_banner": "Always inspect properties in person"}
+  //   {"high_value": true}
+  //   {"requires_condition_field": true}
+  //   {"requires_year_field": true} for vehicles
+  // Phase E uses for the property warning banner (migrated from hardcoded);
+  // Phase F+ uses for category-specific Pro pricing and tier restrictions.
+  category_features: jsonb("category_features").notNull().default({}),
+
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
