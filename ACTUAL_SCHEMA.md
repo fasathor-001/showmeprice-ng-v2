@@ -235,7 +235,7 @@ Empty in Phase E; Phase G+ populates with hold/release/refund records. Forms cir
 | buyer_id | uuid → profiles(id) RESTRICT | NO | — |
 | seller_id | uuid → profiles(id) RESTRICT | NO | — |
 | amount_kobo | bigint | YES | — |
-| payment_provider | text | YES | — (`'monnify'`, `'paystack'`) |
+| payment_provider | text | YES | — (`'paystack'`; D-074 deprioritized Monnify; values added if a Phase F+ alternative ships) |
 | provider_reference | text | YES | — |
 | status | text | YES | — (`'held'`, `'released'`, `'refunded'`, `'disputed'`) |
 | held_at | timestamptz | YES | — |
@@ -446,7 +446,7 @@ Empty in Phase E; Phase G+ canonical fulfillment table (supersedes `escrow_order
 
 ### `payments`
 
-Provider-agnostic payment record. Phase E populates via Paystack only; Phase F+ may add Flutterwave; Phase G+ adds Monnify for escrow.
+Provider-agnostic payment record. Phase E populates via Paystack only (D-074). Phase F+ may add Flutterwave behind the same `PaymentGateway` interface (D-078). Monnify was on the original Phase G+ escrow shortlist but was deprioritized per D-074 — Paystack covers Phase E escrow per D-082.
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
