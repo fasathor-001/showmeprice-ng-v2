@@ -887,3 +887,215 @@ The standing pre-flight diagnostic trio (pg_proc / pg_indexes / pg_constraint sc
 - ACTUAL_SCHEMA.md refresh removes the `admin_audit_log` entry entirely.
 - E.1.4 RLS block writes fresh policies for `admin_action_log` from scratch.
 - Phase A's `actor_id → profiles(id)` model (admins = profiles with `role='admin'`) is left to Phase F+ for full unification with the new `admins` entity. `is_admin(auth.uid())` continues to check `profiles.role = 'admin'` during the transition — separate decision, not Phase E scope.
+
+---
+
+## D-082: Premium Buyer subscription tier eliminated; escrow becomes pay-per-use
+
+**Context:** v1 monetization plan included a Premium Buyer subscription tier at ₦7,500/mo whose primary benefit was access to escrow protection. Deeper Nigerian-market analysis (PiggyVest / Cowrywise consumer subscription benchmarks; per-transaction buyer behavior in high-trust categories) showed Nigerian buyers do not pre-commit to monthly subscriptions for *optional* protection on rare high-value purchases (typical buyer transacts 1–3 high-value items per year).
+
+**Decision:** Eliminate the Premium Buyer subscription tier entirely. Escrow becomes **pay-per-use, available to all buyers** including Free Buyer, at standard rate **1.5% + ₦100**. Pro Buyers receive a discounted rate as part of their subscription (see D-086). There is no separate "Premium Buyer" subscription.
+
+The restructured buyer ladder is: **Free → Pro → Institution**, with Diaspora as a separate Pro variant (USD-priced) for international buyers.
+
+**Operational:**
+- Server-side escrow fee computation enforces tier-based rates (per D-086).
+- Marketing should never frame escrow as "Premium feature" — it's a universally available service with a Pro discount.
+- Pro Buyer value proposition rebalances to: contact reveal + SMS alerts + Pro badge + escrow discount + priority dispute response time (per D-089).
+
+---
+
+## D-083: Pro Buyer contact reveal caps tiered to prevent harvesting
+
+**Context:** Unlimited contact reveals for Pro Buyers creates an exploit vector: a single bad actor pays ₦5,000 once, scrapes contact details for thousands of verified sellers, and resells the list. The platform's seller trust depends on contact details NOT becoming a commodity, so per-Pro-Buyer reveal caps are required.
+
+**Decision:** Daily reveal caps tiered by Pro tenure and standing:
+
+| Buyer state | Daily reveal cap |
+|---|---|
+| New Pro Buyer (first 30 days of subscription) | 10 reveals/day |
+| Established Pro Buyer (30+ days, no open reports) | 25 reveals/day |
+| Institution Buyer | Custom (negotiated per contract) |
+| Free Buyer / credit-pack user | Bounded by purchased credits (no daily cap, but finite pool) |
+| New buyer with signup-grant free reveal (D-084) | 1 lifetime free reveal |
+
+**Operational:**
+- `get_buyer_reveal_cap(p_user_id UUID) RETURNS INT` SQL function implements the tier check (E.2.0.1 ships this).
+- "No open reports" means zero rows in `reports` where `target_type='user' AND target_id=user_id AND status IN ('new', 'in_review')` — computed on read inside the function, not denormalized.
+- Reveals consumed against cap reset at 00:00 Africa/Lagos.
+- Cap exhaustion shows clear messaging: "You've used X of Y reveals today; resets at midnight Lagos time."
+
+---
+
+## D-084: Pro Buyer trial replaced with 1 free reveal at signup
+
+**Context:** v1 plan proposed a 14-day full Pro trial including unlimited reveals. This is a contact-harvesting attack vector — a fraudster signs up, scrapes seller contacts for 14 days, abandons the account, repeats. Even with phone OTP verification, SIM swap and burner numbers make 14-day full-Pro trials unsafe.
+
+**Decision:** No Pro trial. Instead, **every new buyer receives 1 free contact reveal at signup**. Bounded, attack-resistant, generous enough to demonstrate the contact-reveal feature value.
+
+**Operational:**
+- `profiles.signup_free_reveals_remaining INT NOT NULL DEFAULT 1` tracks the grant (E.2.0.0 ships this).
+- First reveal a new buyer attempts consumes the free grant (decrements to 0).
+- After exhaustion, the buyer must purchase a credit pack or subscribe to Pro to reveal again.
+- Existing buyers (`created_at < deployment_date - 30 days`) are backfilled to 0 — they've had ample opportunity to discover the feature pre-grant; new grant is for fresh signups only.
+- Existing buyers (`created_at >= deployment_date - 30 days`) are backfilled to 1 — they're recent enough to count as "new" by intent.
+
+---
+
+## D-085: Credit pack structure locked
+
+**Context:** Pay-per-use contact reveal is the dominant expected buyer-revenue stream (per D-082 analysis, Nigerian buyers prefer pay-per-use to subscription for occasional features). Pack structure must balance entry-point accessibility (₦500 "airtime moment") with bulk-purchase incentive.
+
+**Decision:** Four credit pack tiers:
+
+| Pack | Price | Reveals | Effective ₦/reveal |
+|---|---|---|---|
+| Trial | ₦500 | 1 | ₦500 |
+| Small | ₦1,500 | 3 | ₦500 |
+| Medium | ₦3,500 | 9 | ₦389 |
+| Large | ₦7,000 | 20 | ₦350 |
+
+**Operational:**
+- The ₦500 Trial pack is positioned as the entry-point "airtime moment" — every Nigerian buyer is comfortable buying ₦500 airtime, and the price point removes friction from first-reveal commitment.
+- Pro Monthly (₦5,000/mo) is positioned for power users exceeding ~4 reveals/month, where subscription breakeven kicks in.
+- Marketing must never frame Trial pack and Small pack as equivalent — they cost the same per reveal, but Trial is the "try once" path and Small is the "commit to a few" path.
+- Pack purchases are tracked via the `payments` table with `payment_type='credit_pack'` and a new `pack_type` enum (`'trial' | 'small' | 'medium' | 'large'`) — E.2.0.4 ships this enum.
+- Credits accumulate on the `credit_balances` table (running balance only, no per-pack metadata).
+
+---
+
+## D-086: Pro Buyer escrow fee discount
+
+**Context:** Pro Buyer subscription needs value differentiation beyond contact reveal — after D-082 eliminated Premium Buyer escrow gating, Pro becomes the only subscription tier and needs structural advantages across the buyer journey, not just at first-touch.
+
+**Decision:** Pro Buyers receive a **discounted escrow fee of 1.2% + ₦100** vs the standard **1.5% + ₦100** rate. The discount applies to all eligible protected transactions (₦50,000+).
+
+| Transaction | Standard fee (Free / credit pack) | Pro Buyer fee |
+|---|---|---|
+| ₦50,000 | ₦850 | ₦700 |
+| ₦100,000 | ₦1,600 | ₦1,300 |
+| ₦180,000 | ₦2,800 | ₦2,260 |
+| ₦500,000 | ₦7,600 | ₦6,100 |
+| ₦1,000,000 | ₦15,100 | ₦12,100 |
+
+**Operational:**
+- `compute_escrow_fee(p_amount_kobo BIGINT, p_user_id UUID) RETURNS BIGINT` SQL function enforces tier-based rates server-side (E.2.0.2 ships this).
+- Client-side fee display calls a read-only API; server recomputes on escrow initiation. Client-supplied fee values are never trusted.
+- Pro tenure check inside the function: function looks up `subscriptions` for active subscription where `user_id = p_user_id AND status = 'active' AND current_period_end > NOW()`.
+- Eligibility threshold of ₦50,000 applies to both tiers; below that, escrow is not offered (per existing Phase E spec).
+
+---
+
+## D-087: Pro Buyer launch promo — ₦3,000/mo first 3 months
+
+**Context:** Launch-period pricing needs to be aggressive enough to overcome cold-start friction (no early-adopter advocacy, no peer-review yet) while still establishing a defensible standard price point post-promo.
+
+**Decision:** Pro Buyer subscription priced at **₦3,000/month for the first 3 months** after a buyer's subscription start date. Standard price of **₦5,000/month** thereafter. Annual price unchanged at **₦45,000/year** (no promo applies to annual — annual buyers self-select as committed and the ₦45K already encodes ~25% discount vs 12× monthly standard).
+
+**Operational:**
+- "Launch" trigger TBD operationally — current intent: first verified buyer signup completed after Stage 2.A (Termii OTP integration) ships, marking the platform's true production launch. Hard-coding this trigger requires Frank's call closer to Stage 2.A landing.
+- `subscriptions.promo_code TEXT` and `subscriptions.promo_expires_at TIMESTAMPTZ` track promo state (E.2.0.3 ships this).
+- Promo code value for this launch promo: `'LAUNCH_3K'`.
+- `promo_expires_at = subscription_created_at + INTERVAL '90 days'`.
+- After expiry, Paystack subscription renewal proceeds at the ₦5,000 standard rate. Buyer is notified via email + in-app 14 days before promo expiry: *"Your launch promo expires on [date]; subscription renews at ₦5,000/mo. Lock in launch pricing for the year — switch to annual at ₦45,000."*
+- Promo applies to subscription creation date, not calendar window — a buyer signing up at month 11 of the launch year still gets 3 months at ₦3,000.
+
+---
+
+## D-088: Founding Seller offer — first 100 verified sellers
+
+**Context:** Marketplace bootstrapping requires supply-side subsidy. Without verified sellers, buyer acquisition produces churn. Founding Seller offer rewards the cohort that takes early reputational risk on an unproven platform.
+
+**Decision:** The first 100 verified sellers receive:
+
+1. **6 months Pro Seller free** — the free period starts when **Phase F (seller monetization) launches**, not at seller signup. Sellers verified before Phase F see "Pro Seller features unlock free when Phase F launches" in their dashboard.
+2. **Permanent "Founding Seller" badge** — displayed alongside Verified Seller badge; distinct from paid-tier badges.
+3. **Grandfathered ₦7,500/month Pro Seller pricing for life** — Phase F+ price increases never apply.
+4. **Priority onboarding** — direct founder-led setup support.
+5. **Free listing-quality review** — one-time review of all listings with feedback on quality, photos, descriptions.
+6. **Early seller feedback group access** — direct line to product team for feature requests / friction reports.
+
+**Operational:**
+- Founding Seller status tracked on the **`businesses` table** (not `profiles` — seller-specific attributes belong to the seller entity):
+  - `is_founding_seller BOOLEAN NOT NULL DEFAULT FALSE`
+  - `founding_seller_granted_at TIMESTAMPTZ`
+  - `grandfathered_pro_price_kobo INTEGER` — set to `750000` (₦7,500) for Founding Sellers, NULL for others
+- Phase E Stage 2.B (seller foundation work) ships the **schema infrastructure** but does NOT execute the badge grants. Grants happen at Phase F launch via an admin-run script that selects the first 100 sellers ordered by `seller_verifications.reviewed_at ASC` where `seller_verifications.status = 'verified'`.
+- Founding Seller badge is displayed via `is_founding_seller=true` check; Phase F UI work surfaces it.
+
+---
+
+## D-089: Trust & safety operates equally regardless of tier
+
+**Context:** Paid-tier perks can erode trust positioning if they appear to influence dispute outcomes. The platform's marketing thesis depends on dispute fairness being seen as universal.
+
+**Decision:** Paid tiers (Pro Buyer, Pro Seller, Premium Seller, Institution) receive **faster operational response times** on support and dispute queues. They do NOT receive **preferential dispute outcomes** — every escrow dispute is reviewed against the same evidentiary standards regardless of buyer or seller tier.
+
+**Tier-based SLA scaffolding** (Phase F operationalization):
+
+| Tier | First-response SLA | Resolution target |
+|---|---|---|
+| Institution | 4 business hours | 24 business hours |
+| Pro Buyer / Pro Seller | 24 business hours | 5 business days |
+| Free Buyer / Free Seller | 5 business days | 14 business days |
+
+**Operational:**
+- Phase E ships manual moderation with no formal SLA tier separation (operational reality of single-operator launch).
+- Phase F implements queue prioritization in the admin dashboard.
+- Dispute case reviewers are not informed of buyer/seller tier during evidence evaluation — tier metadata appears in case files but is segregated from the evidence-review surface to prevent unconscious bias.
+- Public-facing copy: *"We respond faster to Pro members; we resolve every dispute the same way."*
+
+---
+
+## D-090: Mobile money channels enabled at Paystack launch
+
+**Context:** Nigerian transaction reality skews heavily toward mobile money (OPay, PalmPay, Kuda, MoniePoint) and bank transfer rather than cards. Card-only payment would lock out a material share of the addressable market — particularly younger buyers and informal-economy participants who are core to the high-intent segment ShowMePrice targets.
+
+**Decision:** Paystack integration in Stage 2.B (`PaystackGateway` concrete implementation) must explicitly enable the following channels at first launch, not as a Phase F+ enhancement:
+
+- **Card** (Mastercard, Visa, Verve)
+- **Bank transfer** (covers OPay, PalmPay, Kuda, MoniePoint, traditional bank apps)
+- **USSD** (feature-phone fallback for buyers without smartphone banking)
+- **Mobile money** (where Paystack's mobile money channel covers it)
+
+**Operational:**
+- Paystack `channels` array parameter on transaction initialization must include: `['card', 'bank_transfer', 'ussd', 'mobile_money']`.
+- App UI must show all available channels at checkout, not card-only.
+- Test plan: at minimum, one successful end-to-end transaction per channel before Stage 2.B ships to production.
+- Channel failure handling: if a buyer's primary channel fails (e.g., OPay outage), the UI prompts retry with a different channel rather than blocking the transaction.
+
+---
+
+## D-091: Seller monetization deferred to Phase F
+
+**Context:** Year 1 marketplace strategy prioritizes trust velocity over revenue extraction. Sellers will not pay for tools until they see buyer demand on the platform; charging too early drives sellers off before the network effect compounds.
+
+**Decision:** Phase E ships **seller-side foundation only** — no seller monetization. Specifically:
+
+**Phase E seller scope (foundation, all free):**
+- Seller profile creation and edit flow
+- Listing creation with mandatory visible price (per Banked Principle 5)
+- Listings in priority Phase E categories: phones, laptops, electronics, appliances, generators
+- In-app inbox structure (no external messaging integrations)
+- Verification application form and admin review queue (uses Korapay NinVerifier per D-074)
+- Founding Seller badge infrastructure (per D-088)
+- Seller report/block tools
+- Mark-item-as-sold flow
+
+**Phase E sellers retain unlimited listings** per the existing `businesses.seller_listing_limit` nullable=unlimited spec. The 10-listing cap is a Phase F constraint applying only to the Free Seller tier when monetization launches.
+
+**Deferred to Phase F:**
+- Pro Seller subscription (₦7,500/mo)
+- Premium Seller subscription (₦15,000–₦20,000/mo, Phase F+)
+- Listing boosts (₦2,500–₦9,000)
+- Featured Seller placement
+- Seller analytics dashboard
+- Seller storefront customization
+- Bulk upload
+- API access (Institution Seller)
+- Free Seller tier limits (10 listings, 3 photos, no boosts)
+
+**Operational:**
+- Phase E Year 1 revenue is buyer-side only (Pro Buyer subscriptions, credit packs, escrow fees, Diaspora Buyer subscriptions).
+- Phase F launch trigger: defined by buyer-side traction metrics (TBD) — likely 250+ verified sellers active + 10,000+ active buyers + measurable seller demand for Pro tooling.
+- Founding Seller 6-month free Pro Seller period (D-088) starts at Phase F launch, not at seller verification — sellers verified during Phase E "bank" the free period until monetization arrives.
