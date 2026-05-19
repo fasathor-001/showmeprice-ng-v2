@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ShowMePrice.ng — Investor One-Pager</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  /* One-pager-specific: force single-page print, denser layout */
+  @page { size: Letter; margin: 0.6in; }
+  .one-pager { padding: 32px 40px; font-size: 10pt; }
+  .one-pager h1 { font-size: 22pt; margin: 0; color: var(--teal-800); }
+  .one-pager .tagline { font-size: 11pt; color: var(--ink-500); margin: 4px 0 16px; }
+  .one-pager h2 { font-size: 11pt; margin: 14px 0 4px; padding: 0; border: none; color: var(--teal-700); text-transform: uppercase; letter-spacing: 0.05em; }
+  .one-pager p { margin: 0 0 8px; }
+  .one-pager ul { margin: 4px 0 8px; padding-left: 18px; }
+  .one-pager li { margin-bottom: 2px; }
+  .one-pager .header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 12px; border-bottom: 2px solid var(--teal-600); margin-bottom: 16px;
+  }
+  .one-pager .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 10px 0 14px; }
+  .one-pager .metric { padding: 8px 6px; border: 1px solid var(--ink-200); border-radius: 6px; }
+  .one-pager .metric .number { font-size: 16pt; }
+  .one-pager .metric .label { font-size: 7.5pt; }
+  .one-pager .footer {
+    margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--ink-200);
+    font-size: 8.5pt; color: var(--ink-500); display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<div class="container one-pager">
+
+<div class="header">
+  <div>
+    <h1>ShowMePrice<span style="color:var(--teal-600)">.ng</span></h1>
+    <div class="tagline">Nigeria's trust-first marketplace — real prices, verified sellers, safer high-value trade.</div>
+  </div>
+  <div style="text-align:right; font-size:9pt; color:var(--ink-500);">
+    Investor Introduction<br />
+    <strong style="color:var(--ink);">Pre-Seed Raise</strong>
+  </div>
+</div>
+
+<h2>The Problem</h2>
+<p>
+Nigerian online commerce is already large — <strong>$9.35B</strong> in 2025 — but trust is the bottleneck. Buyers fear fake sellers and advance-payment scams; sellers waste time on unserious "DM for price" buyers. Most transactions migrate to WhatsApp the moment serious negotiation starts, taking the dispute trail with them.
+</p>
+
+<h2>The Solution</h2>
+<p>
+ShowMePrice builds trust into the transaction flow, not as a badge. Real prices required. Phone-verified buyers. In-app messaging by default (creates dispute trail). Pro buyers unlock direct WhatsApp/phone — a paid "serious buyer" signal sellers can see. Premium buyers access escrow on eligible high-value products (₦50,000+, 1.5% + ₦100 fee). Admin moderation with reports and blocks. Phase E ships the foundation; later phases add seller tools and logistics-backed fulfillment.
+</p>
+
+<h2>Market</h2>
+<p>
+Nigerian e-commerce: <strong>$9.35B (2025) → $18.68B (2031)</strong>, ~12% CAGR. Social commerce: $2.04B → $3.96B by 2030. Mobile-first, 80%+ of online orders.
+</p>
+
+<h2>Wedge</h2>
+<p>
+Lagos-first. Phones, laptops, electronics, appliances, generators — categories where price transparency, seller credibility, and payment safety matter most. <strong>50–100 verified sellers before aggressive buyer acquisition.</strong> We compete on trust density, not listing volume.
+</p>
+
+<h2>Business Model</h2>
+<ul>
+  <li><strong>Pro Buyer subscription</strong> — ₦5,000/mo or ₦45,000/yr — contact reveal, SMS alerts, Pro badge</li>
+  <li><strong>Seller Premium</strong> (Phase F) — listing limits, analytics, badge priority</li>
+  <li><strong>Escrow fee</strong> — 1.5% + ₦100 on eligible protected transactions</li>
+  <li><strong>Promoted listings + institution plans + logistics</strong> (Phase G+)</li>
+</ul>
+
+<h2>Traction (Infrastructure)</h2>
+<ul>
+  <li>Phase E Stage 1 shipped — 42-table production schema, RLS hardened, payment-gateway abstraction in place</li>
+  <li>Termii (SMS) sender ID and Korapay (Identity) live-mode KYC in flight</li>
+  <li>Paystack integration scaffolded behind a vendor-agnostic interface</li>
+  <li>Cloudflare Pages edge deployment live on custom domain</li>
+</ul>
+
+<div class="metrics-row">
+  <div class="metric"><span class="number">$9.35B</span><span class="label">NG e-commerce, 2025</span></div>
+  <div class="metric"><span class="number">42</span><span class="label">Tables shipped</span></div>
+  <div class="metric"><span class="number">3</span><span class="label">Year-3 ARR target ₦933M base</span></div>
+  <div class="metric"><span class="number">$300K</span><span class="label">Pre-seed ask</span></div>
+</div>
+
+<h2>3-Year Base Case</h2>
+<p style="margin-bottom:4px;">
+  Year 1: 750 sellers, 15K buyers, ₦1.59M monthly revenue by year-end. Year 2: 5K sellers, 120K buyers, ₦15.86M monthly revenue. Year 3: 20K sellers, 600K buyers, ~<strong>₦933M annualized run-rate</strong>. Conservative + upside cases in full plan.
+</p>
+
+<h2>Team</h2>
+<p>
+Solo technical founder, <strong>[OWNER: NAME]</strong> — built ShowMePrice end-to-end from infrastructure to launch-ready Phase E. <strong>[OWNER: ONE-LINE BIO — prior role, technical credibility marker, why Nigerian commerce specifically]</strong>. Capital-efficient by construction; post-funding hiring plan focuses on seller acquisition + trust & safety ops, not engineering.
+</p>
+
+<h2>The Ask</h2>
+<p>
+<strong>$300K pre-seed</strong> to ship Phase E to full launch + 12–18 months of operating runway. Use of funds: ~40% seller acquisition (Lagos verified sellers), ~25% trust & safety operations (escrow, moderation, dispute review), ~20% payment & SMS operations (transaction-volume scaling), ~15% legal/compliance + reserve.
+</p>
+
+<div class="footer">
+  <div>
+    <strong>[OWNER: NAME]</strong> · Founder &amp; CEO<br />
+    [OWNER: email@showmeprice.ng] · [OWNER: phone] · showmeprice.ng
+  </div>
+  <div style="text-align:right;">
+    Confidential — for investor evaluation only
+  </div>
+</div>
+
+</div>
+</body>
+</html>

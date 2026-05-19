@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ShowMePrice.ng — Investor Pitch Deck</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+/* ============================================================
+   Pitch deck — 16:9 slides, print one slide per landscape page
+   ============================================================ */
+
+body {
+  background: #1e293b;
+  color: var(--ink);
+  padding: 24px;
+  font-size: 14pt;
+}
+
+.deck {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.slide {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  padding: 56px 64px;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide h1 {
+  font-size: 36pt;
+  color: var(--teal-800);
+  margin: 0 0 0.3em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.slide h2 {
+  font-size: 22pt;
+  margin: 0 0 0.6em;
+  padding: 0;
+  border: none;
+  color: var(--ink);
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.slide h3 {
+  font-size: 14pt;
+  margin: 0 0 0.8em;
+  color: var(--teal-700);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.slide p,
+.slide li {
+  font-size: 13pt;
+  line-height: 1.5;
+}
+
+.slide .big {
+  font-size: 18pt;
+  color: var(--ink-700);
+  line-height: 1.45;
+  font-weight: 400;
+}
+
+.slide .footnote {
+  position: absolute;
+  bottom: 24px;
+  left: 64px;
+  right: 64px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9pt;
+  color: var(--ink-400);
+}
+
+.slide .footnote .brand {
+  color: var(--teal-700);
+  font-weight: 600;
+}
+
+.slide-cover {
+  background: linear-gradient(135deg, var(--teal-800) 0%, var(--teal-600) 100%);
+  color: white;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.slide-cover h1 {
+  font-size: 56pt;
+  color: white;
+  margin-bottom: 0.1em;
+}
+
+.slide-cover .domain { color: rgba(255,255,255,0.7); }
+
+.slide-cover .subtitle {
+  font-size: 18pt;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 400;
+  margin-top: 0.4em;
+  max-width: 720px;
+}
+
+.slide-cover .meta {
+  position: absolute;
+  bottom: 36px;
+  left: 0;
+  right: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11pt;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.slide-big-idea {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.slide-big-idea h2 {
+  font-size: 32pt;
+  max-width: 900px;
+  color: var(--teal-800);
+}
+
+.slide-big-idea .small {
+  font-size: 13pt;
+  color: var(--ink-500);
+  margin-top: 1em;
+}
+
+.cols-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  flex: 1;
+}
+
+.cols-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+  flex: 1;
+}
+
+.cols-4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.tile {
+  border: 1px solid var(--ink-200);
+  border-radius: 8px;
+  padding: 16px 18px;
+  background: var(--ink-50);
+}
+
+.tile h4 {
+  margin: 0 0 4px;
+  font-size: 11pt;
+  color: var(--teal-700);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tile p {
+  font-size: 11pt;
+  margin: 0;
+  color: var(--ink-700);
+  line-height: 1.4;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin: 18px 0;
+}
+
+.metric-tile {
+  text-align: center;
+  border: 1px solid var(--ink-200);
+  border-radius: 8px;
+  padding: 18px 12px;
+}
+
+.metric-tile .num {
+  display: block;
+  font-size: 26pt;
+  font-weight: 800;
+  color: var(--teal-700);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-tile .lab {
+  display: block;
+  margin-top: 6px;
+  font-size: 9.5pt;
+  color: var(--ink-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.slide table { font-size: 11pt; margin: 14px 0 0; }
+.slide table th { font-size: 10pt; padding: 7px 10px; }
+.slide table td { padding: 6px 10px; }
+
+.checklist { list-style: none; padding: 0; }
+.checklist li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 10px;
+}
+.checklist li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--green-600);
+  font-weight: 800;
+  font-size: 14pt;
+}
+
+.gap-list { list-style: none; padding: 0; }
+.gap-list li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 10px;
+}
+.gap-list li::before {
+  content: '✕';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--rose-600);
+  font-weight: 800;
+  font-size: 14pt;
+}
+
+.pill {
+  display: inline-block;
+  font-size: 9pt;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: var(--teal-100);
+  color: var(--teal-800);
+  margin-right: 6px;
+  letter-spacing: 0.03em;
+}
+
+.pill.warn { background: #fef3c7; color: var(--amber-700); }
+.pill.muted { background: var(--ink-100); color: var(--ink-500); }
+
+/* ============================================================
+   PRINT — one slide per landscape page
+   ============================================================ */
+
+@page {
+  size: Letter landscape;
+  margin: 0;
+}
+
+@media print {
+  body {
+    background: white;
+    padding: 0;
+  }
+
+  .deck { max-width: none; margin: 0; }
+
+  .slide {
+    width: 11in;
+    height: 8.5in;
+    aspect-ratio: auto;
+    margin: 0;
+    padding: 0.5in 0.7in;
+    border-radius: 0;
+    box-shadow: none;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .slide:last-child { page-break-after: auto; }
+}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- ====================================================
+     SLIDE 1 — Cover
+     ==================================================== -->
+<section class="slide slide-cover">
+  <h1>ShowMePrice<span class="domain">.ng</span></h1>
+  <div class="subtitle">
+    Nigeria's trust-first marketplace —<br />
+    real prices, verified sellers, safer high-value trade.
+  </div>
+  <div class="meta">
+    Pre-Seed Investor Deck &nbsp;·&nbsp; [OWNER: Date]
+  </div>
+</section>
+
+<!-- ====================================================
+     SLIDE 2 — The Problem
+     ==================================================== -->
+<section class="slide">
+  <h3>The Problem</h3>
+  <h2>Nigerians already buy online. They just don't trust the transaction.</h2>
+  <div class="cols-2" style="margin-top:auto;">
+    <div>
+      <h4 style="color:var(--teal-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Buyer fears</h4>
+      <ul style="padding-left:18px;">
+        <li>Fake listings, fake sellers</li>
+        <li>"DM for price" — no price upfront</li>
+        <li>Advance-payment scams</li>
+        <li>Disappearing vendors after payment</li>
+        <li>No recourse when things go wrong</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="color:var(--teal-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Seller frustrations</h4>
+      <ul style="padding-left:18px;">
+        <li>Unserious "last price" buyers</li>
+        <li>Spam and fake payment claims</li>
+        <li>Time wasted on browsing, not buying</li>
+        <li>No way to signal serious buyer intent</li>
+        <li>Conversations off-platform = no record</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>2 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 3 — The Insight
+     ==================================================== -->
+<section class="slide slide-big-idea">
+  <h3>The insight</h3>
+  <h2>
+    Most marketplaces treat trust as a badge.<br />
+    <span style="color:var(--teal-600);">We treat trust as a system.</span>
+  </h2>
+  <p class="small">
+    The next Nigerian marketplace winner won't have more listings.<br />
+    It will have more trust per transaction.
+  </p>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>3 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 4 — Market
+     ==================================================== -->
+<section class="slide">
+  <h3>Market</h3>
+  <h2>A large, growing market — bottlenecked on trust.</h2>
+  <div class="metric-grid">
+    <div class="metric-tile"><span class="num">$9.35B</span><span class="lab">NG e-commerce, 2025</span></div>
+    <div class="metric-tile"><span class="num">$18.68B</span><span class="lab">NG e-commerce, 2031F</span></div>
+    <div class="metric-tile"><span class="num">$2.04B</span><span class="lab">NG social commerce, 2025</span></div>
+    <div class="metric-tile"><span class="num">~12%</span><span class="lab">CAGR through 2031</span></div>
+  </div>
+  <p class="big" style="margin-top:auto;">
+    Mobile-first: 80%+ of NG online orders via mobile. Smartphone adoption, digital payments, and logistics are unlocking — but <strong>buyer-seller trust remains the bottleneck</strong> across classifieds, social commerce, and direct trade.
+  </p>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>Sources: Mordor Intelligence (2025); ResearchAndMarkets (2025–2026)&nbsp; · &nbsp;4 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 5 — Solution
+     ==================================================== -->
+<section class="slide">
+  <h3>Solution</h3>
+  <h2>Trust is built into the transaction flow.</h2>
+  <div class="cols-3" style="margin-top:14px;">
+    <div class="tile">
+      <h4>Real prices</h4>
+      <p>Every listing shows a price. No "DM for price" culture. Search becomes meaningful — price is the verb.</p>
+    </div>
+    <div class="tile">
+      <h4>Phone-verified buyers</h4>
+      <p>Nigerian-familiar phone-first signup via Termii. SMS verification + structured profile = real users, not bots.</p>
+    </div>
+    <div class="tile">
+      <h4>Verified sellers</h4>
+      <p>Manual identity verification at launch. NIN integration via Korapay Identity for scale. Verified badge as trust signal.</p>
+    </div>
+    <div class="tile">
+      <h4>In-app messaging</h4>
+      <p>Free buyers chat inside ShowMePrice. Creates a reviewable trail for moderation and dispute resolution.</p>
+    </div>
+    <div class="tile">
+      <h4>Pro fast lane</h4>
+      <p>Pro buyers unlock WhatsApp + phone contact, get SMS alerts, show as "Pro buyer inquiry" in seller inboxes.</p>
+    </div>
+    <div class="tile">
+      <h4>Escrow protection</h4>
+      <p>Eligible high-value transactions (₦50K+) flow through escrow. Seller paid after buyer confirms. 1.5% + ₦100 fee.</p>
+    </div>
+  </div>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>5 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 6 — Product Flow
+     ==================================================== -->
+<section class="slide">
+  <h3>Product Flow</h3>
+  <h2>Two sides, one trust-enforced conversation.</h2>
+  <div class="cols-2" style="margin-top:14px;">
+    <div>
+      <h4 style="color:var(--teal-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Buyer journey</h4>
+      <ol style="padding-left:20px;">
+        <li>Browse listings (real prices visible)</li>
+        <li>Save listings · bookmarks</li>
+        <li>Phone-first signup (Termii OTP)</li>
+        <li>Message seller in-app</li>
+        <li>Upgrade to Pro · reveal contact</li>
+        <li>Use escrow on ₦50K+ purchases</li>
+        <li>Report / block if needed</li>
+      </ol>
+    </div>
+    <div>
+      <h4 style="color:var(--teal-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Seller journey</h4>
+      <ol style="padding-left:20px;">
+        <li>Create business profile · verify</li>
+        <li>List products with required price</li>
+        <li>Receive verified inquiries · inbox grouped by listing</li>
+        <li>Use quick replies · Nigerian-flavored templates</li>
+        <li>See Pro buyer badge → reply faster</li>
+        <li>Accept escrow on high-value sale</li>
+        <li>Get paid post-confirmation</li>
+      </ol>
+    </div>
+  </div>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>6 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 7 — Trust Architecture
+     ==================================================== -->
+<section class="slide">
+  <h3>Trust Architecture</h3>
+  <h2>Five layers, each filtering for seriousness.</h2>
+  <table class="compare" style="margin-top:8px;">
+    <thead>
+      <tr><th style="width:140px;">Layer</th><th>Mechanism</th><th style="width:230px;">What it filters out</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>1. Price transparency</strong></td><td>Every listing requires a price field. UI surfaces price upfront.</td><td>"DM for price" time-wasters</td></tr>
+      <tr><td><strong>2. Verification</strong></td><td>Phone-first buyer signup. Manual seller verification → NIN at scale.</td><td>Bots, throwaway accounts, fake sellers</td></tr>
+      <tr><td><strong>3. Messaging trail</strong></td><td>In-app messaging by default. Conversations visible to admin.</td><td>Off-platform routing before payment</td></tr>
+      <tr><td><strong>4. PII &amp; payment filter</strong></td><td>Regex filter on phone/email/social/bank-account/payment-URL in messages.</td><td>Off-platform payment scams</td></tr>
+      <tr><td><strong>5. Escrow + admin review</strong></td><td>Escrow available ₦50K+. Manual admin release/refund + reports queue.</td><td>Advance-payment scams on high-value items</td></tr>
+    </tbody>
+  </table>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>7 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 8 — Business Model
+     ==================================================== -->
+<section class="slide">
+  <h3>Business Model</h3>
+  <h2>Six revenue streams. Trust + access + transactions + fulfillment.</h2>
+  <table style="margin-top:8px;">
+    <thead>
+      <tr><th>Stream</th><th>Pricing</th><th>Phase</th><th>Logic</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Pro Buyer subscription</strong></td><td>₦5,000/mo · ₦45,000/yr</td><td><span class="pill">E (now)</span></td><td>Serious-buyer signal + contact reveal</td></tr>
+      <tr><td><strong>Escrow fee</strong></td><td>1.5% + ₦100</td><td><span class="pill">E (now)</span></td><td>Service fee for protected ₦50K+ transactions</td></tr>
+      <tr><td><strong>Seller Premium</strong></td><td>~₦7,500/mo (TBD)</td><td><span class="pill warn">F</span></td><td>Listing limits, analytics, badge priority</td></tr>
+      <tr><td><strong>Promoted listings</strong></td><td>Per-listing boost fee</td><td><span class="pill warn">F</span></td><td>Surface high-quality sellers, never override trust</td></tr>
+      <tr><td><strong>Institution / bulk plans</strong></td><td>Custom</td><td><span class="pill muted">G</span></td><td>B2B procurement seats + custom terms</td></tr>
+      <tr><td><strong>Logistics / fulfillment</strong></td><td>Commission / partnership</td><td><span class="pill muted">G+</span></td><td>Delivery coordination + escrow bundles</td></tr>
+    </tbody>
+  </table>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>8 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 9 — Unit Economics
+     ==================================================== -->
+<section class="slide">
+  <h3>Unit Economics</h3>
+  <h2>High-margin SaaS economics on the buyer side. Service-fee economics on transactions.</h2>
+  <div class="cols-3" style="margin-top:14px;">
+    <div class="tile">
+      <h4>Pro Buyer</h4>
+      <p><strong>Revenue:</strong> ₦5,000/mo<br />
+      <strong>Direct cost:</strong> ~₦100–₦500/mo SMS (Pro-only, throttled)<br />
+      <strong>Gross margin:</strong> 90%+<br />
+      <em style="color:var(--ink-500);">LTV at 6-mo retention: ₦30K · CAC target &lt; ₦5K</em></p>
+    </div>
+    <div class="tile">
+      <h4>Escrow (avg ₦180K txn)</h4>
+      <p><strong>Fee:</strong> 1.5% × ₦180K = ₦2,700 + ₦100 flat<br />
+      <strong>Per-txn:</strong> <strong style="color:var(--teal-700);">₦2,800</strong><br />
+      <strong>Direct cost:</strong> Paystack ~₦300<br />
+      <strong>Gross margin:</strong> ~89%</p>
+    </div>
+    <div class="tile">
+      <h4>Seller Premium (Phase F)</h4>
+      <p><strong>Revenue:</strong> ₦7,500/mo<br />
+      <strong>Direct cost:</strong> Mostly software-fixed (no per-seller variable)<br />
+      <strong>Gross margin:</strong> 92%+<br />
+      <em style="color:var(--ink-500);">Variable: support hours during onboarding</em></p>
+    </div>
+  </div>
+  <p class="big" style="margin-top:auto;">
+    Marketplace economics improve with scale: SMS costs are throttled per-Pro-buyer, Paystack fees stay flat per transaction, and trust operations are amortized across rising transaction volume.
+  </p>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>9 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 10 — Traction
+     ==================================================== -->
+<section class="slide">
+  <h3>Traction — Pre-Revenue, Post-Infrastructure</h3>
+  <h2>What's shipped vs what's left.</h2>
+  <div class="cols-2" style="margin-top:14px;">
+    <div>
+      <h4 style="color:var(--green-600);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Shipped (Phase E Stage 1)</h4>
+      <ul class="checklist">
+        <li>42-table production schema deployed</li>
+        <li>50 RLS policies + RLS enforcement audit clean</li>
+        <li>Phone-first signup + Termii integration wired</li>
+        <li>Payment gateway abstraction (Paystack primary + fallback)</li>
+        <li>Identity verifier abstraction (Korapay NIN ready)</li>
+        <li>PII filter + 14 seeded rules</li>
+        <li>Notification preferences auto-seed (13 events × user)</li>
+        <li>Cloudflare Pages edge live on showmeprice.ng</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="color:var(--amber-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">In flight (Stage 2)</h4>
+      <ul class="gap-list" style="list-style:none;padding:0;">
+        <li>Termii sender ID approval (N-Alert path)</li>
+        <li>Korapay live-mode KYC review</li>
+        <li>Korapay Identity service activation (gated on KYC)</li>
+        <li>Validation A: Termii latency p95 from CF edge</li>
+        <li>Lagos seller pipeline — first 50–100 verified</li>
+      </ul>
+      <p style="margin-top:14px;color:var(--ink-500);font-size:11pt;">
+        <strong>Capital efficiency:</strong> Phase E Stage 1 shipped solo in ~12 weeks. Vendor relationships and compliance work running in parallel — no engineering blockers.
+      </p>
+    </div>
+  </div>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>10 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 11 — Competition
+     ==================================================== -->
+<section class="slide">
+  <h3>Competitive Positioning</h3>
+  <h2>We don't compete on volume. We compete on trust density.</h2>
+  <table class="compare" style="margin-top:8px;">
+    <thead>
+      <tr><th></th><th>Jiji</th><th>Jumia / Konga</th><th>WhatsApp / IG</th><th style="background:var(--teal-600);">ShowMePrice</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Listing volume</strong></td><td>Massive</td><td>Curated catalog</td><td>Fragmented</td><td>Curated, Lagos-first</td></tr>
+      <tr><td><strong>Price transparency</strong></td><td>Partial</td><td>Yes</td><td>"DM for price"</td><td>Required</td></tr>
+      <tr><td><strong>Seller verification</strong></td><td>Optional</td><td>Vendor-managed</td><td>None</td><td>Required for high-value</td></tr>
+      <tr><td><strong>In-app messaging</strong></td><td>Limited</td><td>N/A</td><td>Off-platform</td><td>Default, dispute-trail capable</td></tr>
+      <tr><td><strong>Escrow</strong></td><td>No</td><td>Cart-based</td><td>No</td><td>Yes, ₦50K+</td></tr>
+      <tr><td><strong>Dispute trail</strong></td><td>Weak</td><td>Order history</td><td>None</td><td>Built-in</td></tr>
+    </tbody>
+  </table>
+  <p class="big" style="margin-top:auto;">
+    Jiji proves the behavior exists. Jumia proves online retail works. WhatsApp proves conversational commerce works. <strong>We layer trust on top of all three.</strong>
+  </p>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>11 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 12 — Go-To-Market
+     ==================================================== -->
+<section class="slide">
+  <h3>Go-To-Market</h3>
+  <h2>Lagos-first. Verified sellers before buyers.</h2>
+  <div class="cols-3" style="margin-top:14px;">
+    <div class="tile">
+      <h4>Months 1–3</h4>
+      <p><strong>50–100 verified Lagos sellers</strong> in phones, laptops, electronics, appliances. Free Premium trial + onboarding help + verified badge. Founder-led outreach.</p>
+    </div>
+    <div class="tile">
+      <h4>Months 4–6</h4>
+      <p><strong>Trust-led buyer acquisition.</strong> Content: "How to buy a used iPhone safely in Lagos." SEO + paid social on high-intent categories. First 5–15K active buyers.</p>
+    </div>
+    <div class="tile">
+      <h4>Months 7–12</h4>
+      <p><strong>Pro buyer conversion + escrow adoption.</strong> Trial-to-paid funnel for Pro. First 100 escrow transactions. Reply-rate scorecards for sellers.</p>
+    </div>
+    <div class="tile">
+      <h4>Months 13–18</h4>
+      <p><strong>City expansion.</strong> Abuja, Port Harcourt. Seller Premium launch (Phase F). Promoted listings as trust-weighted, not pay-to-rank.</p>
+    </div>
+    <div class="tile">
+      <h4>Months 19–24</h4>
+      <p><strong>Logistics integration.</strong> Delivery partner pilots. Escrow + delivery bundles. Institution / bulk plan beta.</p>
+    </div>
+    <div class="tile" style="background:var(--teal-50);border-color:var(--teal-600);">
+      <h4 style="color:var(--teal-800);">Defensibility</h4>
+      <p>Conversation trail + escrow history + reply-rate data create a moat that grows with every transaction. Trust is a flywheel — verified sellers attract Pro buyers attract verified sellers.</p>
+    </div>
+  </div>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>12 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 13 — Financial Projections
+     ==================================================== -->
+<section class="slide">
+  <h3>Financial Projections — 3-Year Base Case</h3>
+  <h2>From validation to ~₦933M ARR run-rate.</h2>
+  <table class="numeric" style="margin-top:14px;">
+    <thead>
+      <tr><th style="text-align:left;">Metric</th><th>Year 1</th><th>Year 2</th><th>Year 3</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Active sellers</strong></td><td>750</td><td>5,000</td><td>20,000</td></tr>
+      <tr><td><strong>Active buyers</strong></td><td>15,000</td><td>120,000</td><td>600,000</td></tr>
+      <tr><td><strong>Monthly active buyers (EOY)</strong></td><td>5,000</td><td>40,000</td><td>180,000</td></tr>
+      <tr><td><strong>Paying Pro buyers</strong></td><td>150</td><td>1,600</td><td>9,000</td></tr>
+      <tr><td><strong>Monthly escrow transactions</strong></td><td>100</td><td>1,200</td><td>5,000</td></tr>
+      <tr><td><strong>Monthly revenue (EOY)</strong></td><td>₦1.59M</td><td>₦15.86M</td><td><strong style="color:var(--teal-700);">₦77.75M</strong></td></tr>
+      <tr style="background:var(--teal-50);"><td><strong>Annualized run-rate (EOY)</strong></td><td>₦19M</td><td>₦190M</td><td><strong style="color:var(--teal-700);">₦933M</strong></td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:18px;color:var(--ink-500);font-size:11pt;">
+    Base case shown. Conservative case: Year-3 run-rate ~₦290M. Upside case: Year-3 run-rate ~₦3.4B. Full sensitivity in the business plan.
+  </p>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>13 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 14 — Team
+     ==================================================== -->
+<section class="slide">
+  <h3>Team</h3>
+  <h2>Solo technical founder. Built end-to-end. Capital-efficient by construction.</h2>
+  <div class="cols-2" style="margin-top:14px;">
+    <div>
+      <h4 style="color:var(--teal-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Founder</h4>
+      <p><strong>[OWNER: NAME]</strong> — Founder &amp; CEO</p>
+      <p style="font-size:11pt;color:var(--ink-700);">
+        [OWNER: 2–3 sentence bio.<br />
+        Prior role / company. Technical credibility marker (stack, project shipped). One personal-credibility line — why Nigerian commerce specifically.]
+      </p>
+      <p style="font-size:11pt;color:var(--ink-500);margin-top:8px;">
+        Based in [Location]. Shipped Phase E Stage 1 solo: 42-table schema, RLS hardening, payment + identity vendor abstractions, Cloudflare edge deployment.
+      </p>
+    </div>
+    <div>
+      <h4 style="color:var(--teal-700);text-transform:uppercase;letter-spacing:0.05em;font-size:10pt;">Hiring plan — first 12 months</h4>
+      <ul style="padding-left:18px;font-size:11pt;">
+        <li><strong>Trust &amp; Safety Lead</strong> (Lagos) — moderation, dispute review, seller verification ops</li>
+        <li><strong>Seller Growth Lead</strong> (Lagos) — founder-led outreach handoff, category expansion</li>
+        <li><strong>Customer Support Specialist</strong> (part-time → full-time) — buyer + seller support, NDPR compliance</li>
+      </ul>
+      <p style="font-size:11pt;color:var(--ink-500);margin-top:14px;">
+        <strong>No engineering hires in the first 12 months.</strong> Phase E infrastructure scales to ~50K monthly active users without additional dev capacity. Hiring focuses on the moat — trust operations and supply.
+      </p>
+    </div>
+  </div>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>14 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 15 — Use of Funds
+     ==================================================== -->
+<section class="slide">
+  <h3>Use of Funds — $300K Pre-Seed</h3>
+  <h2>12–18 months of operating runway. Trust-ops weighted.</h2>
+  <table style="margin-top:14px;">
+    <thead>
+      <tr><th>%</th><th>Category</th><th>Outcome</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>40%</strong> · $120K</td><td>Seller acquisition (Lagos)</td><td>500+ verified sellers in 4 priority categories by month 12</td></tr>
+      <tr><td><strong>25%</strong> · $75K</td><td>Trust &amp; Safety operations</td><td>T&amp;S Lead + dispute review SLAs + escrow ops + verification throughput</td></tr>
+      <tr><td><strong>20%</strong> · $60K</td><td>Payment + SMS operations</td><td>Termii + Korapay + Paystack volume scaling; OTP cost budget through ~50K MAU</td></tr>
+      <tr><td><strong>10%</strong> · $30K</td><td>Marketing &amp; content</td><td>Trust-content SEO + paid acquisition on high-intent buyer queries</td></tr>
+      <tr><td><strong>5%</strong> · $15K</td><td>Legal, compliance, reserve</td><td>NDPR posture, CAC ongoing, payment-processor compliance, contingency</td></tr>
+    </tbody>
+  </table>
+  <p class="big" style="margin-top:auto;">
+    Milestones at month 12: 500+ verified sellers · 15K active buyers · 150 paying Pro buyers · 100 monthly escrow transactions · ₦1.5M+ monthly revenue. <strong>Series A readiness with 12 months data on Pro conversion, escrow adoption, and seller retention.</strong>
+  </p>
+  <div class="footnote"><span class="brand">ShowMePrice.ng</span><span>15 / 16</span></div>
+</section>
+
+<!-- ====================================================
+     SLIDE 16 — Vision / The Ask
+     ==================================================== -->
+<section class="slide slide-cover">
+  <div style="text-align:center;max-width:800px;">
+    <h3 style="color:rgba(255,255,255,0.7);">The vision</h3>
+    <h2 style="color:white;font-size:32pt;margin-bottom:0.6em;">
+      Build the trust infrastructure for Nigerian direct commerce.
+    </h2>
+    <p style="font-size:14pt;color:rgba(255,255,255,0.92);line-height:1.5;">
+      Start as trusted classifieds. Evolve into protected direct trade.<br />
+      Expand into logistics-backed fulfillment.
+    </p>
+    <div style="margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.3);">
+      <p style="font-size:22pt;color:white;font-weight:700;margin:0;">
+        Raising $300K pre-seed
+      </p>
+      <p style="font-size:13pt;color:rgba(255,255,255,0.8);margin:8px 0 0;">
+        [OWNER: NAME] &nbsp;·&nbsp; [OWNER: email] &nbsp;·&nbsp; showmeprice.ng
+      </p>
+    </div>
+  </div>
+  <div class="meta" style="bottom:24px;">16 / 16 &nbsp;·&nbsp; Confidential — for investor evaluation only</div>
+</section>
+
+</div>
+</body>
+</html>
