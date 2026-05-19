@@ -837,6 +837,18 @@ Silent agreement (greenlighting the counter-proposal without naming the reversal
 **Additional Phase E constraint flagged for the maintenance window (banked during E.1.5):**
 - `filter_actions_log_rule_id_filter_rules_id_fk` — agent named this FK using Drizzle's `_<reftable>_<refcol>_fk` convention when adding it via ALTER TABLE in E.1.5. Phase E's other FKs (created inline in CREATE TABLE) auto-named as `_fkey` per Postgres default. Mixing the two conventions inside Phase E creates the same inconsistency D-080 is meant to clean up across phases. Rename target: `filter_actions_log_rule_id_fkey`.
 
+**Catch-all scope expansion (banked during E.1.6):** D-080 is the canonical home for all cosmetic Phase A → Phase E hygiene deferrals — not just FK constraint names. Additional cleanup targets to address in the same maintenance window:
+
+- **Dead Phase A enum types in Postgres** (currently retained, marked `[DEPRECATED]` in `src/db/schema/enums.ts`):
+  - `subscription_tier` — superseded by `subscriptions.plan_code` (TEXT) post-E.1.1 reshape.
+  - `subscription_status` — superseded by `subscriptions.status` (TEXT) post-E.1.1 reshape.
+
+  Both Postgres enum types remain in the schema with zero remaining column references. Drop via `DROP TYPE public.subscription_tier; DROP TYPE public.subscription_status;` once any in-flight tooling that introspects pg_type has been verified clean. Mirror cleanup in Drizzle: remove the `subscriptionTierEnum` and `subscriptionStatusEnum` exports from `src/db/schema/enums.ts`.
+
+- **Ordinal-position gaps on reshaped tables** (subscriptions positions 3/4/5/6/7/10/11/13; contact_reveals positions 5/6/7) — purely cosmetic, standard Postgres behavior after DROP COLUMN. No fix required; documented in ACTUAL_SCHEMA.md so future readers don't reference `ordinal_position` from a tool query as if it were the column count.
+
+The maintenance window's full pre-flight checklist now covers: (a) stale FK constraint names from column renames, (b) the Phase E `filter_actions_log_rule_id_filter_rules_id_fk` naming-convention mismatch, (c) dead Phase A enum type drops, (d) any other cosmetic drift surfaced between now and the window. Should run as one BEGIN/COMMIT-wrapped migration with V-paste-back per change, same discipline as Phase E.1.x sub-migrations.
+
 **Scope clarification (banked during E.1.4.b execution):** Postgres auto-rewrites column *references* in RLS policy bodies on column rename — verified by E.1.4.b pre-check on `subscriptions_self_read`, whose `qual` already showed `auth.uid() = user_id` even though the policy was created against `profile_id` in Phase A. Post-rename hygiene scope therefore narrows:
 
 - ✅ **Auto-rewritten by Postgres on column rename** (no manual fix needed): RLS policy bodies (`pg_policies.qual`, `pg_policies.with_check`), CHECK constraint expressions, generated column expressions, view definitions, function bodies that reference columns by name in SQL (NOT in dynamic SQL strings).
