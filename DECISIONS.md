@@ -1099,3 +1099,24 @@ The restructured buyer ladder is: **Free → Pro → Institution**, with Diaspor
 - Phase E Year 1 revenue is buyer-side only (Pro Buyer subscriptions, credit packs, escrow fees, Diaspora Buyer subscriptions).
 - Phase F launch trigger: defined by buyer-side traction metrics (TBD) — likely 250+ verified sellers active + 10,000+ active buyers + measurable seller demand for Pro tooling.
 - Founding Seller 6-month free Pro Seller period (D-088) starts at Phase F launch, not at seller verification — sellers verified during Phase E "bank" the free period until monetization arrives.
+
+---
+
+## D-092: Existing subscriber grandfathering on pricing revisions
+
+**Context:** `MONETIZATION-PLAN.md` v2.0 establishes Pro Buyer (₦5,000/mo), Pro Buyer launch promo (₦3,000/mo first 3 months), escrow rates (1.5% / 1.2% Pro), credit pack tier amounts, and the Phase F Pro Seller price (₦7,500/mo) as committed launch positions. The Validation Disclosure in that document reserves the right to revise pricing in two scenarios — quarterly Year 1 review and material market signal — with revisions banked as new D-numbers. This decision specifies what happens to **existing paid subscribers** when a revision lands.
+
+**Decision:** Any future pricing revision to Pro Buyer subscription, Pro Seller subscription, or escrow rates **grandfathers existing active paid subscribers at their prior pricing for the duration of their active subscription period**. This applies regardless of how the revision is triggered (quarterly review or material signal).
+
+**Operational:**
+- Active monthly subscribers continue paying the original rate until cancellation or non-renewal. New rate applies on next renewal after their current period ends.
+- Active annual subscribers continue at the original annual rate through the full 12-month term. New rate applies on renewal.
+- Escrow fee revisions apply at transaction initiation time — there is no "in-flight transaction" pricing concept since escrow is per-use. However, if a Pro Buyer subscribed before a Pro discount-rate revision, they retain their original discount rate for the duration of their subscription.
+- Founding Seller grandfathered ₦7,500/mo Pro Seller pricing (D-088) is permanent — it does NOT expire at next renewal even if Pro Seller pricing is revised. D-088's lifetime guarantee supersedes D-092's subscription-period scope for Founding Sellers specifically.
+- Marketing surface: pricing revision announcements explicitly call out the grandfathering. "Existing Pro Buyers stay at ₦5,000/mo for the duration of your current subscription period. New Pro pricing applies on renewal."
+
+**Rationale:**
+1. Protects subscriber trust on a trust-first brand. A "we just raised your price" email midway through a subscription period is a brand-damaging move incompatible with the positioning.
+2. Cost-neutral until renewal — no immediate revenue impact, just deferred. The downside is a few months of mixed-pricing operational complexity at the moment of revision.
+3. Consistent with the Founding Seller lifetime-grandfathering principle (D-088) — same brand promise, scoped narrower (subscription period vs lifetime).
+4. Removes a class of subscriber dispute — "you changed my price without my consent" — that would otherwise consume trust & safety operational hours.
