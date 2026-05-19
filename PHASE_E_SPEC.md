@@ -605,20 +605,20 @@ Rules table is admin-editable from the admin moderation dashboard. Pattern, acti
 **Subscriptions** (auto-renewing, tiered daily reveal cap per D-083 — 10/day new Pro under 30 days, 25/day established Pro with no open reports):
 | Plan | Standard price | Launch promo price |
 |---|---|---|
-| Monthly | ₦5,000/month | ₦3,000/month |
-| Annual | ₦45,000/year | ₦27,000/year |
+| Monthly | ₦5,000/month | ₦3,000/month (D-087) |
+| Annual | ₦45,000/year | (no annual launch promo per D-087) |
 
 ### Launch promo mechanics
-- **Duration:** 3 months from Pro tier go-live date
-- **Mechanic:** discount on signup during the 3-month window
-- **Monthly subscribers from promo:** auto-renew at ₦5,000 after their first month (no grandfather)
-- **Annual subscribers from promo:** complete 12-month term at ₦27,000, then renew at ₦45,000
+- **Duration:** 3 months from Pro tier go-live date (per D-087)
+- **Mechanic:** monthly-plan-only discount on signup during the 3-month window
+- **Monthly subscribers from promo:** auto-renew at ₦5,000 after their third paid invoice (Paystack `pro_monthly_launch` plan, invoice limit 3, auto-transitions to `pro_monthly_standard`)
+- **Annual plan:** no promo applies — annual self-selects as committed; ₦45,000 already encodes ~25% discount vs 12× monthly standard. Per D-087.
 - **Credit pack prices unchanged** during promo
 - **End date displayed prominently** on pricing page during promo
 
 ### Save mechanism for monthly cancellers
 14 days before first renewal at the new price (₦5,000), email sent to promo monthly subscribers:
-> "Your Pro subscription renews on [date] at ₦5,000/month. Lock in launch pricing for the year by switching to annual at ₦27,000 (save ₦33,000)."
+> "Your Pro subscription renews on [date] at ₦5,000/month. Lock in launch pricing for the year by switching to annual at ₦45,000."
 
 ### Pro tier features (FINAL LIST)
 
@@ -729,8 +729,9 @@ Paystack as primary processor. Full integration: one-time + recurring + manageme
 |---|---|---|---|---|
 | Pro Monthly Launch | `pro_monthly_launch` | ₦3,000 | monthly | 3 |
 | Pro Monthly Standard | `pro_monthly_standard` | ₦5,000 | monthly | — |
-| Pro Annual Launch | `pro_annual_launch` | ₦27,000 | annually | 1 |
 | Pro Annual Standard | `pro_annual_standard` | ₦45,000 | annually | — |
+
+*Annual launch plan deliberately dropped per D-087 — no annual promo. If Phase E launch shows weak annual conversion, a future D-number may reintroduce an annual promo plan with rationale and effective date.*
 
 ### Payment provider abstraction
 ```sql
@@ -814,7 +815,7 @@ When a `pro_monthly_launch` subscription hits `subscription.disable` with status
 3. Sends notification to user: "Your launch pricing has ended. You're now on the standard ₦5,000/month plan."
 4. Updates user_tier_history with migration record
 
-Same logic for annual: `pro_annual_launch` completing migrates to `pro_annual_standard`.
+~~Same logic for annual: `pro_annual_launch` completing migrates to `pro_annual_standard`.~~ — Annual launch plan dropped per D-087. Annual subscriptions go directly to `pro_annual_standard` at signup; no migration needed.
 
 ### Direct Debit support
 - At subscription checkout, offer two payment paths:
@@ -837,7 +838,7 @@ Buyer profile section "Subscription & Billing" shows:
 ### Cancellation flow
 1. Click "Cancel subscription"
 2. Confirmation screen: "Are you sure? You'll lose access to [list of Pro features] on [period_end date]"
-3. Save offer screen: "Stay for ₦3,000/month for the next 3 months" or "Switch to annual at ₦27,000 (one-year promo rate)"
+3. Save offer screen: "Stay for ₦3,000/month for the next 3 months (if eligible for monthly launch promo)" or "Switch to annual at ₦45,000 (save ₦15,000 vs 12× monthly)"
 4. If still cancels: mark `cancel_at_period_end = true`, Pro features remain active until period_end
 
 ### Refund handling (manual via admin)

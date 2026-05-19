@@ -496,8 +496,8 @@ If a seller becomes ineligible mid-promotion (e.g., a report is filed against th
 - **Plan codes** (Paystack dashboard):
   - `pro_monthly_launch` — ₦3,000, monthly, invoice_limit 3 (auto-transitions to `pro_monthly_standard` after 3 invoices)
   - `pro_monthly_standard` — ₦5,000, monthly, no invoice limit
-  - `pro_annual_launch` — ₦27,000, annually, invoice_limit 1 (placeholder; D-087 annual is ₦45,000 — confirm with Frank before Phase F)
   - `pro_annual_standard` — ₦45,000, annually, no invoice limit
+  - *No `pro_annual_launch` plan — annual launch promo deliberately dropped per D-087. Annual subscribers go directly to `pro_annual_standard` at signup.*
 - **Subscription lifecycle states** (Paystack-native, stored in `subscriptions.status`): `'active' | 'attention' | 'non-renewing' | 'completed' | 'cancelled'`
 - **Webhooks** consumed via `PaymentGateway.handleWebhook()`:
   - `charge.success` (initial signup, renewal payments)
