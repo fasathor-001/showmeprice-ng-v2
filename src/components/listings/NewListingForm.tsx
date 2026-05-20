@@ -188,6 +188,21 @@ export function NewListingForm({
         )}
       </div>
 
+      {/* Sprint 3 / Gap D.5: listing-level city/area (location beyond state). */}
+      <div>
+        <label htmlFor="cityArea" className="block text-sm font-medium text-ink mb-1.5">
+          City / Area
+        </label>
+        <Input
+          id="cityArea"
+          name="cityArea"
+          type="text"
+          required
+          error={state?.errors?.cityArea}
+          placeholder="e.g. Lekki Phase 1, Computer Village Ikeja"
+        />
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-ink mb-1.5">Images</label>
         <ImageUploader

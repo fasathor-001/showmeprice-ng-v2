@@ -24,6 +24,10 @@ interface Defaults {
   categoryId: string;
   stateId: string;
   negotiable: boolean;
+  /** Sprint 3 / Gap D.5: listing city/area. Legacy listings (pre-D.1) have
+   *  NULL city_area → the edit page passes "" → empty input prompts the
+   *  seller to backfill it (editing requires city_area per D.3). */
+  cityArea: string;
   /** Existing category_specs values from the DB, keyed on spec field name. */
   categorySpecs?: Record<string, string | number>;
 }
@@ -191,6 +195,23 @@ export function EditListingForm({
         {state?.errors?.stateId && (
           <p className="text-xs text-danger mt-1.5">{state.errors.stateId}</p>
         )}
+      </div>
+
+      {/* Sprint 3 / Gap D.5: listing-level city/area. Prefilled from the
+          existing row; legacy NULL → "" prompts backfill on edit. */}
+      <div>
+        <label htmlFor="cityArea" className="block text-sm font-medium text-ink mb-1.5">
+          City / Area
+        </label>
+        <Input
+          id="cityArea"
+          name="cityArea"
+          type="text"
+          required
+          defaultValue={defaults.cityArea}
+          error={state?.errors?.cityArea}
+          placeholder="e.g. Lekki Phase 1, Computer Village Ikeja"
+        />
       </div>
 
       <div>

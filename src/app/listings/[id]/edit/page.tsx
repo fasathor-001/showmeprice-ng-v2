@@ -53,7 +53,7 @@ export default async function EditListingPage({
     .select(
       `
       id, title, description, price_kobo, is_negotiable,
-      category_id, state_id, seller_id, business_id, category_specs,
+      category_id, state_id, city_area, seller_id, business_id, category_specs,
       product_images ( storage_path, position )
     `
     )
@@ -107,6 +107,7 @@ export default async function EditListingPage({
               priceInput: formatNaira(listing.price_kobo).replace("₦", ""),
               categoryId: listing.category_id ?? "",
               stateId: listing.state_id ?? "",
+              cityArea: listing.city_area ?? "", // Sprint 3 / Gap D.5 — legacy NULL → "" prompts backfill
               negotiable: listing.is_negotiable,
               categorySpecs: (listing.category_specs ?? undefined) as
                 | Record<string, string | number>
