@@ -90,6 +90,16 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Fix when prioritised:** scheduled cleanup job that lists Storage objects under `product-images/{business_id}/{product_id}/` and removes any whose `product_id` no longer exists in `products`. Phase E or post-launch. Could run as a Supabase Edge Function on a schedule.
 
+### K-012 — `revalidatePath` called in auth actions on Cloudflare edge (low)
+
+**Symptom:** `signUpAction`, `signInAction`, and `signOutAction` in `src/app/(auth)/actions.ts` call `revalidatePath("/", "layout")` immediately before a `redirect()`. Per the banked MEMORY.md lesson, `revalidatePath` is broken on Cloudflare Pages edge — it silently fails (and would throw a visible 500 only if the action returned state instead of redirecting). Because all three redirect right after, the failure is invisible today.
+
+**Severity:** low. No user-visible breakage — the subsequent `redirect()` navigates to a freshly-fetched page, which is the freshness mechanism that actually works on edge. The `revalidatePath` calls are simply dead/no-op on this platform.
+
+**Surfaced:** Stage 2.A OTP audit (signup-flow read). Left untouched to keep the OTP work scoped.
+
+**Fix when prioritised:** delete the three `revalidatePath("/", "layout")` calls; navigation-driven freshness via `redirect()` already covers it. Trivial, but verify no non-edge code path relies on them first.
+
 ## Resolved or superseded
 
 ### K-011 — Cross-browser PKCE email confirmation fails (RESOLVED)
