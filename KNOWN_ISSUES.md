@@ -27,18 +27,6 @@ Phase A.5 set up the foundation (focus rings via `focus-visible`, semantic HTML,
 
 Not blocking for Phase B onward. Owner / planner can add this to Phase J's scope.
 
-### K-003 — Spam signups possible (email confirmation OFF)
-
-Per D-023, email confirmation is off at launch. This means anyone with a working SMTP-deliverable email can create a profile without proving they own the email. Risks:
-- Bots creating mass accounts to abuse contact-reveal (Phase F)
-- Spam profiles muddying the verified-seller signal
-- Email-typo signups that can't recover their account
-
-Not blocking for Phase B. Mitigations available if abuse surfaces:
-- Flip email confirmation ON (1-line Supabase Dashboard change)
-- Add rate-limiting to signups by IP (Cloudflare Pages can do this via Workers config)
-- Require email verification before seller upgrade (Phase D could enforce this even if buyer signups don't)
-
 ### K-004 — No "delete account" flow
 
 Phase B creates accounts but provides no way to delete one. RLS policies + cascade rules in Phase A's schema would technically allow it, but there's no UI. Buyers should be able to self-delete; sellers may need admin-mediated deletion to handle pending escrow/disputes (Phase H).
@@ -101,6 +89,10 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 **Fix when prioritised:** delete the three `revalidatePath("/", "layout")` calls; navigation-driven freshness via `redirect()` already covers it. Trivial, but verify no non-edge code path relies on them first.
 
 ## Resolved or superseded
+
+### K-003 — Spam signups possible (email confirmation OFF) (RESOLVED)
+
+**Resolution (confirmed 2026-05-20):** Production state is email confirmation **ON** (Supabase → Authentication → Providers → Email → Confirm email). The K-011 PKCE cross-browser fix shipped the working confirmed-email flow, so unconfirmed-email profiles can no longer be created — closing the original spam vector. Phase E Stage 2.A phone OTP adds a second proof-of-identity layer (gates contact-reveal + listing-creation on `phone_verified`). The `signUpAction` comment ("email confirmation ON (D-023)") matches reality and stays as-is.
 
 ### K-011 — Cross-browser PKCE email confirmation fails (RESOLVED)
 
