@@ -20,7 +20,7 @@ export default async function SellPage() {
     supabase
       .from("businesses")
       .select(
-        "id, business_name, description, state_id, verification_status, rejection_reason"
+        "id, business_name, description, state_id, city_area, verification_status, rejection_reason"
       )
       .eq("owner_id", user.id)
       .maybeSingle(),
@@ -163,6 +163,7 @@ export default async function SellPage() {
               business_name: business.business_name,
               description: business.description,
               state_id: business.state_id,
+              city_area: business.city_area,
             }}
             states={states ?? []}
           />

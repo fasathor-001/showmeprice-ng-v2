@@ -248,6 +248,7 @@ interface BecomeSellerErrors {
   businessName?: string;
   businessDescription?: string;
   stateId?: string;
+  cityArea?: string;
   _form?: string;
 }
 
@@ -265,6 +266,10 @@ export async function becomeSellerAction(
     formData.get("businessDescription") ?? ""
   ).trim();
   const stateId = String(formData.get("stateId") ?? "");
+  // Sprint 3 / Gap D.6: business operating location. Optional (nullable
+  // column, no banked requirement) — validated inline, max 100 only when
+  // present. Distinct from the listing-level required validateCityArea().
+  const cityArea = String(formData.get("cityArea") ?? "").trim();
 
   const errors: BecomeSellerErrors = {};
   if (!businessName) errors.businessName = "Business name is required";
@@ -280,6 +285,9 @@ export async function becomeSellerAction(
     errors.businessDescription = "Description is too long (max 500)";
 
   if (!stateId) errors.stateId = "State is required";
+
+  if (cityArea && cityArea.length > 100)
+    errors.cityArea = "City / area is too long (max 100 characters)";
 
   if (Object.values(errors).some((v) => v)) return { errors };
 
@@ -313,6 +321,7 @@ export async function becomeSellerAction(
       business_name: businessName,
       description: businessDescription,
       state_id: stateId,
+      city_area: cityArea || null, // Sprint 3 / Gap D.6 (optional → NULL when empty)
     });
 
     if (insertError) {
@@ -371,6 +380,7 @@ interface UpdateBusinessErrors {
   businessName?: string;
   businessDescription?: string;
   stateId?: string;
+  cityArea?: string;
   _form?: string;
 }
 
@@ -387,6 +397,8 @@ export async function updateBusinessAction(
     formData.get("businessDescription") ?? ""
   ).trim();
   const stateId = String(formData.get("stateId") ?? "");
+  // Sprint 3 / Gap D.6: business operating location (optional, max 100).
+  const cityArea = String(formData.get("cityArea") ?? "").trim();
 
   const errors: UpdateBusinessErrors = {};
   if (!businessName) errors.businessName = "Business name is required";
@@ -399,6 +411,9 @@ export async function updateBusinessAction(
     errors.businessDescription = "Description is too long (max 500)";
 
   if (!stateId) errors.stateId = "State is required";
+
+  if (cityArea && cityArea.length > 100)
+    errors.cityArea = "City / area is too long (max 100 characters)";
 
   if (Object.values(errors).some((v) => v)) return { errors };
 
@@ -418,6 +433,7 @@ export async function updateBusinessAction(
         business_name: businessName,
         description: businessDescription || null,
         state_id: stateId,
+        city_area: cityArea || null, // Sprint 3 / Gap D.6 (optional → NULL when empty)
       })
       .eq("owner_id", user.id);
 

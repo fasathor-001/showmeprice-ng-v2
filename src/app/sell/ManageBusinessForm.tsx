@@ -8,6 +8,7 @@ interface Business {
   business_name: string;
   description: string | null;
   state_id: string | null;
+  city_area: string | null;
 }
 
 interface State {
@@ -103,6 +104,23 @@ export function ManageBusinessForm({ business, states }: Props) {
         {state?.errors?.stateId && (
           <p className="text-xs text-danger mt-1.5">{state?.errors.stateId}</p>
         )}
+      </div>
+
+      {/* Sprint 3 / Gap D.6: business operating location (optional).
+          Legacy businesses (pre-D.1) have NULL city_area → "" → empty input. */}
+      <div>
+        <label htmlFor="cityArea" className="block text-sm font-medium text-ink mb-1.5">
+          City / Area <span className="text-ink-600 font-normal">(optional)</span>
+        </label>
+        <Input
+          id="cityArea"
+          name="cityArea"
+          type="text"
+          defaultValue={business.city_area ?? ""}
+          error={state?.errors?.cityArea}
+          placeholder="e.g. Ikeja, Computer Village"
+        />
+        <p className="text-xs text-ink-600 mt-1.5">Where your business operates from</p>
       </div>
 
       <SubmitButton />

@@ -93,6 +93,21 @@ export function BecomeSellerForm({ states }: Props) {
         )}
       </div>
 
+      {/* Sprint 3 / Gap D.6: business operating location (optional). */}
+      <div>
+        <label htmlFor="cityArea" className="block text-sm font-medium text-ink mb-1.5">
+          City / Area <span className="text-ink-600 font-normal">(optional)</span>
+        </label>
+        <Input
+          id="cityArea"
+          name="cityArea"
+          type="text"
+          error={state?.errors?.cityArea}
+          placeholder="e.g. Ikeja, Computer Village"
+        />
+        <p className="text-xs text-ink-600 mt-1.5">Where your business operates from</p>
+      </div>
+
       <SubmitButton />
     </form>
   );
