@@ -6,6 +6,8 @@
 >
 > **Phase E Stage 2 buyer-side prep applied (E.2.0.0–E.2.0.4), all V-verified:** `profiles.signup_free_reveals_remaining` + `profiles.pro_activated_at`; functions `get_buyer_reveal_cap(uuid)` + `compute_escrow_fee(bigint, uuid)`; `subscriptions.promo_code` + `subscriptions.promo_expires_at`; `credit_pack_type` enum + `payments.pack_type` + `payments_pack_type_only_for_credit_pack` CHECK. Table count unchanged at 42 (Stage 2 added only columns / functions / one enum, no new tables).
 >
+> **Phase E Sprint 3 seller-foundation applied (Gap A + Gap D), V-verified 2026-05-20:** `businesses.is_founding_seller` + `businesses.founding_seller_granted_at` + `businesses.grandfathered_pro_price_kobo` (D-088); `businesses.city_area` + `products.city_area` (Gap D.1); new Tier 1 `Power & Generators` parent + 4 subcategories (Gap D.0a, confirmed live via categories SELECT); `electronics.search_aliases` extended to 23 (Gap D.0b). `product_status` enum value `'sold'` now reachable via the seller mark-as-sold flow (Gap B). Table count unchanged at 42.
+>
 > If you change the schema (new tables, new columns, new policies, new triggers, new enums), update this file in the same commit.
 
 ---
@@ -111,6 +113,10 @@ A seller's business profile. One per user (no FK uniqueness constraint enforces 
 | **seller_tier** | text | NO | `'free'` (Phase E.1.0; backfilled to `'verified'` for businesses where `verification_status='verified'`) |
 | **seller_listing_limit** | integer | YES | — (Phase E.1.0; null = unlimited. Phase F+ enforces per-tier limits) |
 | **seller_reply_quota** | integer | YES | — (Phase E.1.0; null = unlimited. Phase F+ enforces per-tier reply quotas) |
+| **city_area** | text | YES | — (Sprint 3 / Gap D.1; business operating location, optional/unenforced) |
+| **is_founding_seller** | boolean | NO | false (Sprint 3 / D-088; grant happens at Phase F launch, not Phase E) |
+| **founding_seller_granted_at** | timestamptz | YES | — (Sprint 3 / D-088) |
+| **grandfathered_pro_price_kobo** | integer | YES | — (Sprint 3 / D-088; `750000` = ₦7,500 for Founding Sellers, NULL otherwise) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
@@ -118,10 +124,12 @@ A seller's business profile. One per user (no FK uniqueness constraint enforces 
 - Column is `business_name`, NOT `name`. Default for `verification_status` was changed from `'pending'` to `'unsubmitted'` during Phase C.5 P.1.
 - `seller_tier` (Phase E.1.0) tracks the seller's tier — `'free'`, `'verified'` (post-identity-verification, baseline), with Phase F+ adding `'pro_seller'`/`'premium_seller'` and Phase G+ adding `'enterprise_seller'`. Distinct from the buyer-side `profiles.tier`.
 - `seller_listing_limit` / `seller_reply_quota` are nullable and unenforced in Phase E (tracking-only schema). Phase F+ enforces per-tier ceilings.
+- Founding Seller fields (`is_founding_seller`/`founding_seller_granted_at`/`grandfathered_pro_price_kobo`) are schema-only in Phase E per D-088. Grants run at Phase F launch (admin script selecting the first 100 sellers by `seller_verifications.reviewed_at ASC`). Badge renders on the not-yet-built public storefront (Phase F+ platform gap, see MEMORY.md).
+- `city_area` (Sprint 3 / Gap D) is optional and unenforced for businesses (contrast `products.city_area`, which is app-required on create/edit). Legacy rows are NULL.
 
 ### `categories`
 
-Top-level + sub-categories. Post-Phase-D: 28 top-level (6 Tier 1 + 11 Tier 2 + 11 Tier 3) + 75 sub-categories = 103 rows total. See "Complete category taxonomy" section below for the inventory.
+Top-level + sub-categories. Post-Sprint-3: 29 top-level (7 Tier 1 + 11 Tier 2 + 11 Tier 3) + 79 sub-categories = 108 rows total. See "Complete category taxonomy" section below for the inventory.
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
@@ -140,6 +148,7 @@ Top-level + sub-categories. Post-Phase-D: 28 top-level (6 Tier 1 + 11 Tier 2 + 1
 **Notes:**
 - `tier` (added Phase D.1) classifies top-level parents: 1 = home-page featured, 2 = `/categories` index standard, 3 = "Other categories" disclosure drawer. Subcategories carry the default value 3 — tier is semantically meaningful for top-level rows only.
 - `search_aliases` (added Phase D.7.2) is a JSONB array of lowercased buyer-intent terms. Per D-049/D-050, contains category-level synonyms only.
+- `electronics` carries the most aliases (23 in production after Gap D's appliance-routing additions, verified via `jsonb_array_length`). Seed.ts has 28 — a documented 5-alias seed-vs-prod drift tracked by the Phase E Taxonomy Reconciliation task, not a bug.
 - `icon_name` is vestigial post-D.4.1 — `getCategoryEmoji()` keys on `slug` instead. New rows leave it NULL.
 
 ### `contact_reveals`
@@ -521,6 +530,7 @@ Marketplace listings.
 | is_negotiable | boolean | NO | false |
 | category_id | uuid → categories(id) SET NULL | YES | — |
 | state_id | uuid → nigerian_states(id) SET NULL | YES | — |
+| **city_area** | text | YES | — (Sprint 3 / Gap D.1; listing location. Nullable in DB for legacy tolerance, but app-required on create/edit) |
 | status | product_status (enum) | NO | `'draft'` |
 | view_count | integer | NO | 0 |
 | is_featured | boolean | NO | false |
@@ -532,6 +542,8 @@ Marketplace listings.
 **Notes:**
 - `slug` is NOT NULL and has NO default — every insert must provide one. Default `status` is `'draft'`, not `'active'`.
 - `category_specs` (added Phase D.7) is per-listing JSONB matching the active category's spec schema.
+- `city_area` (Sprint 3 / Gap D): schema-permissive (nullable), app-strict (required on create/edit via exported `validateCityArea()`, min 3 / max 100). Legacy NULL rows prompt backfill on next edit.
+- `status='sold'` is now reachable via the seller mark-as-sold flow (Sprint 3 / Gap B, `setListingStatusAction`). Marketplace/category queries filter `status='active'`, so sold listings drop out of buyer search but stay in the seller dashboard.
 - `price_kobo` updates fire the `products_price_change_log` AFTER UPDATE trigger which writes to `price_history`. The trigger uses a WHEN clause to fire only on actual price changes.
 
 ### `profiles`
@@ -1114,11 +1126,11 @@ Three buckets in Supabase Storage. All have explicit RLS policies; service role 
 
 ---
 
-## Complete category taxonomy (post-D.7.6)
+## Complete category taxonomy (post-Sprint-3 / Gap D.0a)
 
-**Top-level totals:** 6 Tier 1 + 11 Tier 2 + 11 Tier 3 = **28 parents**. Subcategories: **75 rows**. Total: **103 category rows**.
+**Top-level totals:** 7 Tier 1 + 11 Tier 2 + 11 Tier 3 = **29 parents**. Subcategories: **79 rows**. Total: **108 category rows**.
 
-### Tier 1 — featured on home page (6)
+### Tier 1 — featured on home page (7)
 
 | Slug | Name |
 |---|---|
@@ -1128,6 +1140,7 @@ Three buckets in Supabase Storage. All have explicit RLS policies; service role 
 | `beauty` | Beauty & Personal Care |
 | `electronics` | Electronics & Gadgets |
 | `home-living` | Home & Furniture |
+| `power-generators` | Power & Generators (Sprint 3 / Gap D.0a, sort_order 7) |
 
 ### Tier 2 — `/categories` index (11)
 
@@ -1161,7 +1174,7 @@ Three buckets in Supabase Storage. All have explicit RLS policies; service role 
 | `photography-equipment` | Photography Equipment |
 | `religious-items` | Religious Items |
 
-### Subcategories (75 total)
+### Subcategories (79 total)
 
 | Parent | Subs | Slugs |
 |---|---|---|
@@ -1176,6 +1189,7 @@ Three buckets in Supabase Storage. All have explicit RLS policies; service role 
 | Drinks & Beverages | 7 | `alcohol-spirits`, `wine`, `beer`, `soft-drinks`, `juices`, `water`, `coffee-tea` |
 | Perfume & Fragrance | 8 | `perfume-men`, `perfume-women`, `perfume-unisex`, `perfume-oud`, `body-sprays`, `perfume-oils`, `deodorants`, `car-perfumes` |
 | Building Materials & Supplies | 10 | `cement-concrete`, `tiles`, `roofing-materials`, `doors-windows`, `blocks-bricks-stones`, `iron-steel-rods`, `plumbing-sanitary`, `electrical-wiring`, `paint-finishing`, `ceiling-interior` |
+| Power & Generators | 4 | `generators`, `inverters`, `solar-panels`, `batteries` |
 
 Beauty & Personal Care, Home & Furniture, and Tier 2's other parents currently carry no subcategories; future product-launch demand may add them.
 
