@@ -100,8 +100,19 @@ async function seed() {
         "lipstick", "mascara", "foundation", "concealer",
         "moisturizer", "serum", "facewash", "exfoliator",
       ] },
-      { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu", search_aliases: ["electronics", "electronic", "tv", "television", "gaming", "speaker", "audio", "solar", "console", "playstation", "xbox"] },
+      // NOTE (Sprint 3 / Gap D.0b): production electronics currently holds 23
+      // aliases (6 legacy + 17 appliance from the D.0b `||` append). This seed
+      // holds 28 (those 6 + the 5 D.7.2 aliases — electronic/television/
+      // console/playstation/xbox — that never migrated to production + the 17
+      // appliance terms). The 5-alias gap is closed by the Phase E Taxonomy
+      // Reconciliation task (deferred). Fresh-seeded DBs get all 28;
+      // production catches up at reconciliation.
+      { name: "Electronics & Gadgets", slug: "electronics", tier: 1, sort_order: 5, icon_name: "cpu", search_aliases: ["electronics", "electronic", "tv", "television", "gaming", "speaker", "audio", "solar", "console", "playstation", "xbox", "appliance", "appliances", "fridge", "refrigerator", "freezer", "washing machine", "washer", "dryer", "air conditioner", "ac", "microwave", "oven", "cooker", "blender", "iron", "dishwasher", "kitchen appliance"] },
       { name: "Home & Furniture", slug: "home-living", tier: 1, sort_order: 6, icon_name: "home", search_aliases: ["furniture", "home", "kitchen", "appliance", "decor", "fridge", "freezer", "cooker", "microwave"] },
+      // Sprint 3 / Gap D.0a: Power & Generators — strategic NG launch category.
+      // Tier 1 (7th home-hero tile), sort_order 7. Subs seeded in the
+      // subcategory block below.
+      { name: "Power & Generators", slug: "power-generators", tier: 1, sort_order: 7, search_aliases: ["generator", "generators", "gen", "genset", "power", "backup power", "power solution", "inverter", "inverters", "solar", "solar panel", "solar panels", "battery", "batteries", "ups", "kva", "petrol generator", "diesel generator", "diesel", "rechargeable"] },
 
       // Tier 2 — in main nav, not on hero (9 parents post-D.7.4).
       // sort_order values mirror the live DB exactly (7-15 range) so the
@@ -215,6 +226,7 @@ async function seed() {
   const buildingMaterials = topCategories.find(
     (c) => c.slug === "building-materials"
   );
+  const power = topCategories.find((c) => c.slug === "power-generators");
 
   if (
     fashion &&
@@ -227,7 +239,8 @@ async function seed() {
     foodstuff &&
     drinks &&
     perfume &&
-    buildingMaterials
+    buildingMaterials &&
+    power
   ) {
     await db
       .insert(schema.categories)
@@ -320,9 +333,15 @@ async function seed() {
         { name: "Electrical & Wiring", slug: "electrical-wiring", parent_id: buildingMaterials.id, sort_order: 8 },
         { name: "Paint & Finishing", slug: "paint-finishing", parent_id: buildingMaterials.id, sort_order: 9 },
         { name: "Ceiling & Interior", slug: "ceiling-interior", parent_id: buildingMaterials.id, sort_order: 10 },
+
+        // Power & Generators subs (4, Sprint 3 / Gap D.0a)
+        { name: "Generators", slug: "generators", parent_id: power.id, sort_order: 1 },
+        { name: "Inverters", slug: "inverters", parent_id: power.id, sort_order: 2 },
+        { name: "Solar Panels", slug: "solar-panels", parent_id: power.id, sort_order: 3 },
+        { name: "Batteries", slug: "batteries", parent_id: power.id, sort_order: 4 },
       ])
       .onConflictDoNothing();
-    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks, Perfume & Fragrance, Building Materials");
+    console.log("  ✓ sub-categories for Fashion, Mobile, Hair, Electronics, Computer & Accessories, Travel & Luggage, Automotive, Foodstuff, Drinks, Perfume & Fragrance, Building Materials, Power & Generators");
   } else {
     console.log("  - top categories already seeded; skipping sub-categories");
   }

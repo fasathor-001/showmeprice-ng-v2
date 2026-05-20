@@ -20,6 +20,10 @@ export const TIER_1_FEATURED_SLUGS = [
   "beauty",
   "electronics",
   "home-living",
+  // Sprint 3 / Gap D.0a: strategic NG launch category (chronic power
+  // instability makes generators/inverters/solar/batteries household
+  // infrastructure). Appended at sort_order 7 — 7th featured tile.
+  "power-generators",
 ] as const;
 
 // Phase D.4.1: promoted property + sports from T3, added computer-accessories
@@ -85,6 +89,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   beauty: "💄",
   electronics: "📺", // Phase D.4.1: was 💻; Laptops moved out to Computer & Accessories
   "home-living": "🛋️",
+  "power-generators": "⚡", // Sprint 3 / Gap D.0a — Tier 1 launch category
   // Tier 2
   health: "💊",
   "baby-kids": "👶",

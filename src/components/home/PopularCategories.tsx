@@ -5,9 +5,11 @@ import { Card } from "@/components/ui";
 import { getCategoryEmoji } from "@/lib/categories";
 
 /**
- * Browse-by-category quick-access grid on the home page. Surfaces the 6
- * Tier 1 (featured) parents seeded in Phase D. Each card links to
- * /categories/[slug] (where the parent rolls up its subcategory listings).
+ * Browse-by-category quick-access grid on the home page. Surfaces the 7
+ * Tier 1 (featured) parents (6 from Phase D + power-generators from
+ * Sprint 3 / Gap D.0a). Data-driven: queries tier=1 parents ordered by
+ * sort_order, so new featured categories appear automatically. Each card
+ * links to /categories/[slug] (parent rolls up its subcategory listings).
  */
 export async function PopularCategories() {
   const supabase = createClient();
@@ -34,7 +36,7 @@ export async function PopularCategories() {
             All categories →
           </Link>
         </div>
-        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3">
           {items.map((cat) => (
             <Link
               key={cat.id}
