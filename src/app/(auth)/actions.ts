@@ -1025,6 +1025,8 @@ export async function updateListingAction(
   const categoryId = String(formData.get("categoryId") ?? "");
   const stateId = String(formData.get("stateId") ?? "");
   const negotiable = formData.get("negotiable") === "on";
+  // Sprint 3 / Gap D.3: listing-level city/area location.
+  const cityArea = String(formData.get("cityArea") ?? "").trim();
 
   // Phase D.3: same imagePaths[] convention as createListingAction.
   const imagePaths = formData
@@ -1044,6 +1046,11 @@ export async function updateListingAction(
     imageUrls: imagePaths.length > 0 ? ["https://placeholder/"] : [],
   });
   errors.imageUrls = undefined;
+  // Sprint 3 / Gap D.3: city/area validated per-action (mirror of D.2).
+  // Required even when editing a legacy listing whose city_area is NULL —
+  // editing is the natural backfill moment. Standard required-field copy;
+  // no legacy/new differentiation (don't expose internal state).
+  errors.cityArea = validateCityArea(cityArea);
   if (listingHasErrors(errors)) return { errors };
 
   if (imagePaths.length === 0) {
@@ -1108,13 +1115,24 @@ export async function updateListingAction(
   // category_id, not the DB's prior category — handles the edit case
   // where the user changed the category to one with different specs.
   //
-  // Sprint 3 / Gap D.2: switched to resolveCategoryForListing for the
-  // shared {slug, specsSchema} shape. Behavior here is unchanged from the
-  // old resolveCategorySpecsSchema (not-found → null schema). D.3 adds the
-  // not-found + isLaunchCategory enforcement to this action.
+  // Sprint 3 / Gap D.2+D.3: resolveCategoryForListing returns {slug,
+  // specsSchema} in one lookup. D.3 adds the same launch-allowlist
+  // enforcement createListingAction has — a seller editing a listing into
+  // a non-launch category is rejected server-side, same as create.
   const category = await resolveCategoryForListing(supabase, categoryId);
+  if (!category) {
+    return { errors: { categoryId: "Category not found" } };
+  }
+  if (!isLaunchCategory(category.slug)) {
+    return {
+      errors: {
+        categoryId:
+          "This category isn't available during launch. Available categories: phones, computers, electronics, power & generators.",
+      },
+    };
+  }
   const { specs: categorySpecs, error: specError } = parseSpecsFromFormData(
-    category?.specsSchema ?? null,
+    category.specsSchema,
     formData
   );
   if (specError) return { errors: { _form: specError } };
@@ -1128,6 +1146,7 @@ export async function updateListingAction(
       is_negotiable: negotiable,
       category_id: categoryId,
       state_id: stateId,
+      city_area: cityArea, // Sprint 3 / Gap D.3
       category_specs: categorySpecs,
     })
     .eq("id", productId);
