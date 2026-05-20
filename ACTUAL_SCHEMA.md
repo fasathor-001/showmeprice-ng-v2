@@ -167,7 +167,7 @@ Records when buyers reveal seller WhatsApp contact. Reshaped in Phase E.1.1 (D-0
 
 **Notes:**
 - 7 columns logical order. Ordinal positions 5/6/7 are gaps from the Phase A DROP COLUMN of `channel`/`ip_hash`/`created_at` in E.1.1 (standard Postgres behavior — DROP doesn't renumber subsequent columns). Always document in logical order, never reference `ordinal_position` from a tool query.
-- FK constraint names are stale per D-080: `contact_reveals_buyer_id_profiles_id_fk`, `contact_reveals_product_id_products_id_fk` (constraint name still says `product_id` though the column is now `listing_id`), `contact_reveals_seller_id_profiles_id_fk`. Functional but cosmetic; rename deferred to a low-risk maintenance window.
+- FK constraint name for the `listing_id` column was renamed in D-080.1 (2026-05-20): `contact_reveals_product_id_products_id_fk` → `contact_reveals_listing_id_products_id_fk` (RENAME CONSTRAINT, CASCADE preserved). The `buyer_id`/`seller_id` FK names (`contact_reveals_buyer_id_profiles_id_fk`, `contact_reveals_seller_id_profiles_id_fk`) are truthful Drizzle-canonical names — left untouched.
 
 ### `conversations`
 
@@ -795,7 +795,7 @@ Pro tier paid subscriptions. Reshaped in Phase E.1.1 (D-055) — Phase A columns
 - Promo columns (E.2.0.3): a subscription is on promo pricing while `NOW() < promo_expires_at`. After expiry, Paystack renewal proceeds at standard rate via the `pro_monthly_launch → pro_monthly_standard` plan transition (D-087). Launch promo is monthly-only — no annual promo per D-087.
 - FK constraint `subscriptions_profile_id_profiles_id_fk` is stale per D-080 — name still references old `profile_id` column though the column is now `user_id`. Functional but cosmetic; rename deferred.
 - The orphan index `subscriptions_profile_idx` (post-rename btree on `user_id`) was dropped in E.1.2 cleanup (D-069). Current btree-on-user_id index is `subscriptions_user_idx`.
-- The pre-existing `subscription_tier` enum is unused going forward — plan_code text is canonical (D-055 framework).
+- The pre-existing `subscription_tier` enum was unused going forward (plan_code text is canonical, D-055 framework) and was dropped in D-080.1 (2026-05-20).
 
 ### `tier_features`
 
@@ -831,7 +831,7 @@ Append-only log of every tier change. Drives "Pro for X months" displays, churn 
 
 ## Enums
 
-Thirteen custom enums in the `public` schema.
+Eleven custom enums in the `public` schema. (Originally thirteen; `subscription_status` + `subscription_tier` dropped in D-080.1, 2026-05-20, after the post-E.1.1 move to `text` columns left them with zero references.)
 
 | Enum | Values |
 |---|---|
@@ -839,8 +839,6 @@ Thirteen custom enums in the `public` schema.
 | `escrow_order_status` | `initiated`, `funded`, `shipped`, `delivered`, `released`, `disputed`, `refunded`, `cancelled` |
 | `id_document_type` | `nin_slip`, `drivers_license`, `voters_card`, `international_passport` (Phase C.5 P.1) |
 | `product_status` | `draft`, `active`, `sold`, `archived` |
-| `subscription_status` | `active`, `past_due`, `cancelled`, `expired` |
-| `subscription_tier` | `free`, `pro` |
 | `user_role` | `admin` |
 | `user_type` | `buyer`, `seller` |
 | `verification_status` | `unverified`, `unsubmitted`, `pending`, `verified`, `rejected` |
@@ -850,7 +848,7 @@ Thirteen custom enums in the `public` schema.
 | **`credit_pack_type`** | `trial`, `small`, `medium`, `large` (Phase E.2.0.4 / D-085; used by `payments.pack_type`) |
 
 **Notes:**
-- `subscription_status` and `subscription_tier` (Phase A) are no longer referenced by the post-E.1.1 `subscriptions` table — `subscriptions.status` is now plain `text` and `plan_code` replaces the tier concept. The enums remain in the schema as dead code; safe to leave or drop in Phase F+.
+- `subscription_status` and `subscription_tier` (Phase A) were no longer referenced by the post-E.1.1 `subscriptions` table — `subscriptions.status` is now plain `text` and `plan_code` replaces the tier concept. Both enums were `DROP TYPE`d in D-080.1 (2026-05-20) after the audit (§3) confirmed zero column references.
 - `verification_status` does NOT contain `'suspended'`.
 - `user_role` has only `'admin'` — there's no "seller" or "buyer" role. Use `user_type` for that distinction.
 - Phase E intentionally uses `text` (not enum) for new tier-related columns (`profiles.tier`, `businesses.seller_tier`, `subscriptions.plan_code`) to allow tier additions without enum-alter migrations.
