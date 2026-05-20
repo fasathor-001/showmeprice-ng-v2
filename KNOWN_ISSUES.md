@@ -88,6 +88,16 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Fix when prioritised:** delete the three `revalidatePath("/", "layout")` calls; navigation-driven freshness via `redirect()` already covers it. Trivial, but verify no non-edge code path relies on them first.
 
+### K-013 — OTP verify-attempt counter is read-then-write, not atomic (low)
+
+**Symptom:** `verifyPhoneOtpAction` (`src/app/(auth)/otp-actions.ts`) increments `phone_verifications.attempts_made` via read-then-write (`update({ attempts_made: row.attempts_made + 1 })`). Concurrent wrong-code submissions for the same OTP can under-count, allowing up to ~6 attempts instead of the intended 5.
+
+**Severity:** low. The brute-force margin is negligible — 6 vs 5 guesses against a 6-digit code is ~1-in-166,666 either way. No practical security impact.
+
+**Surfaced + decided:** Stage 2.A Step 3/4. Deliberately deferred (decision B) because the atomic fix is disproportionate to the margin (see fix path).
+
+**Fix path (Phase F+ hardening):** supabase-js can't express `attempts_made = attempts_made + 1`, so an atomic increment needs a `SECURITY DEFINER` Postgres function doing `UPDATE phone_verifications SET attempts_made = attempts_made + 1 WHERE id = $1 AND user_id = $2 RETURNING attempts_made;` — the action then checks the returned value `>= 5`. **Must apply the full anon/authenticated/PUBLIC triple-REVOKE + service_role grant lockdown** (see the SECURITY DEFINER lesson in MEMORY.md) and a §2d-style grant audit. DB-first migration before the action change.
+
 ## Resolved or superseded
 
 ### K-003 — Spam signups possible (email confirmation OFF) (RESOLVED)

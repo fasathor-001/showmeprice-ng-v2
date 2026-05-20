@@ -52,6 +52,10 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "success",
     message: "Business updated successfully.",
   },
+  "phone-verified": {
+    variant: "success",
+    message: "Your phone number is verified.",
+  },
   "verification-approved": {
     variant: "success",
     message: "Seller approved. Their listings are now live.",

@@ -77,9 +77,31 @@ export async function GET(request: NextRequest) {
         .select("verification_status")
         .eq("owner_id", user.id)
         .maybeSingle();
+
+      // Determine the eventual destination first.
+      let dest = next;
       if (business && business.verification_status !== "verified") {
-        return NextResponse.redirect(`${origin}/sell/verify`);
+        dest = "/sell/verify";
       }
+
+      // Phase E Stage 2.A (Model A): prompt phone verification before that
+      // destination if it isn't done yet. This is a SOFT prompt — /verify-phone
+      // has a "Skip for now" link; hard enforcement of phone_verified lives at
+      // the gated actions (contact-reveal, listing-creation), per decision #3.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("verification_status")
+        .eq("id", user.id)
+        .maybeSingle();
+      const phoneVerified = (profile?.verification_status ?? []).includes(
+        "phone_verified"
+      );
+      if (!phoneVerified) {
+        return NextResponse.redirect(
+          `${origin}/verify-phone?next=${encodeURIComponent(dest)}`
+        );
+      }
+      return NextResponse.redirect(`${origin}${dest}`);
     }
     return NextResponse.redirect(`${origin}${next}`);
   }
