@@ -420,6 +420,44 @@ Search the function body for the old name. If any rows return, either:
 
 **Phase E.1.0 hotfix pattern (banked for re-use):** `CREATE OR REPLACE FUNCTION` is online — no table lock, no downtime. Apply it in the same SQL transaction as the column rename if possible. The Phase E.1.0 break was a few minutes of broken signups (no real users), but on a populated production database that's an outage.
 
+### Phase E photo rule: minimum 1, suggest 3+, maximum 8
+
+Earlier Sprint 3 scoping initially answered "no maximum" on listing photos. That was wrong — the Phase E spec photo rule is **minimum 1, suggest 3+, maximum 8**. Correcting it here so the cap doesn't get re-derived from the stale answer.
+
+**Operational:** when a scoping answer contradicts the written spec, the spec wins and the correction gets banked — don't leave the wrong answer as the most recent word on it.
+
+### DB-first / code-second so code can always roll back to a clean HEAD
+
+When a code commit references database state (a new column, enum value, function, or category row), ship the DB change first and confirm it applied, *then* commit the code. The ordering matters for recovery: if code lands first and the migration is delayed or fails, `git reset` to a clean HEAD still leaves code referencing a column that doesn't exist. DB-first means every code commit on `main` references state that already exists.
+
+**Exception:** code-only changes that don't reference DB state (refactors, dead-code deletion, type-only changes) don't need DB-first sequencing — the rule applies specifically when code references new DB state. (E.g. the Sprint 3 `ListingForm.tsx` deletion needed no DB step.)
+
+**Operational:** the migration runs in Supabase and is verified (paste-back) before the code commit that depends on it. Used throughout Sprint 2 (E.2.0.x) and Sprint 3.
+
+### Two-sided data discipline: audit BOTH code-side and DB-side before any UPDATE/REPLACE
+
+When a migration touches data that has both a code-side representation (`seed.ts`) and a database-side representation (production rows), audit BOTH before any UPDATE/REPLACE. Count-based diffs are triage only — they tell you *whether* something diverged, not *what*. Element-by-element comparison is required for true reconciliation.
+
+**Caught in Sprint 3:** seed-vs-prod category counts looked like "drift up" in some categories until the seed file was read exactly — every apparent drift-up was an undercount in the audit estimate, and real drift was unidirectional (7 drift-down categories). Estimated counts (using approximations) manufactured false signals; exact counts revealed unidirectional drift only.
+
+### Validation pattern split: required-on-listing vs optional-on-business is intentional
+
+The Sprint 3 `city_area` work deliberately uses two validation patterns, and the split should NOT be collapsed into one parameterized helper:
+- **Listings** (create/edit) use the exported `validateCityArea()` — required, trim, min 3, max 100.
+- **Business** (become-seller/manage) uses inline action-side validation — optional, max 100, empty allowed.
+
+A single `validateCityArea(value, { required })` helper would obscure the real difference: required-vs-optional *and* min-length-vs-empty-OK are different validation shapes, not one shape with a flag. Keeping them separate makes each call site's contract obvious.
+
+**Lesson:** when considering whether to parameterize two validators into one, check what the parameter actually toggles. If it toggles the same rule with different inputs (different max lengths for different fields), parameterize. If it toggles fundamentally different validation shapes (required vs optional, presence vs absence checks), keep them separate. Duplication that documents intent beats abstraction that hides it.
+
+### Public storefront is a Phase F+ dependency — bank deferred foundations as a known gap
+
+Multiple Phase E spec items depend on a public seller storefront route that does not exist in Phase E: sold-as-trust-signal, founding-seller-badge-as-trust-signal, reply-rate metrics, and seller analytics view. The data foundations for several of these are being laid in Phase E (founding-seller fields, mark-as-sold status), but they have no public surface to render on yet.
+
+**Currently waiting on storefront:** Founding Seller badge display (D-088), sold-listing trust signal (Gap B), seller reply-rate display (Phase F+), seller analytics view (Phase F+). When storefront ships, these activate as a coordinated batch.
+
+**Lesson:** when storefront ships in Phase F+, these deferred foundations activate together. Banking this as a known platform gap so future audits don't misclassify "founding-seller field exists but renders nowhere" as a bug — it's deferred-by-design, waiting on the storefront route.
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `phone`)
