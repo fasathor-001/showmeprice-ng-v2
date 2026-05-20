@@ -589,6 +589,27 @@ Half-coverage is a real trap: in E.2.0.2 the pre-flight verified `subscriptions.
 
 This is D-079 applied to code design, not just decision-doc framing. A banked decision is the default; deviating from it requires an explicit re-bank, not a silent code change. Cheap to surface, expensive to discover post-ship.
 
+## SECURITY DEFINER lockdown needs explicit anon + authenticated REVOKEs, not just PUBLIC
+
+**Vulnerability class — banked during Stage 2.A (E.2.1.1).** Supabase auto-grants `EXECUTE` on every `public`-schema function to BOTH the `anon` and `authenticated` roles. `REVOKE ALL ... FROM PUBLIC` does **not** remove those role-specific grants — `PUBLIC` is a separate grantee from the named roles. So a `SECURITY DEFINER` function meant for service-role-only access, locked down with only `REVOKE ... FROM PUBLIC`, is **still callable by any signed-in user via `rpc()`** — which for `mark_phone_verified` would have meant any authenticated user could self-grant `'phone_verified'`. Caught at the §2d verification step (the grant audit returned `anon` + `authenticated` rows).
+
+**Mandatory lockdown for any service-role-only SECURITY DEFINER function:**
+```sql
+REVOKE EXECUTE ON FUNCTION public.fn(...) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn(...) FROM authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn(...) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.fn(...) TO service_role;
+```
+
+**Always verify post-deploy** — neither `anon` nor `authenticated` may appear:
+```sql
+SELECT grantee, privilege_type FROM information_schema.routine_privileges
+WHERE routine_schema='public' AND routine_name='fn';
+-- PASS: service_role (+ owner) present; anon / authenticated / PUBLIC absent.
+```
+
+This applies to EVERY future `SECURITY DEFINER` function on this codebase. Writing one with only `REVOKE FROM PUBLIC` reopens the same self-grant vector — treat the triple-REVOKE + grant-audit as a non-negotiable checklist item, paired with `SET search_path = public`.
+
 ---
 
 ## Banked Principles
