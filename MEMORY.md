@@ -513,6 +513,44 @@ SELECT conname, conrelid::regclass FROM pg_constraint WHERE conname ILIKE '%<old
 
 Policy bodies don't need a separate scan — Postgres has us covered there.
 
+## Synthetic-scenario verification: pg_temp function returning a TABLE
+
+**Problem (banked during Sprint 2):** The Supabase SQL Editor splits multi-statement submissions in a way that does NOT preserve TEMP tables — or even regular tables — across statement boundaries inside a single `BEGIN`/`ROLLBACK` transaction. A naive "CREATE TEMP TABLE results; INSERT scenario rows; SELECT * FROM results; ROLLBACK" pattern loses the temp table between statements.
+
+**Workaround that works:** define a `pg_temp` function that returns a `TABLE(...)`, then `SELECT * FROM pg_temp.fn_name()` in the same submission, all wrapped in `BEGIN ... ROLLBACK`:
+
+```sql
+BEGIN;
+CREATE OR REPLACE FUNCTION pg_temp.test_scenarios()
+RETURNS TABLE (scenario TEXT, expected TEXT, actual TEXT, pass BOOLEAN)
+LANGUAGE plpgsql AS $func$
+BEGIN
+  -- mutate state, call the function under test, RETURN QUERY SELECT rows
+  RETURN QUERY SELECT 'case 1'::TEXT, 'X'::TEXT, actual_val::TEXT, (actual_val = expected);
+  -- ... more scenarios ...
+END;
+$func$;
+SELECT * FROM pg_temp.test_scenarios();
+ROLLBACK;
+```
+
+Each scenario is a `RETURN QUERY SELECT`; the whole thing returns one clean result grid; the `ROLLBACK` discards all synthetic mutations (including any INSERTs the function made and the pg_temp function itself). Used in E.2.0.1 (reveal-cap branches), E.2.0.2 (escrow fee scenarios), E.2.0.4 (CHECK constraint behavioral test). This is the canonical pattern for "verify a function across N scenarios without persisting test data."
+
+## Pre-flight column-coverage discipline for synthetic test INSERTs
+
+**Banked during Sprint 2 (E.2.0.2):** when a migration's verification includes synthetic-scenario INSERTs (the pg_temp pattern above), the pre-flight column-check query must cover EVERY column the INSERT references — not just the columns the function-under-test reads internally.
+
+Half-coverage is a real trap: in E.2.0.2 the pre-flight verified `subscriptions.user_id/status/current_period_end` (the columns `compute_escrow_fee` reads) but the V4 synthetic INSERT also referenced `payment_provider`, `plan_code`, `started_at`. A stale column name in the INSERT would surface as a "column not found" error during V4 that the operator misreads as a function bug — when the real issue is test setup. List every INSERT column in pre-flight.
+
+## Surface design conflicts against banked decisions before drafting code
+
+**Banked during Sprint 2 (E.2.0.2):** when the planner proposes a design that contradicts a banked decision, the agent must surface the conflict and resolve it explicitly before drafting code — never silently absorb the deviation. The discipline runs both directions:
+
+- E.2.0.2: the planner improvised `compute_escrow_fee(p_amount_kobo, p_buyer_tier TEXT)` — but D-086 had banked `(p_amount_kobo, p_user_id UUID)` with a subscriptions-lookup (not tier-param) design. The agent surfaced the divergence with a 3-option table; the planner chose to ship D-086 as banked.
+- The TEXT-tier proposal would also have broken the trust boundary (server-side recomputation means the function IS the boundary; accepting a caller-supplied tier puts the caller back inside it).
+
+This is D-079 applied to code design, not just decision-doc framing. A banked decision is the default; deviating from it requires an explicit re-bank, not a silent code change. Cheap to surface, expensive to discover post-ship.
+
 ---
 
 ## Banked Principles

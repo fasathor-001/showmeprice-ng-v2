@@ -4,6 +4,8 @@
 >
 > Verified via `information_schema` and `pg_catalog` queries on 2026-05-18 during Phase E Stage 1 schema-refresh dump (D1–D6 + filter_rules follow-up). Column-level information for the 32 E.1.x CREATE-from-scratch tables derives from migration SQL whose CREATE TABLE statements all passed V-verification at apply time; the two ALTER-in-place tables (`subscriptions`, `contact_reveals`) are documented against verbatim D1 paste-back.
 >
+> **Phase E Stage 2 buyer-side prep applied (E.2.0.0–E.2.0.4), all V-verified:** `profiles.signup_free_reveals_remaining` + `profiles.pro_activated_at`; functions `get_buyer_reveal_cap(uuid)` + `compute_escrow_fee(bigint, uuid)`; `subscriptions.promo_code` + `subscriptions.promo_expires_at`; `credit_pack_type` enum + `payments.pack_type` + `payments_pack_type_only_for_credit_pack` CHECK. Table count unchanged at 42 (Stage 2 added only columns / functions / one enum, no new tables).
+>
 > If you change the schema (new tables, new columns, new policies, new triggers, new enums), update this file in the same commit.
 
 ---
@@ -461,6 +463,14 @@ Provider-agnostic payment record. Phase E populates via Paystack only (D-074). P
 | metadata | jsonb | YES | — |
 | created_at | timestamptz | YES | now() |
 | completed_at | timestamptz | YES | — |
+| **pack_type** | credit_pack_type (enum) | YES | — (Phase E.2.0.4 / D-085; `'trial'`/`'small'`/`'medium'`/`'large'`. Meaningful only for `payment_type='credit_pack'` rows) |
+
+**Constraints:**
+- `payments_pack_type_only_for_credit_pack` CHECK (`pack_type IS NULL OR payment_type = 'credit_pack'`) — Phase E.2.0.4. Prevents non-credit-pack payments (subscriptions, refunds) from carrying a pack_type.
+
+**Notes:**
+- `pack_type` enum (E.2.0.4): closed set of 4 values matching D-085 locked credit pack structure (Trial ₦500/1 reveal, Small ₦1,500/3, Medium ₦3,500/9, Large ₦7,000/20). Enum (not text) because the value set is fixed — unlike `payment_type`/`status`/`tier`/`plan_code` which are text for extensibility.
+- Credit balance accumulation happens on `credit_balances` (running balance only); `payments.pack_type` records which pack was purchased for analytics + reconciliation.
 
 ### `price_history`
 
@@ -545,6 +555,8 @@ User profiles. One-to-one with `auth.users`. Created automatically via `handle_n
 | **tier** | text | NO | `'free'` (Phase E.1.0; values `'free'`/`'pro'`/`'premium'`/`'institution'`) |
 | **tier_started_at** | timestamptz | YES | — (Phase E.1.0) |
 | **tier_expires_at** | timestamptz | YES | — (Phase E.1.0) |
+| **signup_free_reveals_remaining** | integer | NO | `1` (Phase E.2.0.0 / D-084; 1 free contact reveal granted at signup. Backfill on deploy: profiles created ≥30 days prior → 0; <30 days → 1) |
+| **pro_activated_at** | timestamptz | YES | — (Phase E.2.0.1 / D-083; set on first Pro subscription activation, backfilled from `MIN(subscriptions.started_at)`. NULL = never activated Pro. Drives the new/established Pro reveal-cap tenure check) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
@@ -554,6 +566,8 @@ User profiles. One-to-one with `auth.users`. Created automatically via `handle_n
 - `verification_status` array tracks completed verifications. Phase E.1: sets `'phone_verified'` and optionally `'email_verified'`. Phase F+ adds `'google_verified'` / `'facebook_verified'`. Phase H+ adds `'bvn_verified'` / `'nin_verified'`.
 - `auth_providers` array tracks linked sign-in methods.
 - `tier` drives Pro-feature gating. Default `'free'`.
+- `signup_free_reveals_remaining` (E.2.0.0 / D-084): every new buyer gets 1 free contact reveal at signup. First reveal attempt decrements to 0. After exhaustion, buyer must buy a credit pack or subscribe to Pro. Replaces the rejected 14-day Pro trial (harvesting attack vector).
+- `pro_activated_at` (E.2.0.1 / D-083): consumed by `get_buyer_reveal_cap(uuid)` — Pro buyers within 30 days of activation get 10 reveals/day, established Pro buyers (30+ days, no open reports) get 25/day. NULL or open-reports → falls back to 10/day cap.
 
 ### `push_subscriptions`
 
@@ -761,9 +775,12 @@ Pro tier paid subscriptions. Reshaped in Phase E.1.1 (D-055) — Phase A columns
 | cancelled_at | timestamptz | YES | — |
 | payment_method | text | YES | — (`'card'`, `'direct_debit'`) |
 | created_at | timestamptz | YES | now() |
+| **promo_code** | text | YES | — (Phase E.2.0.3 / D-087; promo identifier e.g. `'LAUNCH_3K'`. NULL = no promo) |
+| **promo_expires_at** | timestamptz | YES | — (Phase E.2.0.3 / D-087; when promo rate ends. For LAUNCH_3K: `created_at + 90 days`. NULL = standard pricing) |
 
 **Notes:**
-- 13 columns logical order. Ordinal positions 3/4/5/6/7/10/11/13 are gaps from Phase A DROP COLUMNs in E.1.1 (standard Postgres behavior).
+- 15 columns logical order (13 from E.1.1 reshape + 2 promo columns from E.2.0.3). Ordinal positions 3/4/5/6/7/10/11/13 are gaps from Phase A DROP COLUMNs in E.1.1 (standard Postgres behavior).
+- Promo columns (E.2.0.3): a subscription is on promo pricing while `NOW() < promo_expires_at`. After expiry, Paystack renewal proceeds at standard rate via the `pro_monthly_launch → pro_monthly_standard` plan transition (D-087). Launch promo is monthly-only — no annual promo per D-087.
 - FK constraint `subscriptions_profile_id_profiles_id_fk` is stale per D-080 — name still references old `profile_id` column though the column is now `user_id`. Functional but cosmetic; rename deferred.
 - The orphan index `subscriptions_profile_idx` (post-rename btree on `user_id`) was dropped in E.1.2 cleanup (D-069). Current btree-on-user_id index is `subscriptions_user_idx`.
 - The pre-existing `subscription_tier` enum is unused going forward — plan_code text is canonical (D-055 framework).
@@ -802,7 +819,7 @@ Append-only log of every tier change. Drives "Pro for X months" displays, churn 
 
 ## Enums
 
-Twelve custom enums in the `public` schema.
+Thirteen custom enums in the `public` schema.
 
 | Enum | Values |
 |---|---|
@@ -818,6 +835,7 @@ Twelve custom enums in the `public` schema.
 | **`notification_event`** | `new_message`, `seller_reply`, `listing_sold`, `price_drop`, `verification_status_change`, `pro_renewal_upcoming`, `pro_renewal_succeeded`, `pro_renewal_failed`, `pro_subscription_ending`, `report_action_taken`, `admin_message`, `listing_reported`, `listing_hidden` (Phase E.1.0) |
 | **`report_target_type`** | `listing`, `user`, `message` (Phase E.1.0) |
 | **`report_status`** | `new`, `in_review`, `resolved`, `dismissed` (Phase E.1.0) |
+| **`credit_pack_type`** | `trial`, `small`, `medium`, `large` (Phase E.2.0.4 / D-085; used by `payments.pack_type`) |
 
 **Notes:**
 - `subscription_status` and `subscription_tier` (Phase A) are no longer referenced by the post-E.1.1 `subscriptions` table — `subscriptions.status` is now plain `text` and `plan_code` replaces the tier concept. The enums remain in the schema as dead code; safe to leave or drop in Phase F+.
@@ -931,8 +949,12 @@ Business-logic triggers (excluding auto-generated FK constraint triggers).
 | **`is_admin`** | `check_user_id uuid` | boolean | Checks if given user_id is admin. Reads `profiles.role = 'admin'`. **Does NOT consult the `admins` entity** — that table is Phase E §14 future-state; current RLS still uses the profiles-based admin model (per D-081 Phase F+ unification deferral). |
 | `set_updated_at` | (trigger context) | trigger | Generic updated_at maintenance |
 | **`log_product_price_change`** | (trigger context) | trigger | Phase E.1.2. Inserts a row into `price_history` (product_id, price_kobo, changed_by = NEW.seller_id) on every price_kobo change. Per D-071, `changed_by` attribution uses `NEW.seller_id` — best-effort, since DB triggers can't reliably resolve `auth.uid()`. Admin price overrides are captured in `admin_action_log` instead. |
+| **`get_buyer_reveal_cap`** | `p_user_id uuid` | integer | Phase E.2.0.1 / D-083. Returns the daily contact-reveal cap for a buyer. Free → 0 (convention: no per-day cap; caller checks `signup_free_reveals_remaining` + `credit_balances`). Pro new (<30d) / missing `pro_activated_at` / has open reports → 10. Pro established (30+d, no open reports) → 25. Institution → 25 (Phase E placeholder). Legacy `'premium'` → treated as Pro (defensive; shouldn't exist post-D-082). STABLE, SECURITY DEFINER, `search_path=public`. Open-reports check computed-on-read against `reports` (target_type='user', status IN 'new'/'in_review'). |
+| **`compute_escrow_fee`** | `p_amount_kobo bigint, p_user_id uuid` | bigint | Phase E.2.0.2 / D-086. Returns escrow fee in kobo. Raises exception below ₦50,000 (5,000,000 kobo). Pro rate 1.2% + ₦100 if an active subscription exists (`status='active' AND current_period_end > NOW()`), else standard 1.5% + ₦100. Integer half-up rounding `(amount × rate + 500) / 1000 + 10000`. Reads billing-authoritative `subscriptions` (NOT `profiles.tier`) — catches cancelled-but-tier-stale + past-due edge cases. STABLE, SECURITY DEFINER, `search_path=public`. |
 
 **Critical:** `is_admin` requires a `uuid` argument. There is NO parameterless `is_admin()` form. RLS policies and triggers must call `is_admin(auth.uid())`.
+
+**Phase E.2 buyer-side functions** (`get_buyer_reveal_cap`, `compute_escrow_fee`) are both STABLE + SECURITY DEFINER + `search_path=public`-locked. The SECURITY DEFINER pattern lets them read `reports` / `subscriptions` regardless of caller RLS context (needed when computing a buyer's own cap/fee); the search_path lock prevents schema-injection. They are pure computation over current DB state — safe to call from server actions, RLS policies, or background jobs.
 
 ---
 
@@ -1048,6 +1070,7 @@ All Phase E FKs use Drizzle naming convention (`<table>_<col>_<reftable>_<refcol
 | `filter_rules_action_check` | filter_rules | `action IN ('block', 'warn', 'allow')` |
 | `reports_description_length` | reports | `description IS NULL OR char_length(description) <= 200` |
 | `blocks_no_self` | blocks | `blocker_id <> blocked_id` |
+| `payments_pack_type_only_for_credit_pack` | payments | `pack_type IS NULL OR payment_type = 'credit_pack'` (Phase E.2.0.4 / D-085) |
 
 (Additional CHECKs may exist from E.1.1 — D4 returned 12 total. Rerun the D4 query if a comprehensive list is needed for a specific operation.)
 
@@ -1195,7 +1218,7 @@ The project journal (chat summary at start of conversations) was inaccurate in s
 
 - "12 tables" → 42 tables (Phase E Stage 1 net additions: +32 new tables, −1 drop, +0 net renames)
 - `admin_audit_log` no longer exists (dropped E.1.3.1)
-- "8 enums" → 12 enums (Phase E.1.0 added `notification_event`, `report_target_type`, `report_status`; Phase C.5 P.1 added `id_document_type`)
+- "8 enums" → 13 enums (Phase E.1.0 added `notification_event`, `report_target_type`, `report_status`; Phase C.5 P.1 added `id_document_type`; Phase E.2.0.4 added `credit_pack_type`)
 - `subscriptions` has been substantially reshaped — Phase A's `tier`/`paystack_*` columns dropped, Phase E's plan_code-based structure landed. The `subscription_tier` and `subscription_status` enums (Phase A) are dead code post-E.1.1.
 - `contact_reveals` has been reshaped — Phase A's `channel`/`ip_hash`/`created_at` dropped, Phase E's reveal-tracking columns landed. Column `product_id` renamed to `listing_id`.
 - `notifications` (claimed) → no such table; canonical is `notification_log` + `notification_preferences` from E.1.1
