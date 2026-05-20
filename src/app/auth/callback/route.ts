@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { phoneGateDest } from "@/lib/auth";
 
 export const runtime = "edge";
 
@@ -84,24 +85,15 @@ export async function GET(request: NextRequest) {
         dest = "/sell/verify";
       }
 
-      // Phase E Stage 2.A (Model A): prompt phone verification before that
-      // destination if it isn't done yet. This is a SOFT prompt — /verify-phone
-      // has a "Skip for now" link; hard enforcement of phone_verified lives at
-      // the gated actions (contact-reveal, listing-creation), per decision #3.
+      // Phase E Stage 2.A (Model A): route through the shared phone-verify
+      // soft-prompt gate (same phoneGateDest helper as signInAction — K-014).
       const { data: profile } = await supabase
         .from("profiles")
         .select("verification_status")
         .eq("id", user.id)
         .maybeSingle();
-      const phoneVerified = (profile?.verification_status ?? []).includes(
-        "phone_verified"
-      );
-      if (!phoneVerified) {
-        return NextResponse.redirect(
-          `${origin}/verify-phone?next=${encodeURIComponent(dest)}`
-        );
-      }
-      return NextResponse.redirect(`${origin}${dest}`);
+      const gated = phoneGateDest(profile?.verification_status, dest);
+      return NextResponse.redirect(`${origin}${gated}`);
     }
     return NextResponse.redirect(`${origin}${next}`);
   }

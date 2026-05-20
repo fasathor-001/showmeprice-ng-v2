@@ -34,6 +34,19 @@ export function normalizeNigerianWhatsApp(input: string): string | null {
 }
 
 /**
+ * Format a canonical NG number (2348012345678) for display as
+ * "+234 801 234 5678". Returns the input unchanged if it isn't a canonical
+ * 234 + 10-digit string (defensive — legacy/odd values pass through).
+ */
+export function formatNigerianPhone(canonical: string): string {
+  if (/^234\d{10}$/.test(canonical)) {
+    const n = canonical.slice(3); // 10 national digits
+    return `+234 ${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}`;
+  }
+  return canonical;
+}
+
+/**
  * Sanity check that a normalized number is a plausible Nigerian mobile.
  * NCC mobile prefixes after the 234 country code: 70, 71, 80, 81, 90, 91.
  */

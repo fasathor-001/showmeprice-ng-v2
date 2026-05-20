@@ -98,7 +98,25 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Fix path (Phase F+ hardening):** supabase-js can't express `attempts_made = attempts_made + 1`, so an atomic increment needs a `SECURITY DEFINER` Postgres function doing `UPDATE phone_verifications SET attempts_made = attempts_made + 1 WHERE id = $1 AND user_id = $2 RETURNING attempts_made;` — the action then checks the returned value `>= 5`. **Must apply the full anon/authenticated/PUBLIC triple-REVOKE + service_role grant lockdown** (see the SECURITY DEFINER lesson in MEMORY.md) and a §2d-style grant audit. DB-first migration before the action change.
 
+### K-015 — Middleware auth-only redirect doesn't apply the phone-verify gate (low)
+
+**Symptom:** `middleware.ts` redirects a *signed-in* user who visits an auth-only route (`/sign-in`, `/sign-up`, `/forgot-password`) to `/dashboard` (hardcoded, line 50-55), bypassing the Stage 2.A phone-verify soft-prompt.
+
+**Severity:** low. Rare path — a signed-in user manually revisiting auth-only pages. Edge case acceptable because Step 5's `requirePhoneVerified()` gates catch unverified users at the actual point of impact (listing creation, contact reveal).
+
+**Fix declined for now:** would require a `profiles.verification_status` query inside middleware, which runs on most requests — wrong trade for a rare edge case. Revisit if it matters.
+
 ## Resolved or superseded
+
+### K-014 — Phone-verify soft-prompt missed signInAction (RESOLVED)
+
+**Symptom:** The Stage 2.A verify-phone soft-prompt was wired only into `/auth/callback`. Standard email+password sign-in (`signInAction`) bypasses `/auth/callback` and hardcoded `redirect("/dashboard")`, so existing accounts with phone unverified were never routed to `/verify-phone`. Caught in pre-Step-5 smoke testing (a test account with `verification_status=[]` landed on `/dashboard`).
+
+**Root cause (vulnerability class):** the routing decision was inlined in one of two parallel post-auth paths; the second drifted — the same "two places drift" failure the shared-helper pattern exists to prevent.
+
+**Fix:** extracted the pure helper `phoneGateDest(verificationStatus, baseDest)` to `src/lib/auth/post-auth.ts` and applied it in BOTH `/auth/callback` and `signInAction`. Single source of truth for the gate decision.
+
+**Resolved:** 2026-05-20 (same commit as the Step 4 two-state UX fix).
 
 ### K-003 — Spam signups possible (email confirmation OFF) (RESOLVED)
 

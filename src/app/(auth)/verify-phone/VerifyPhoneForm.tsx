@@ -5,6 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Input } from "@/components/ui";
+import { formatNigerianPhone } from "@/lib/auth";
 import {
   sendPhoneOtpAction,
   verifyPhoneOtpAction,
@@ -13,6 +14,12 @@ import {
 
 const initial: OtpActionState = {};
 const COOLDOWN_SECONDS = 60;
+
+function fmtCountdown(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
 
 interface Props {
   phone: string;
@@ -23,12 +30,18 @@ export function VerifyPhoneForm({ phone, next }: Props) {
   const router = useRouter();
   const [sendState, sendAction] = useFormState(sendPhoneOtpAction, initial);
   const [verifyState, verifyAction] = useFormState(verifyPhoneOtpAction, initial);
+  // Latch into State 2 on first successful send; stays true even if a later
+  // resend errors (so a failed resend doesn't bounce the user back to State 1).
+  const [hasSentOnce, setHasSentOnce] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
-  // Start the soft client cooldown each time a send succeeds. (The real cap is
-  // the server's 3/hr; this just prevents reflexive resend taps.)
+  const formattedPhone = formatNigerianPhone(phone);
+
   useEffect(() => {
-    if (sendState.ok) setCooldown(COOLDOWN_SECONDS);
+    if (sendState.ok) {
+      setHasSentOnce(true);
+      setCooldown(COOLDOWN_SECONDS);
+    }
   }, [sendState]);
 
   useEffect(() => {
@@ -37,7 +50,7 @@ export function VerifyPhoneForm({ phone, next }: Props) {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  // On successful verification, continue to the intended destination + toast.
+  // On success, continue to the intended destination with a toast.
   useEffect(() => {
     if (verifyState.ok) {
       const sep = next.includes("?") ? "&" : "?";
@@ -45,33 +58,44 @@ export function VerifyPhoneForm({ phone, next }: Props) {
     }
   }, [verifyState, next, router]);
 
-  const everSent = sendState.ok === true;
+  // STATE 1 — request a code.
+  if (!hasSentOnce) {
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-ink-600 text-center">
+          We&apos;ll text a code to{" "}
+          <span className="font-medium text-ink tabular-nums">
+            {formattedPhone}
+          </span>
+        </p>
+        <form action={sendAction}>
+          <SendButton cooldown={cooldown} resend={false} />
+          {sendState.error && (
+            <p role="alert" className="text-xs text-danger mt-2 text-center">
+              {sendState.error}
+            </p>
+          )}
+        </form>
+        <SkipLink next={next} />
+      </div>
+    );
+  }
 
+  // STATE 2 — enter the code.
   return (
-    <div className="space-y-5">
-      <p className="text-sm text-ink-600 text-center">
-        Code will be sent to{" "}
-        <span className="font-medium text-ink tabular-nums">{phone}</span>
+    <div className="space-y-6">
+      <p className="text-sm text-center text-verified-text">
+        Code sent to{" "}
+        <span className="font-medium tabular-nums">{formattedPhone}</span>
       </p>
 
-      {/* Send / resend code */}
-      <form action={sendAction}>
-        <SendButton cooldown={cooldown} everSent={everSent} />
-        {sendState.error && (
-          <p role="alert" className="text-xs text-danger mt-2 text-center">
-            {sendState.error}
-          </p>
-        )}
-      </form>
-
-      {/* Enter + verify code */}
       <form action={verifyAction} noValidate className="space-y-3">
         <div>
           <label
             htmlFor="code"
             className="block text-sm font-medium text-ink mb-1.5"
           >
-            6-digit code
+            Enter 6-digit code
           </label>
           <Input
             id="code"
@@ -82,47 +106,64 @@ export function VerifyPhoneForm({ phone, next }: Props) {
             pattern="[0-9]{6}"
             maxLength={6}
             required
-            error={verifyState.error}
+            aria-describedby={verifyState.error ? "code-error" : undefined}
           />
+          {verifyState.error && (
+            <p
+              id="code-error"
+              role="alert"
+              className="text-xs text-danger mt-1.5"
+            >
+              {verifyState.error}
+            </p>
+          )}
         </div>
         <VerifyButton />
       </form>
 
-      <div className="text-center">
-        <Link
-          href={next}
-          className="text-sm text-ink-600 hover:text-ink underline"
-        >
-          Skip for now
-        </Link>
+      <div className="text-center space-y-2">
+        <form action={sendAction}>
+          <SendButton cooldown={cooldown} resend />
+        </form>
+        {sendState.error && (
+          <p role="alert" className="text-xs text-danger">
+            {sendState.error}
+          </p>
+        )}
       </div>
+
+      <SkipLink next={next} />
     </div>
   );
 }
 
 function SendButton({
   cooldown,
-  everSent,
+  resend,
 }: {
   cooldown: number;
-  everSent: boolean;
+  resend: boolean;
 }) {
   const { pending } = useFormStatus();
-  const label =
-    cooldown > 0
-      ? `Resend code (${cooldown}s)`
-      : everSent
-        ? "Resend code"
-        : "Send code";
+
+  if (resend) {
+    const label =
+      cooldown > 0 ? `Resend in ${fmtCountdown(cooldown)}` : "Resend code";
+    return (
+      <Button
+        type="submit"
+        variant="ghost"
+        size="md"
+        disabled={pending || cooldown > 0}
+      >
+        {pending ? "Sending…" : label}
+      </Button>
+    );
+  }
+
   return (
-    <Button
-      type="submit"
-      variant={everSent ? "ghost" : "primary"}
-      size="lg"
-      fullWidth
-      disabled={pending || cooldown > 0}
-    >
-      {pending ? "Sending…" : label}
+    <Button type="submit" variant="primary" size="lg" fullWidth disabled={pending}>
+      {pending ? "Sending…" : "Send code"}
     </Button>
   );
 }
@@ -133,5 +174,18 @@ function VerifyButton() {
     <Button type="submit" variant="primary" size="lg" fullWidth disabled={pending}>
       {pending ? "Verifying…" : "Verify"}
     </Button>
+  );
+}
+
+function SkipLink({ next }: { next: string }) {
+  return (
+    <div className="text-center">
+      <Link
+        href={next}
+        className="text-xs text-ink-400 hover:text-ink-600 underline"
+      >
+        Skip for now
+      </Link>
+    </div>
   );
 }

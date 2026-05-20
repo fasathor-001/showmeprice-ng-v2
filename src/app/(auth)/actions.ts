@@ -7,6 +7,7 @@ import {
   normalizeNigerianWhatsApp,
   validateSignUpForm,
   hasErrors,
+  phoneGateDest,
   type ValidationErrors,
 } from "@/lib/auth";
 import {
@@ -139,7 +140,10 @@ export async function signInAction(
   if (!password) return { errors: { password: "Password is required" } };
 
   const supabase = createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
   if (error) {
     if (error.message.toLowerCase().includes("invalid login credentials")) {
@@ -148,8 +152,22 @@ export async function signInAction(
     return { errors: { _form: error.message } };
   }
 
+  // Phase E Stage 2.A: existing accounts sign in HERE, not via /auth/callback,
+  // so the phone-verify soft-prompt gate must be applied in both places (the
+  // shared phoneGateDest helper — K-014). baseDest stays /dashboard; seller
+  // verification routing fires at the gated actions, not on every sign-in.
+  let dest = "/dashboard";
+  if (data.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("verification_status")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    dest = phoneGateDest(profile?.verification_status, "/dashboard");
+  }
+
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(dest);
 }
 
 export async function signOutAction(): Promise<void> {

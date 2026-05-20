@@ -1,4 +1,9 @@
-export { normalizeNigerianWhatsApp, isPlausibleNigerianMobile } from "./whatsapp";
+export {
+  normalizeNigerianWhatsApp,
+  isPlausibleNigerianMobile,
+  formatNigerianPhone,
+} from "./whatsapp";
+export { phoneGateDest } from "./post-auth";
 export {
   validateEmail,
   validatePassword,
