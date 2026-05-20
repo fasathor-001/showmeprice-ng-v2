@@ -13,6 +13,7 @@ export {
   validateCategoryId,
   validateStateId,
   validateImageUrls,
+  validateCityArea,
   validateListingForm,
   hasErrors,
   type ListingFormData,

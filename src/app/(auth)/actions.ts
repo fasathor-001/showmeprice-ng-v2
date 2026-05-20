@@ -12,6 +12,7 @@ import {
 import {
   parseNairaInputToKobo,
   validateListingForm,
+  validateCityArea,
   hasErrors as listingHasErrors,
   generateListingSlug,
   type ListingValidationErrors,
@@ -20,6 +21,7 @@ import {
   getSpecsForCategory,
   parseSpecsFromFormData,
 } from "@/lib/categorySpecs";
+import { isLaunchCategory } from "@/lib/categories";
 
 export interface ActionResult {
   errors?: ValidationErrors & {
@@ -809,13 +811,22 @@ async function getSellerBusiness(
 }
 
 /**
- * Resolve the spec schema for a category by id, falling back to the
- * parent's schema (Phase D.7). Returns null when no schema applies.
+ * Resolve category metadata for listing creation/edit by id (Phase D.7 +
+ * Sprint 3 / Gap D.2). Single categories lookup returns BOTH:
+ *   - slug: the category's own slug (for the Phase E launch-allowlist
+ *     check via isLaunchCategory)
+ *   - specsSchema: the category-spec schema, falling back to the parent's
+ *     schema (Phase D.7); null when no schema applies
+ *
+ * Returns null ONLY when the category id doesn't exist — this distinguishes
+ * "category not found" from "category found but has no specs" (the latter
+ * is { slug, specsSchema: null }). The previous resolveCategorySpecsSchema
+ * conflated both as null; the allowlist check needs them separated.
  */
-async function resolveCategorySpecsSchema(
+async function resolveCategoryForListing(
   supabase: ReturnType<typeof createClient>,
   categoryId: string
-) {
+): Promise<{ slug: string; specsSchema: ReturnType<typeof getSpecsForCategory> } | null> {
   const { data: cat } = await supabase
     .from("categories")
     .select("slug, parent_id")
@@ -831,7 +842,7 @@ async function resolveCategorySpecsSchema(
       .maybeSingle();
     parentSlug = parent?.slug ?? null;
   }
-  return getSpecsForCategory(cat.slug, parentSlug);
+  return { slug: cat.slug, specsSchema: getSpecsForCategory(cat.slug, parentSlug) };
 }
 
 // Loose UUID check — defends against malformed productId from the client.
@@ -852,6 +863,8 @@ export async function createListingAction(
   const stateId = String(formData.get("stateId") ?? "");
   const negotiable = formData.get("negotiable") === "on";
   const productId = String(formData.get("productId") ?? "");
+  // Sprint 3 / Gap D.2: listing-level city/area location.
+  const cityArea = String(formData.get("cityArea") ?? "").trim();
 
   // Phase D.2: imagePaths are storage paths under the product-images bucket,
   // NOT public URLs. The old paste-URL flow used `imageUrls`.
@@ -875,6 +888,9 @@ export async function createListingAction(
   // Drop the URL-validator's complaint about the placeholder; the real
   // path validation happens below.
   errors.imageUrls = undefined;
+  // Sprint 3 / Gap D.2: city/area validated per-action (same pattern as
+  // the imageUrls handling above) — not wired into validateListingForm.
+  errors.cityArea = validateCityArea(cityArea);
   if (listingHasErrors(errors)) return { errors };
 
   if (!productId || !UUID_RE.test(productId)) {
@@ -925,13 +941,29 @@ export async function createListingAction(
     }
   }
 
+  // Sprint 3 / Gap D.2: resolve category (slug + specs in one lookup) and
+  // enforce the Phase E launch-category allowlist server-side. The UI may
+  // filter the category dropdown, but the server is the trust boundary —
+  // a direct POST must not bypass the restriction.
+  const category = await resolveCategoryForListing(supabase, categoryId);
+  if (!category) {
+    return { errors: { categoryId: "Category not found" } };
+  }
+  if (!isLaunchCategory(category.slug)) {
+    return {
+      errors: {
+        categoryId:
+          "This category isn't available during launch. Available categories: phones, computers, electronics, power & generators.",
+      },
+    };
+  }
+
   // Phase D.7: parse + validate category-specific fields against the
   // schema for the chosen category. Errors surface in _form (per-field
   // surfacing would require widening ListingValidationErrors; the form
   // header is fine for v2).
-  const specSchema = await resolveCategorySpecsSchema(supabase, categoryId);
   const { specs: categorySpecs, error: specError } = parseSpecsFromFormData(
-    specSchema,
+    category.specsSchema,
     formData
   );
   if (specError) return { errors: { _form: specError } };
@@ -951,6 +983,7 @@ export async function createListingAction(
       is_negotiable: negotiable,
       category_id: categoryId,
       state_id: stateId,
+      city_area: cityArea, // Sprint 3 / Gap D.2
       status: "active",
       published_at: new Date().toISOString(),
       category_specs: categorySpecs,
@@ -1074,9 +1107,14 @@ export async function updateListingAction(
   // createListingAction). Note: the schema is resolved from the FORM's
   // category_id, not the DB's prior category — handles the edit case
   // where the user changed the category to one with different specs.
-  const specSchema = await resolveCategorySpecsSchema(supabase, categoryId);
+  //
+  // Sprint 3 / Gap D.2: switched to resolveCategoryForListing for the
+  // shared {slug, specsSchema} shape. Behavior here is unchanged from the
+  // old resolveCategorySpecsSchema (not-found → null schema). D.3 adds the
+  // not-found + isLaunchCategory enforcement to this action.
+  const category = await resolveCategoryForListing(supabase, categoryId);
   const { specs: categorySpecs, error: specError } = parseSpecsFromFormData(
-    specSchema,
+    category?.specsSchema ?? null,
     formData
   );
   if (specError) return { errors: { _form: specError } };

@@ -17,6 +17,7 @@ export interface ListingValidationErrors {
   categoryId?: string;
   stateId?: string;
   imageUrls?: string;
+  cityArea?: string;
   _form?: string;
 }
 
@@ -52,6 +53,21 @@ export function validateCategoryId(id: string): string | undefined {
 
 export function validateStateId(id: string): string | undefined {
   if (!id) return "State is required";
+  return undefined;
+}
+
+// Sprint 3 / Gap D.2: listing-level city/area (location beyond state).
+// Validated per-action (not wired into validateListingForm) — matches the
+// imageUrls per-action pattern in createListingAction. Required for new
+// listings even though the products.city_area column is nullable (the
+// column is nullable to tolerate legacy listings created before the
+// field existed; new listings must supply it).
+export function validateCityArea(cityArea: string): string | undefined {
+  if (!cityArea || !cityArea.trim()) return "City / area is required";
+  const trimmed = cityArea.trim();
+  if (trimmed.length < 3) return "City / area must be at least 3 characters";
+  if (trimmed.length > 100)
+    return "City / area is too long (max 100 characters)";
   return undefined;
 }
 
