@@ -35,6 +35,14 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Listing deleted.",
   },
+  "listing-marked-sold": {
+    variant: "success",
+    message: "Listing marked as sold. It's now hidden from buyer search.",
+  },
+  "listing-reactivated": {
+    variant: "success",
+    message: "Listing reactivated. It's back in buyer search.",
+  },
   "signup-business-failed": {
     variant: "warning",
     message:

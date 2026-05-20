@@ -6,6 +6,8 @@ import { Button, Card, Badge, ToastFromSearchParams } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
 import { getVerificationState } from "@/lib/verification";
 import { getProductImagePublicUrl } from "@/lib/storage";
+import { setListingStatusAction } from "@/app/(auth)/actions";
+import { MarkSoldButton } from "@/components/listings/MarkSoldButton";
 
 export const runtime = "edge";
 
@@ -175,6 +177,11 @@ export default async function SellerListingsPage() {
               return (
                 <Card key={listing.id} padding="none" className="overflow-hidden">
                   <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">
+                    {listing.status === "sold" && (
+                      <span className="absolute top-2 left-2 z-10">
+                        <Badge variant="neutral">Sold</Badge>
+                      </span>
+                    )}
                     {primaryImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -210,7 +217,30 @@ export default async function SellerListingsPage() {
                     </p>
                     <div className="flex items-center justify-between text-xs text-ink-600">
                       <span>{timeAgo(listing.created_at)}</span>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
+                        {listing.status === "sold" ? (
+                          // Reactivation is the recoverable direction — plain
+                          // one-click form, no confirmation (Gap B asymmetry).
+                          <form action={setListingStatusAction}>
+                            <input
+                              type="hidden"
+                              name="productId"
+                              value={listing.id}
+                            />
+                            <input type="hidden" name="status" value="active" />
+                            <button
+                              type="submit"
+                              className="text-teal-700 hover:text-teal-900 font-medium"
+                            >
+                              Reactivate
+                            </button>
+                          </form>
+                        ) : (
+                          <MarkSoldButton
+                            action={setListingStatusAction}
+                            productId={listing.id}
+                          />
+                        )}
                         <Link
                           href={`/listings/${listing.id}/edit`}
                           className="text-teal-700 hover:text-teal-900 font-medium"

@@ -1235,3 +1235,44 @@ export async function deleteListingAction(formData: FormData): Promise<void> {
 
   redirect(`/dashboard/listings?toast=listing-deleted`);
 }
+
+/**
+ * Sprint 3 / Gap B — mark a listing sold or reactivate it.
+ *
+ * Schema-ready: the product_status enum already carries 'sold', so no
+ * migration was needed. Marketplace search and category pages already filter
+ * `.eq("status","active")`, so flipping to 'sold' simply removes the listing
+ * from buyer-facing surfaces while keeping it in the seller dashboard.
+ *
+ * Status is allowlist-validated against {'active','sold'} to prevent status
+ * injection — a crafted form could otherwise push the row into any enum value
+ * (e.g. a moderation/hidden state) the seller shouldn't control. Ownership is
+ * checked the same way as deleteListingAction.
+ */
+export async function setListingStatusAction(
+  formData: FormData
+): Promise<void> {
+  const productId = String(formData.get("productId") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (!productId) return;
+  if (status !== "active" && status !== "sold") return;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: existing } = await supabase
+    .from("products")
+    .select("seller_id")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!existing || existing.seller_id !== user.id) return;
+
+  await supabase.from("products").update({ status }).eq("id", productId);
+
+  const toast =
+    status === "sold" ? "listing-marked-sold" : "listing-reactivated";
+  redirect(`/dashboard/listings?toast=${toast}`);
+}
