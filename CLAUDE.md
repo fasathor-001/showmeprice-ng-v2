@@ -3,14 +3,15 @@
 You are working on ShowMePrice.ng v2. Before you do anything in this codebase, read these files in this order:
 
 1. This file
-2. `AGENT.md` — discipline rules
-3. `ARCHITECTURE.md` — what the system looks like
-4. `DECISIONS.md` — locked decisions, do not relitigate
-5. `ROADMAP.md` — where we are in the phased build
-6. `KNOWN_ISSUES.md` — open bugs
-7. `MEMORY.md` — lessons learned, project-specific patterns
-8. `docs/RUNBOOK.md` — how to perform common operations
-9. `docs/WORKFLOW.md` — how the planner ↔ owner ↔ agent loop works
+2. `docs/agent-handoff.md` — operating manual (read right after this file)
+3. `AGENT.md` — discipline rules
+4. `ARCHITECTURE.md` — what the system looks like
+5. `DECISIONS.md` — locked decisions, do not relitigate
+6. `ROADMAP.md` — where we are in the phased build
+7. `KNOWN_ISSUES.md` — open bugs
+8. `MEMORY.md` — lessons learned, project-specific patterns
+9. `docs/RUNBOOK.md` — how to perform common operations
+10. `docs/WORKFLOW.md` — how the planner ↔ owner ↔ agent loop works
 
 ## What ShowMePrice.ng is
 

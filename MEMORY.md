@@ -630,6 +630,18 @@ Re-enable in the **same** submission so you never leave the freeze off. Discover
 
 ---
 
+## Meta-discipline: the documentation IS the institutional memory
+
+This project has no permanent team — solo founder + AI agents (planner + coding agent). The continuity that would normally come from a shared team brain instead lives in five canonical files: `PHASE_E_SPEC.md`, `MEMORY.md`, `DECISIONS.md`, `KNOWN_ISSUES.md`, `ACTUAL_SCHEMA.md` — plus session journals (`docs/journal/`).
+
+When agents change (new conversation, different model, future-Frank returning to the codebase after months), those files are how the project survives the transition. Every banked decision, learned principle, and documented gotcha is what makes the next session start at the right altitude instead of relearning lessons.
+
+**Required first action for any new agent session:** read `docs/agent-handoff.md` — the operating manual. Without that grounding, agents drift from established patterns and produce work that may need redoing.
+
+**For the owner:** when starting a new session with any agent, use the §7 opening-prompt template in `docs/agent-handoff.md`. It forces the agent to ground in current state before any code is written. Skipping this step is the single biggest source of session-to-session drift.
+
+---
+
 ## Banked Principles
 
 Six non-negotiable architecture rules. These are not lessons learned in flight — they are upfront design commitments that constrain every monetization, product, and platform decision. Any new feature, decision, or change must respect all six. If a proposal violates one, the proposal is wrong, not the principle.

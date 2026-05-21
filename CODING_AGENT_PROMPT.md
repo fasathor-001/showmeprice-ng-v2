@@ -1,5 +1,10 @@
 # PROMPT FOR CODING AGENT — PHASE E EXECUTION
 
+> **HISTORICAL — SUPERSEDED.** This document was the agent orientation prior to
+> `docs/agent-handoff.md`. Current orientation lives at `/docs/agent-handoff.md`.
+> This file is preserved for historical reference (decisions made under the prior
+> framework) but should NOT be used as current operating instructions.
+
 Copy and paste the section below into Claude Code (or your coding agent of choice) to begin Phase E implementation.
 
 ---

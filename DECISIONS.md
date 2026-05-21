@@ -1190,3 +1190,13 @@ This is a **forward commitment**, not a known bug — banked in DECISIONS.md (no
 ## D-101: Conversation safety layer is non-negotiable for MVP
 
 **Decision:** The conversation safety layer (typed-pattern warnings) is **required** for the messaging MVP — not deferrable. Detection patterns at minimum: bank details, phone numbers, "WhatsApp me", "advance payment", "send money". Per D-097 these surface as warnings in the MVP (hard-block/escalation later). This protects the trust-first thesis from the exact off-platform-scam vector the platform exists to fix.
+
+---
+
+## D-102: Marketing/investor copy precision on "verified sellers"
+
+**Decision:** Marketing/investor copy must distinguish between **"verified-seller marketplace"** (positioning — accurate) and **"every account is verified at signup"** (claim — false and unsupportable). The verification flow is explicit and earned: seller accounts exist in an unverified state and gain `'verified'` status only after successful business verification (Phase C.5 flow). Never market in a way that promises automatic verification.
+
+**Operational:** when in doubt, use phrasing like *"verified-seller marketplace"* or *"sellers complete verification before posting"* rather than *"all sellers are verified."* This applies to the investor deck/business plan (`docs/investor/`), the marketing site, and any in-app copy.
+
+**Rationale:** protects investor and marketing copy from drift into an unsupportable claim, and keeps the brand promise (trust is *earned*, not automatic) consistent with MEMORY.md Banked Principle 2 (verification is earned, not bought).

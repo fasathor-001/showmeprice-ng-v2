@@ -1,5 +1,10 @@
 # ShowMePrice.ng v2 — Kickoff (Cloudflare Pages + Next.js 14)
 
+> **HISTORICAL — SUPERSEDED.** This document was the agent orientation prior to
+> `docs/agent-handoff.md`. Current orientation lives at `/docs/agent-handoff.md`.
+> This file is preserved for historical reference (decisions made under the prior
+> framework) but should NOT be used as current operating instructions.
+
 > **Historical record.** This is the kickoff spec, preserved verbatim as
 > pasted by the planner. It supersedes an earlier (reverted) Workers +
 > OpenNext + Next.js 16 attempt — see `DECISIONS.md` D-014 and the
