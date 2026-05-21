@@ -116,7 +116,9 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Fix:** extracted `resolveRequestOrigin()` — prefers the request `Origin` header (local dev → localhost, prod → prod, automatically), falls back to `NEXT_PUBLIC_SITE_URL`, and **throws** if neither is set (a silent hardcoded fallback would mask misconfiguration). Applied to both `signUpAction` and `requestPasswordResetAction`. Safe against `Origin` spoofing because Supabase validates the redirect against its dashboard Redirect-URLs allowlist.
 
-**Resolved:** 2026-05-21 (the `resolveRequestOrigin` commit).
+**Resolved:** 2026-05-21 (the `resolveRequestOrigin` commit, `00d92c7`).
+
+**Collapsed candidate K-017 (not a separate bug):** a smoke-test account (`fasathor+selling@gmail.com`) appeared to sign up as a seller but landed with `profiles.user_type='buyer'`. Diagnosis confirmed it was a symptom of K-016: `raw_user_meta_data` correctly captured `user_type:'seller'` + `business_name` + `business_state_id` (signup worked), but the email link pointed at production, so the **production** `/auth/callback` consumed the one-shot token while the **local** callback — where seller promotion runs — never executed. The account is unrecoverable for local seller testing (token already consumed); re-test with a fresh email after this fix. No separate code bug exists.
 
 ### K-014 — Phone-verify soft-prompt missed signInAction (RESOLVED)
 
