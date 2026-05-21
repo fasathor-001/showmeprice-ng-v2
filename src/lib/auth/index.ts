@@ -3,7 +3,11 @@ export {
   isPlausibleNigerianMobile,
   formatNigerianPhone,
 } from "./whatsapp";
-export { phoneGateDest } from "./post-auth";
+export {
+  phoneGateDest,
+  isPhoneVerified,
+  requirePhoneVerified,
+} from "./post-auth";
 export {
   validateEmail,
   validatePassword,

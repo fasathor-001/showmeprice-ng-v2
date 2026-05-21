@@ -6,6 +6,7 @@ import { Button, Card } from "@/components/ui";
 import { NewListingForm } from "@/components/listings/NewListingForm";
 import { createListingAction } from "@/app/(auth)/actions";
 import { getVerificationState } from "@/lib/verification";
+import { requirePhoneVerified } from "@/lib/auth";
 
 export const runtime = "edge";
 
@@ -125,6 +126,12 @@ export default async function NewListingPage() {
       </Container>
     );
   }
+
+  // Phase E Stage 2.A: business is verified — now require phone verification
+  // before listing creation. Sequential gate (business first above, phone
+  // second) so a seller mid-business-review isn't also phone-nagged. Redirects
+  // to /verify-phone?next=/listings/new if unverified.
+  await requirePhoneVerified(supabase, user.id, "/listings/new");
 
   const [{ data: categories }, { data: states }] = await Promise.all([
     supabase

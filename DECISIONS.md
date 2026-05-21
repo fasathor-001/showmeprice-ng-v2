@@ -1120,3 +1120,18 @@ The restructured buyer ladder is: **Free → Pro → Institution**, with Diaspor
 2. Cost-neutral until renewal — no immediate revenue impact, just deferred. The downside is a few months of mixed-pricing operational complexity at the moment of revision.
 3. Consistent with the Founding Seller lifetime-grandfathering principle (D-088) — same brand promise, scoped narrower (subscription period vs lifetime).
 4. Removes a class of subscriber dispute — "you changed my price without my consent" — that would otherwise consume trust & safety operational hours.
+
+---
+
+## D-093: Phone-verification gate reaches contact-reveal when that flow ships
+
+**Context:** Phase E Stage 2.A established phone OTP verification (`profiles.verification_status` contains `'phone_verified'`) and locked decision #3: phone verification gates **contact-reveal + listing-creation**, not signup. Step 5 implemented the hard gate (`requirePhoneVerified` for pages, `isPhoneVerified` for actions' inline-error path) for **listing-creation only** — the contact-reveal flow does not yet exist (the listing page shows a disabled "Contact reveal coming soon" placeholder; there is no reveal action, no `contact_reveals` write, no reveal-cap enforcement). Building the reveal flow is materially larger than gating it (action + `contact_reveals` insertion + `get_buyer_reveal_cap` enforcement + reveal-credit payment integration + UI state), so it is out of Stage 2.A scope.
+
+**Decision:** When the contact-reveal flow is built (post-Stage-2.A), it **must apply the same phone-verification gate** established for listing-creation:
+- The reveal entry point (page or action) gates on `isPhoneVerified` / `requirePhoneVerified`.
+- Page-level reveal UI → redirect to `/verify-phone?next=/listings/<id>` (return-to-intent to the listing being viewed).
+- A JSON/API reveal endpoint → return a 403 + a body the client interprets to trigger the verify prompt (the D.5/D.6 modal), rather than a server redirect.
+
+This is a **forward commitment**, not a known bug — banked in DECISIONS.md (not KNOWN_ISSUES.md) so the second intended call site isn't forgotten when the underlying feature ships.
+
+**Reference pattern:** the listing-creation gate landed in the Stage 2.A Step 5 commit — `requirePhoneVerified(supabase, user.id, "/listings/new")` on the page after the business-verified check, and an `isPhoneVerified` inline-error guard in `createListingAction` after its business-verified check. Mirror that structure for reveal.

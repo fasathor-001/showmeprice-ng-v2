@@ -8,6 +8,7 @@ import {
   validateSignUpForm,
   hasErrors,
   phoneGateDest,
+  isPhoneVerified,
   type ValidationErrors,
 } from "@/lib/auth";
 import {
@@ -958,6 +959,20 @@ export async function createListingAction(
       errors: {
         _form: "Your account must be verified before creating listings",
       },
+    };
+  }
+
+  // Phase E Stage 2.A: phone-verification gate, defense-in-depth. The page
+  // redirects unverified users to /verify-phone; this guards a direct POST.
+  // Checked after business-verified so the gates stay sequential (D-093).
+  const { data: gateProfile } = await supabase
+    .from("profiles")
+    .select("verification_status")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!isPhoneVerified(gateProfile?.verification_status)) {
+    return {
+      errors: { _form: "Verify your phone number before posting listings." },
     };
   }
 
