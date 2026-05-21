@@ -2,11 +2,15 @@
 
 **Project:** ShowMePrice.ng v2 (https://showmeprice-ng-v2.pages.dev)
 **Phase:** E — Buyer-Side Infrastructure + Pro Monetization
-**Document version:** 1.1 (Sprint 1 monetization reconciliation)
+**Document version:** 1.2 (Stage 2.A complete; Stage 2.B MVP scope tightened)
 **Predecessor phase:** D (shipped — 25 commits across categories, images, CRUD, search)
 **Local repo:** `C:\Users\fasat\showmeprice-ng-v2\`
 
 > **Spec revision note (v1.0 → v1.1):** Substantial monetization-related updates applied per **D-082 through D-091** (escrow restructure, no Premium Buyer tier, Pro Buyer reveal caps, mobile money channels, seller monetization deferred to Phase F). Earlier monetization framing in this spec has been corrected. The canonical monetization reference is now `MONETIZATION-PLAN.md`. See `DECISIONS.md` for the full rationale chain.
+>
+> **Spec revision note (v1.1 → v1.2):**
+> - **Stage 2.A — Phone OTP Verification: COMPLETE** (code-validated 2026-05-21; SMS end-to-end pending Arkesel sender-ID approval). Commits: `f302483`, `5599bac`, `13bf8d4`, `46680b5`, `ba77bfe`, `c27132e`, `b69bb98`, `00d92c7`. See §4. Architecture per **D-094** (delivery-only OTP provider abstraction; active provider Arkesel, Termii swap-ready).
+> - **Stage 2.B — Messaging: MVP scope tightened** per **D-095 through D-101**. §7–8 below remain the architectural reference (full feature set), but the **MVP ships a reduced surface** — see the scope callout at the top of §7. Features beyond MVP are deferred to subsequent stages (2.B.2/2.B.3/2.B.5) and Phase F.
 
 ---
 
@@ -91,6 +95,8 @@ Carried over from `DECISIONS.md`. The PII filter rules designed in §10 below ap
 ---
 
 ## 4. BUYER AUTHENTICATION
+
+> **STATUS — Stage 2.A COMPLETE (code-validated 2026-05-21).** Phone OTP verification shipped: `phone_verifications` table + `mark_phone_verified` fn, delivery-only provider abstraction (`src/lib/otp/`, D-094), `send`/`verifyPhoneOtpAction`, `/verify-phone` route, post-auth soft-prompt gate (callback + sign-in), and the listing-creation hard gate (D-093 forward-notes contact-reveal). Active provider: **Arkesel** (Termii swap-ready, one env var). Outstanding: SMS end-to-end smoke, blocked on Arkesel sender-ID approval. Commits `f302483`→`00d92c7`. NOTE: "via Termii" below is historical — provider is now config-selected.
 
 ### Decision summary
 **Phone-primary OTP via Termii, password required, email optional with prominent prompt, display_name required, full_name and state_id optional.**
@@ -262,6 +268,11 @@ CREATE TABLE price_history (
 ---
 
 ## 7. MESSAGING SYSTEM
+
+> **MVP SCOPE (Stage 2.B) per D-095 through D-101** — this section is the full architectural reference; the **MVP ships a reduced surface**:
+> - **In MVP:** text + image messages; conversation **safety layer** (typed-pattern warnings — bank details / phone / "WhatsApp me" / "advance payment" / "send money", as **warnings** not hard blocks, D-097/D-101 — non-negotiable, D-101); **first-message templates** for buyer-initiated convos (D-096); **basic offers** (sender→recipient with amount, D-099); **last-seen + response-time** signals (D-100).
+> - **Deferred:** typing indicators → 2.B.2; read receipts → 2.B.2 (D-100); offer Accept/Reject/Counter + escrow-link → 2.B.3 (D-099); voice notes → 2.B.5 (D-095); trust-scoring escalation of contact patterns → later (D-097).
+> - SMS notifications for messaging events are restricted to high-intent events only (D-098); all else email-only in MVP.
 
 ### Decision summary
 WhatsApp-style real-time chat with typing indicators, read receipts, image attachments. Supabase Realtime for delivery. Buyer-initiated only. One conversation per (buyer, seller, listing).

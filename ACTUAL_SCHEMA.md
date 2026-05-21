@@ -481,6 +481,30 @@ Provider-agnostic payment record. Phase E populates via Paystack only (D-074). P
 - `pack_type` enum (E.2.0.4): closed set of 4 values matching D-085 locked credit pack structure (Trial ₦500/1 reveal, Small ₦1,500/3, Medium ₦3,500/9, Large ₦7,000/20). Enum (not text) because the value set is fixed — unlike `payment_type`/`status`/`tier`/`plan_code` which are text for extensibility.
 - Credit balance accumulation happens on `credit_balances` (running balance only); `payments.pack_type` records which pack was purchased for analytics + reconciliation.
 
+### `phone_verifications`
+
+Phase E Stage 2.A (E.2.1.0 — table; E.2.1.1 — `provider` column). Backs the phone OTP flow (`sendPhoneOtpAction` / `verifyPhoneOtpAction`). We own the OTP lifecycle — the SMS provider (Termii/Arkesel) only delivers a rendered message. Reference commits: `f302483` (table), `13bf8d4` (`provider` column + `mark_phone_verified` + lockdown fix).
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| id | uuid | NO | gen_random_uuid() |
+| user_id | uuid → profiles(id) CASCADE | NO | — |
+| phone | text | NO | — (canonical NG E.164 w/o `+`, e.g. `2348012345678`) |
+| code_hash | text | NO | — (SHA-256 of `salt:phone:code`; plaintext code never stored) |
+| channel | text | NO | `'sms'` (CHECK in `'sms'`/`'whatsapp'`) |
+| request_ip_hash | text | YES | — (SHA-256 of `salt:rawIp`; salted hash, never raw IP — NDPR) |
+| expires_at | timestamptz | NO | — (10-minute TTL set by the action) |
+| attempts_made | integer | NO | 0 (CHECK ≥ 0; capped at 5 in the verify action) |
+| consumed_at | timestamptz | YES | — (set on successful verify or invalidation) |
+| created_at | timestamptz | NO | now() |
+| **provider** | text | NO | — (CHECK in `'termii'`/`'arkesel'`; sending vendor, set from `getOtpProvider().vendor`) |
+
+**Constraints:** PK; `phone_verifications_user_id_profiles_id_fk` (→ profiles, ON DELETE CASCADE); `phone_verifications_channel_check`; `phone_verifications_attempts_nonneg_check`; `phone_verifications_provider_check`.
+
+**Indexes:** PK + `phone_verifications_phone_created_idx` (per-phone rate limit, 3/hr) + `phone_verifications_request_ip_hash_created_idx` (per-IP rate limit, 10/hr) + `phone_verifications_user_created_idx` (newest-unconsumed verify lookup).
+
+**Access model:** RLS **enabled with ZERO policies** — never read/written by the browser. All access is via the service-role client (`createAdminClient`) inside server actions, keeping `code_hash` + `attempts_made` entirely server-side. The final verify-success write goes through `mark_phone_verified` (below), not a direct table write.
+
 ### `price_history`
 
 Append-only price-change log on `products`. Written by AFTER UPDATE OF `price_kobo` trigger (`products_price_change_log` → `log_product_price_change` function). Phase E logs; Phase F+ surfaces (price drop alerts).
@@ -961,6 +985,7 @@ Business-logic triggers (excluding auto-generated FK constraint triggers).
 | **`log_product_price_change`** | (trigger context) | trigger | Phase E.1.2. Inserts a row into `price_history` (product_id, price_kobo, changed_by = NEW.seller_id) on every price_kobo change. Per D-071, `changed_by` attribution uses `NEW.seller_id` — best-effort, since DB triggers can't reliably resolve `auth.uid()`. Admin price overrides are captured in `admin_action_log` instead. |
 | **`get_buyer_reveal_cap`** | `p_user_id uuid` | integer | Phase E.2.0.1 / D-083. Returns the daily contact-reveal cap for a buyer. Free → 0 (convention: no per-day cap; caller checks `signup_free_reveals_remaining` + `credit_balances`). Pro new (<30d) / missing `pro_activated_at` / has open reports → 10. Pro established (30+d, no open reports) → 25. Institution → 25 (Phase E placeholder). Legacy `'premium'` → treated as Pro (defensive; shouldn't exist post-D-082). STABLE, SECURITY DEFINER, `search_path=public`. Open-reports check computed-on-read against `reports` (target_type='user', status IN 'new'/'in_review'). |
 | **`compute_escrow_fee`** | `p_amount_kobo bigint, p_user_id uuid` | bigint | Phase E.2.0.2 / D-086. Returns escrow fee in kobo. Raises exception below ₦50,000 (5,000,000 kobo). Pro rate 1.2% + ₦100 if an active subscription exists (`status='active' AND current_period_end > NOW()`), else standard 1.5% + ₦100. Integer half-up rounding `(amount × rate + 500) / 1000 + 10000`. Reads billing-authoritative `subscriptions` (NOT `profiles.tier`) — catches cancelled-but-tier-stale + past-due edge cases. STABLE, SECURITY DEFINER, `search_path=public`. |
+| **`mark_phone_verified`** | `p_verification_id uuid, p_user_id uuid, p_provider_tag text` | boolean | Phase E.2.1.1 / Stage 2.A. Atomic verify-success across two tables: under `FOR UPDATE`, validates the row belongs to `p_user_id` and is unconsumed, sets `consumed_at`, then idempotently appends `'phone_verified'` to `profiles.verification_status` and `p_provider_tag` (e.g. `'arkesel_phone'`) to `profiles.auth_providers`. Returns `true` on success, `false` if no row / wrong user / already consumed (benign concurrent-consume — the action gates validity; this gates atomicity). SECURITY DEFINER, `search_path=public`. **EXECUTE locked down**: triple-`REVOKE` from `anon`, `authenticated`, AND `PUBLIC`, then `GRANT` to `service_role` only — Supabase auto-grants anon/authenticated on public functions, and `REVOKE FROM PUBLIC` alone does NOT remove those (the lockdown gap caught at E.2.1.1 §2d; commit `13bf8d4`). |
 
 **Critical:** `is_admin` requires a `uuid` argument. There is NO parameterless `is_admin()` form. RLS policies and triggers must call `is_admin(auth.uid())`.
 

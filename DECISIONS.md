@@ -1135,3 +1135,58 @@ The restructured buyer ladder is: **Free → Pro → Institution**, with Diaspor
 This is a **forward commitment**, not a known bug — banked in DECISIONS.md (not KNOWN_ISSUES.md) so the second intended call site isn't forgotten when the underlying feature ships.
 
 **Reference pattern:** the listing-creation gate landed in the Stage 2.A Step 5 commit — `requirePhoneVerified(supabase, user.id, "/listings/new")` on the page after the business-verified check, and an `isPhoneVerified` inline-error guard in `createListingAction` after its business-verified check. Mirror that structure for reveal.
+
+---
+
+## D-094: OTP provider abstraction — final architecture
+
+**Decision:** Phone OTP uses a delivery-only provider abstraction (`src/lib/otp/`), validated and shipped in Stage 2.A.
+
+- **Lifecycle ownership: we own it.** Generation, hashing (`salt:phone:code`), expiry (10-min TTL), attempt-counting (cap 5), and rate-limiting (3/phone/hr, 10/IP/hr) all live in our code + DB (`phone_verifications`). The provider only **delivers a pre-rendered message**.
+- **Vendor-specific concepts are excluded from the interface.** No `pin_id`, no `verificationId`, no Token-API patterns leak into `OtpProvider` — the interface is `sendOtp({ to, message, channel })` only. This is what makes a swap a config change.
+- **Validated by the Termii→Arkesel swap:** flipping `OTP_PROVIDER_VENDOR` (Cloudflare + `.dev.vars`) switched the active provider with **zero code change**.
+- **Rejected for Token-API lock-in:** Message Central "Verify Now", Termii's Token API, and Arkesel's `/api/otp/generate` were all rejected for the same reason — they own the OTP lifecycle and would couple verification logic to a vendor.
+
+**Reference:** Stage 2.A commits `5599bac` (module), `f302483`/`13bf8d4` (DB), `46680b5` (actions).
+
+---
+
+## D-095: Messaging MVP scope (Stage 2.B)
+
+**Decision:** Messaging MVP = text + images + safety layer (D-101) + basic offers (D-099). **Voice notes deferred to 2.B.5. Typing indicators deferred to 2.B.2.**
+
+---
+
+## D-096: First-message templates for buyer-initiated conversations
+
+**Decision:** Buyer-initiated conversations require a first-message template. Custom freeform is allowed, but template usage is tracked (signal for response-quality + abuse analysis).
+
+---
+
+## D-097: Contact-pattern handling in messaging MVP
+
+**Decision:** Phone-number / bank-account / "WhatsApp me" patterns trigger **warnings**, not hard blocks, in the MVP. Escalation to admin via trust scoring is deferred. (See D-101 for the detection pattern set.)
+
+---
+
+## D-098: SMS notifications restricted to high-intent events (MVP)
+
+**Decision:** SMS notifications fire only for high-intent events: new Pro-buyer message, new offer, escrow started, seller verification approved, dispute/admin action. **All other notifications are email-only in MVP** (SMS cost discipline — ties to D-090 channel economics).
+
+---
+
+## D-099: Basic offer-making ships in 2.B MVP
+
+**Decision:** Basic offers (sender → recipient with an amount) ship in the 2.B MVP. **Accept / Reject / Counter and escrow-linking deferred to 2.B.3.**
+
+---
+
+## D-100: Read receipts deferred; presence signals ship
+
+**Decision:** Read receipts deferred to 2.B.2. **Last-seen + response-time signals ship in the MVP** (they feed the trust-quality surface without the per-message overhead/expectations of read receipts).
+
+---
+
+## D-101: Conversation safety layer is non-negotiable for MVP
+
+**Decision:** The conversation safety layer (typed-pattern warnings) is **required** for the messaging MVP — not deferrable. Detection patterns at minimum: bank details, phone numbers, "WhatsApp me", "advance payment", "send money". Per D-097 these surface as warnings in the MVP (hard-block/escalation later). This protects the trust-first thesis from the exact off-platform-scam vector the platform exists to fix.

@@ -610,6 +610,24 @@ WHERE routine_schema='public' AND routine_name='fn';
 
 This applies to EVERY future `SECURITY DEFINER` function on this codebase. Writing one with only `REVOKE FROM PUBLIC` reopens the same self-grant vector — treat the triple-REVOKE + grant-audit as a non-negotiable checklist item, paired with `SET search_path = public`.
 
+## Verify actual deployed state, not apparent success
+
+A migration that throws no error has **succeeded**, not necessarily **achieved its intent**. "No error" ≠ "the deployed state matches the design." Every migration must include §2 verification queries that read `information_schema` / `pg_catalog` and confirm the real post-state — column nullability/defaults, constraint definitions, `prosecdef`/`proconfig`, **grantees** — and the operator pastes them back.
+
+**Worked example (E.2.1.1, 2026-05-20):** the `mark_phone_verified` lockdown ran without error, so the migration "succeeded." But the §2d grantee query (`information_schema.routine_privileges`) revealed `anon` + `authenticated` still held `EXECUTE` — a live self-grant vulnerability invisible to migration success and caught only because we read the actual grant state. The error-free `REVOKE FROM PUBLIC` masked the gap. Read the state; don't trust the absence of an exception.
+
+## `businesses.verification_status` is trigger-frozen — only admin/service-role context can change it
+
+`businesses.verification_status` is protected by the `businesses_freeze_verification` trigger (function `freeze_business_verification`). A direct UPDATE from a normal context raises `"businesses.verification_status can only be changed by an admin"`. Real verification flows route through admin/service-role actions (Phase C.5's audit-table + admin-consume design).
+
+**For local testing/debugging only**, flip it in one submission:
+```sql
+ALTER TABLE businesses DISABLE TRIGGER businesses_freeze_verification;
+UPDATE businesses SET verification_status = 'verified' WHERE id = '...';
+ALTER TABLE businesses ENABLE TRIGGER businesses_freeze_verification;
+```
+Re-enable in the **same** submission so you never leave the freeze off. Discovered during Step 5 smoke testing (2026-05-20) when manually verifying a test seller to exercise the listing-creation gate.
+
 ---
 
 ## Banked Principles
