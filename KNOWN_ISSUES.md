@@ -108,6 +108,16 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 ## Resolved or superseded
 
+### K-016 — Auth email links used the env Site URL, not the request origin (RESOLVED)
+
+**Symptom:** `signUpAction` and `requestPasswordResetAction` built their email-redirect URLs from `process.env.NEXT_PUBLIC_SITE_URL ?? <hardcoded prod>`. In local dev (where the env var points to / defaults to production), the confirmation + password-reset email links pointed at the production domain — so local signups couldn't complete email confirmation against localhost, blocking local end-to-end testing. Downstream effect: the seller-promotion in `/auth/callback` never ran locally, leaving local seller signups stuck at the `user_type='buyer'` trigger default (the suspected cause of the K-017 candidate).
+
+**Note:** `emailRedirectTo`/`redirectTo` *were* being passed — the bug was the **origin source** (env, not request), not a missing redirect param.
+
+**Fix:** extracted `resolveRequestOrigin()` — prefers the request `Origin` header (local dev → localhost, prod → prod, automatically), falls back to `NEXT_PUBLIC_SITE_URL`, and **throws** if neither is set (a silent hardcoded fallback would mask misconfiguration). Applied to both `signUpAction` and `requestPasswordResetAction`. Safe against `Origin` spoofing because Supabase validates the redirect against its dashboard Redirect-URLs allowlist.
+
+**Resolved:** 2026-05-21 (the `resolveRequestOrigin` commit).
+
 ### K-014 — Phone-verify soft-prompt missed signInAction (RESOLVED)
 
 **Symptom:** The Stage 2.A verify-phone soft-prompt was wired only into `/auth/callback`. Standard email+password sign-in (`signInAction`) bypasses `/auth/callback` and hardcoded `redirect("/dashboard")`, so existing accounts with phone unverified were never routed to `/verify-phone`. Caught in pre-Step-5 smoke testing (a test account with `verification_status=[]` landed on `/dashboard`).

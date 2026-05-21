@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import {
   normalizeNigerianWhatsApp,
@@ -32,6 +33,25 @@ export interface ActionResult {
     businessStateId?: string;
   };
   success?: boolean;
+}
+
+/**
+ * Resolve the request origin for building auth-email redirect links
+ * (confirmation, password reset). Prefers the actual request Origin header so
+ * local dev produces localhost links and production produces production links;
+ * falls back to NEXT_PUBLIC_SITE_URL. Throws if neither is available — a silent
+ * hardcoded fallback would mask a serious misconfiguration (K-016). Safe
+ * against header spoofing because Supabase independently validates the redirect
+ * against its dashboard Redirect-URLs allowlist.
+ */
+function resolveRequestOrigin(): string {
+  const origin = headers().get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL;
+  if (!origin) {
+    throw new Error(
+      "Could not determine origin for email redirect — missing both Origin header and NEXT_PUBLIC_SITE_URL"
+    );
+  }
+  return origin;
 }
 
 export async function signUpAction(
@@ -73,8 +93,7 @@ export async function signUpAction(
   if (!normalized) return { errors: { phone: "Invalid WhatsApp number" } };
 
   const supabase = createClient();
-  const origin =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://showmeprice-ng-v2.pages.dev";
+  const origin = resolveRequestOrigin();
 
   // With email confirmation ON (D-023), signUp does NOT return a session.
   // Any RLS-protected write here (profile UPDATE, business INSERT) would
@@ -189,8 +208,7 @@ export async function requestPasswordResetAction(
   if (!email) return { errors: { email: "Email is required" } };
 
   const supabase = createClient();
-  const origin =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://showmeprice-ng-v2.pages.dev";
+  const origin = resolveRequestOrigin();
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/auth/callback?type=recovery&next=/dashboard`,
