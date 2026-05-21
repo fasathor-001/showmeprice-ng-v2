@@ -118,6 +118,36 @@ The `isPlausibleNigerianMobile()` validator exists in `src/lib/auth/whatsapp.ts`
 
 **Severity:** medium. **Surfaced** 2026-05-21 during Stage 2.A SMS smoke validation. **Do NOT implement a code fix until the product decision is banked** (likely D-105).
 
+### K-020 — Admin role provisioning has no app-level path; bootstrap path undecided (Open, blocking next admin work)
+
+Admin features exist (`/admin/verifications`, Phase C.5.6) but no path provisions the first admin. Manual DB intervention via the `profiles_freeze_role` trigger workaround technically works but is unacceptable as ongoing process — Frank does not want to run SQL to access admin features.
+
+The architectural escape: the `profiles_freeze_role` trigger was added (correctly — prevents role tampering), admin features were built gated by `role='admin'`, but an admin bootstrap mechanism was never built.
+
+**Decisions needed (next session, before any admin-related code work):**
+
+1. **WHEN does admin bootstrap get built?**
+   - Inserted as Stage 2.A.1 (between 2.A close and 2.B start)
+   - Folded into Stage 2.B
+   - Deferred to Phase F+
+   - Other
+
+2. **HOW does the FIRST admin get provisioned?**
+   - Designated bootstrap email (env var, auto-admin on signup)
+   - One-time deploy script
+   - Pre-seeded in initial migration
+   - Manual DB for first admin only (then UI for subsequent)
+   - Other
+
+3. **HOW do SUBSEQUENT admins get granted?**
+   - Admin UI calling a SECURITY DEFINER server action
+   - Approval workflow (multi-admin sign-off)
+   - Other
+
+Surfaced 2026-05-21 during Stage 2.A close. Frank explicitly stated the DB workaround is not the answer — admin must work as a product feature.
+
+This is a real scope decision that needs banking as **D-105** before code work proceeds.
+
 ## Resolved or superseded
 
 ### K-018 — /verify-phone Skip loop on hard-gated destinations (RESOLVED)

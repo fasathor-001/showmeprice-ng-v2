@@ -38,6 +38,7 @@
 - `docs/agent-handoff.md` (new canonical operating manual) and the `docs/journal/` convention are now referenced from `CLAUDE.md` and `MEMORY.md` (meta-discipline). No further indexing pending.
 
 ## Process notes for the next session
+- **K-020 blocks comfortable admin testing until resolved.** Frank cannot exercise the admin verification flow without first deciding the admin bootstrap pattern. Next session should make Decisions 1, 2, and 3 from K-020 first, bank as **D-105**, then implement — before any other admin-touching work.
 - **Test the agent-handoff opening protocol (§7) end-to-end** on the first new session. If it runs smoothly, no changes needed; if gaps surface, update `agent-handoff.md` per the §9 drift-resolution rule.
 - **Stage 2.B kickoff:** schema migration (conversations + messages tables) per D-095–D-101 scope. Use the established discipline: surface findings → propose schema → review → execute with the §0/§1/§2 pattern.
 - **Top up the Arkesel account before public launch** — current balance is sufficient for testing (per Bernice's advice), but production SMS volume will need a top-up.
