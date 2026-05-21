@@ -24,9 +24,11 @@ function fmtCountdown(s: number): string {
 interface Props {
   phone: string;
   next: string;
+  /** True when reached from a hard gate (D-103): no Skip, /dashboard escape instead. */
+  required?: boolean;
 }
 
-export function VerifyPhoneForm({ phone, next }: Props) {
+export function VerifyPhoneForm({ phone, next, required = false }: Props) {
   const router = useRouter();
   const [sendState, sendAction] = useFormState(sendPhoneOtpAction, initial);
   const [verifyState, verifyAction] = useFormState(verifyPhoneOtpAction, initial);
@@ -76,7 +78,7 @@ export function VerifyPhoneForm({ phone, next }: Props) {
             </p>
           )}
         </form>
-        <SkipLink next={next} />
+        <ExitLink next={next} required={required} />
       </div>
     );
   }
@@ -132,7 +134,7 @@ export function VerifyPhoneForm({ phone, next }: Props) {
         )}
       </div>
 
-      <SkipLink next={next} />
+      <ExitLink next={next} required={required} />
     </div>
   );
 }
@@ -177,14 +179,18 @@ function VerifyButton() {
   );
 }
 
-function SkipLink({ next }: { next: string }) {
+function ExitLink({ next, required }: { next: string; required: boolean }) {
+  // Required mode: honest escape to /dashboard (Skip would loop back into the
+  // gate, K-018). Soft mode: Skip routes to the intended destination.
+  const href = required ? "/dashboard" : next;
+  const label = required ? "Not ready? Go to dashboard" : "Skip for now";
   return (
     <div className="text-center">
       <Link
-        href={next}
+        href={href}
         className="text-xs text-ink-400 hover:text-ink-600 underline"
       >
-        Skip for now
+        {label}
       </Link>
     </div>
   );

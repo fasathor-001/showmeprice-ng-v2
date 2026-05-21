@@ -38,15 +38,21 @@ export function phoneGateDest(
 }
 
 /**
- * Hard gate for pages: redirect an unverified user to /verify-phone (returning
- * them to `next` after verify/skip). Call from a server component AFTER any
- * higher-priority gate (e.g. business verification) has passed. Returns void
- * when the phone is verified.
+ * Hard gate for pages: redirect an unverified user to /verify-phone. Call from
+ * a server component AFTER any higher-priority gate (e.g. business
+ * verification) has passed. Returns void when the phone is verified.
+ *
+ * Pass `{ required: true }` when the caller is itself a HARD gate (e.g.
+ * listing-creation). Required mode renders an honest "verification required"
+ * screen with a /dashboard escape instead of a Skip-to-`next` link — Skip would
+ * loop straight back into this gate (K-018). `reason` selects context-specific
+ * copy via verify-phone-copy.ts (D-103).
  */
 export async function requirePhoneVerified(
   supabase: SupabaseClient,
   userId: string,
   next: string,
+  options?: { required?: boolean; reason?: string },
 ): Promise<void> {
   const { data: profile } = await supabase
     .from("profiles")
@@ -54,6 +60,9 @@ export async function requirePhoneVerified(
     .eq("id", userId)
     .maybeSingle();
   if (!isPhoneVerified(profile?.verification_status)) {
-    redirect(`/verify-phone?next=${encodeURIComponent(next)}`);
+    const params = new URLSearchParams({ next });
+    if (options?.required) params.set("required", "true");
+    if (options?.reason) params.set("reason", options.reason);
+    redirect(`/verify-phone?${params.toString()}`);
   }
 }

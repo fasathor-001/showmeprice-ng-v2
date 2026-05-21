@@ -108,6 +108,10 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 ## Resolved or superseded
 
+### K-018 — /verify-phone Skip loop on hard-gated destinations (RESOLVED)
+
+When an unverified seller clicked "New listing" → `/listings/new` redirected to `/verify-phone?next=/listings/new` → the user clicked "Skip for now" → Skip routed to `/listings/new` → the gate re-fired → redirected to `/verify-phone` again. Infinite loop with no escape. Resolved by **D-103**: two-mode page (soft vs required), with required mode replacing Skip with a "Not ready? Go to dashboard" escape link. Found via Step 5 smoke testing 2026-05-21. **Resolved:** 2026-05-21 (the two-mode /verify-phone commit).
+
 ### K-016 — Auth email links used the env Site URL, not the request origin (RESOLVED)
 
 **Symptom:** `signUpAction` and `requestPasswordResetAction` built their email-redirect URLs from `process.env.NEXT_PUBLIC_SITE_URL ?? <hardcoded prod>`. In local dev (where the env var points to / defaults to production), the confirmation + password-reset email links pointed at the production domain — so local signups couldn't complete email confirmation against localhost, blocking local end-to-end testing. Downstream effect: the seller-promotion in `/auth/callback` never ran locally, leaving local seller signups stuck at the `user_type='buyer'` trigger default (the suspected cause of the K-017 candidate).

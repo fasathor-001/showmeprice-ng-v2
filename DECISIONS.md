@@ -1200,3 +1200,44 @@ This is a **forward commitment**, not a known bug — banked in DECISIONS.md (no
 **Operational:** when in doubt, use phrasing like *"verified-seller marketplace"* or *"sellers complete verification before posting"* rather than *"all sellers are verified."* This applies to the investor deck/business plan (`docs/investor/`), the marketing site, and any in-app copy.
 
 **Rationale:** protects investor and marketing copy from drift into an unsupportable claim, and keeps the brand promise (trust is *earned*, not automatic) consistent with MEMORY.md Banked Principle 2 (verification is earned, not bought).
+
+---
+
+## D-103: Two-mode /verify-phone page (soft vs required)
+
+**Date:** 2026-05-21
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-093 (contact-reveal gating — will use this same pattern when built)
+
+### Context
+Step 5 (listing-creation hard gate, b69bb98) introduced a redirect to /verify-phone for unverified sellers. The Skip button on /verify-phone blindly routes to `next=`, which re-fires the gate, trapping the user in an infinite loop. Skip was designed for soft post-signup nudges where deferring is legitimate — it's dishonest when the destination has a hard gate.
+
+### Decision
+/verify-phone operates in two modes distinguished by `required=true` query param:
+
+- **Soft mode** (no `required` flag): post-signup nudge. "Verify your phone" + Send code + Skip routes to `next=`.
+- **Required mode** (`required=true`): from a hard-gated page. "Phone verification required" + Send code + "Not ready? Go to dashboard" escape link. NO Skip.
+
+Context-specific copy via `reason` query param mapped via `src/lib/auth/verify-phone-copy.ts`.
+
+### Rationale
+- Infinite loop is a real bug (K-018, found via Step 5 smoke 2026-05-21)
+- "Required" framing is honest about why user is on this screen
+- "Go to dashboard" escape prevents trapping
+- Query-param mode distinction decouples /verify-phone from redirecting source's identity
+- Reason-based copy decouples copy from URL routing patterns
+
+### Implications
+- `requirePhoneVerified()` gains `{ required?: boolean; reason?: string }` optional param
+- `/listings/new` passes `{ required: true, reason: "listings" }`
+- `/auth/callback` unchanged (still uses `phoneGateDest` for soft mode)
+- D-093 (contact-reveal) when built passes `{ required: true, reason: "contact-reveal" }`, adds copy map entry then
+- VerifyPhoneForm.tsx accepts `required` + `reason` props
+- Escape link hardcoded to `/dashboard`
+
+### Out of scope
+- I18n / dynamic translation (static English map for MVP)
+- Soft-mode Skip behavior changes (working as designed)
+- Browser back button handling
+- Pre-populating copy map for unbuilt features

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Card, ToastFromSearchParams } from "@/components/ui";
+import { getVerifyPhoneCopy } from "@/lib/auth/verify-phone-copy";
 import { VerifyPhoneForm } from "./VerifyPhoneForm";
 
 export const runtime = "edge";
@@ -16,9 +17,10 @@ function safeNext(raw: string | undefined): string {
 export default async function VerifyPhonePage({
   searchParams,
 }: {
-  searchParams: { next?: string };
+  searchParams: { next?: string; required?: string; reason?: string };
 }) {
   const next = safeNext(searchParams.next);
+  const required = searchParams.required === "true";
 
   const supabase = createClient();
   const {
@@ -43,19 +45,29 @@ export default async function VerifyPhonePage({
     redirect(next);
   }
 
+  // Required mode (came from a hard gate) shows context-specific "verification
+  // required" copy + a /dashboard escape (D-103). Soft mode is the post-signup
+  // nudge with Skip.
+  const copy = required
+    ? getVerifyPhoneCopy(searchParams.reason)
+    : {
+        heading: "Verify your phone",
+        explanation:
+          "We will text a 6-digit code to confirm your number. Verifying helps buyers and sellers trust each other.",
+      };
+
   return (
     <Container size="narrow">
       <ToastFromSearchParams />
       <div className="py-12 sm:py-16 max-w-md mx-auto">
         <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-2 text-center">
-          Verify your phone
+          {copy.heading}
         </h1>
         <p className="text-sm text-ink-600 text-center mb-8">
-          We will text a 6-digit code to confirm your number. Verifying helps
-          buyers and sellers trust each other.
+          {copy.explanation}
         </p>
         <Card>
-          <VerifyPhoneForm phone={profile.phone} next={next} />
+          <VerifyPhoneForm phone={profile.phone} next={next} required={required} />
         </Card>
       </div>
     </Container>

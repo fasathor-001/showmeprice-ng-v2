@@ -131,7 +131,10 @@ export default async function NewListingPage() {
   // before listing creation. Sequential gate (business first above, phone
   // second) so a seller mid-business-review isn't also phone-nagged. Redirects
   // to /verify-phone?next=/listings/new if unverified.
-  await requirePhoneVerified(supabase, user.id, "/listings/new");
+  await requirePhoneVerified(supabase, user.id, "/listings/new", {
+    required: true,
+    reason: "listings",
+  });
 
   const [{ data: categories }, { data: states }] = await Promise.all([
     supabase
