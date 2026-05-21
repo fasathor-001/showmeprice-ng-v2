@@ -1241,3 +1241,32 @@ Context-specific copy via `reason` query param mapped via `src/lib/auth/verify-p
 - Soft-mode Skip behavior changes (working as designed)
 - Browser back button handling
 - Pre-populating copy map for unbuilt features
+
+---
+
+## D-104: Decision-banking format standardization
+
+**Date:** 2026-05-21
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-103 (first decision banked in new format)
+
+### Context
+D-001 through D-102 were banked using a Context/Decision/Operational/Rationale format that emerged organically. D-103 introduced a richer structured format (Date/Status/Supersedes/Related/Context/Decision/Rationale/Implications/Out of scope) per `docs/_decision_bank.md` template.
+
+### Decision
+The new structured format is canonical going forward. Old entries (D-001 through D-102) remain in their original format — not mass-rewritten.
+
+### Rationale
+- New format captures decision metadata (status, supersession, scope boundaries) that old format lost
+- Mass-rewriting 100+ entries is high-effort, low-value, and risks introducing errors
+- Two coexisting formats is acceptable because old format is a complete record of decisions as-banked-then
+
+### Implications
+- All future D-numbers use the structured format
+- `docs/_decision_bank.md` template is the authoritative format reference
+- When an old decision is superseded, the NEW superseding decision uses the new format and references the old one in its "Supersedes" field
+
+### Out of scope
+- Mass-rewriting D-001 through D-102
+- Format negotiation per-decision (the template is the standard)

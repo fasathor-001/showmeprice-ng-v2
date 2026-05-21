@@ -22,6 +22,7 @@
 | `ACTUAL_SCHEMA.md` | Verified DB schema. The "what's actually deployed." |
 | `PHASE_E_SPEC.md` | Current phase spec (versioned). |
 | `docs/journal/` | Per-session journals — continuity across sessions. |
+| `docs/_*.md` (session templates) | Reusable copy-paste prompts: session open, close, recovery, decision banking. Operationalize §3, §7, §8. |
 
 This doc is **durable process**. Live state (current phase, commits, in-flight)
 comes from the §3 session-open summary, never from static text here.
@@ -112,6 +113,7 @@ Scan here, click through for the full lesson. Do **not** restate these in this d
 | No direct UPDATE on trigger-protected columns (`businesses.verification_status`) | `MEMORY.md` "`businesses.verification_status` is trigger-frozen" |
 | `revalidatePath` is a no-op/banned on Cloudflare edge | `MEMORY.md` "`revalidatePath` ban…"; `KNOWN_ISSUES.md` K-012 |
 | Bank decisions before they drift (numbered D-XXX) | `DECISIONS.md` |
+| Decision banking (D-XXX format) | `docs/_decision_bank.md` template; structured format established per D-104 onward |
 | Single coherent commit per change; typecheck before commit | `WORKFLOW.md` (report format); project commit history |
 | Use existing patterns before inventing (e.g. `src/lib/payments/` → `src/lib/otp/`) | `MEMORY.md` (helper-extraction lessons); read siblings first |
 | Keep the canonical docs current | §9 + `MEMORY.md` meta-discipline |
@@ -167,6 +169,11 @@ Grounded. Current state:
 Ready for next instruction.
 ```
 
+For convenience, the full owner-prompt + agent-grounding-summary templates are pre-built in:
+- `docs/_planner_session_open.md` — planner chat (with paste placeholders)
+- `docs/_coding_agent_session_open.md` — Claude Code (paste as-is)
+- `docs/_context_recovery.md` — mid-session re-grounding without a new chat
+
 ## §8 — Session-closing protocol + journal convention
 
 At session end, the agent **proposes** (owner confirms) a journal entry:
@@ -174,6 +181,8 @@ At session end, the agent **proposes** (owner confirms) a journal entry:
   - topic = 3–5 words, hyphenated, lowercase; multiple sessions/day get an `-am`/`-pm` or numeric suffix.
   - Greppable; each becomes the next session's first read (§3 step 7).
 - **Contents:** session date + commit range · what shipped · what's in-flight at session end · open questions / next-session entry point · any decisions made but not yet banked · **any new files or patterns introduced that should be referenced from `agent-handoff.md` or `MEMORY.md`.**
+
+For convenience, the full journal-entry template is at `docs/_session_close.md`.
 
 ## §9 — Maintaining this document
 
