@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { getVerificationState } from "@/lib/verification";
+import { isPhoneVerified } from "@/lib/auth";
 import { SignOutButton } from "./SignOutButton";
 
 export const runtime = "edge";
@@ -19,7 +20,7 @@ export default async function DashboardPage() {
   const [{ data: profile }, { data: business }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("display_name, phone")
+      .select("display_name, phone, verification_status")
       .eq("id", user.id)
       .single(),
     supabase
@@ -65,9 +66,19 @@ export default async function DashboardPage() {
             <h2 className="text-sm font-medium text-ink mb-1">Your account</h2>
             <p className="text-xs text-ink-600 mb-3">{user.email}</p>
             {profile?.phone && (
-              <p className="text-xs text-ink-600">
-                WhatsApp: +{profile.phone}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap text-xs text-ink-600">
+                <span>WhatsApp: +{profile.phone}</span>
+                {isPhoneVerified(profile.verification_status) ? (
+                  <Badge variant="verified">Verified</Badge>
+                ) : (
+                  <Link
+                    href="/verify-phone?next=/dashboard"
+                    className="text-teal-700 hover:text-teal-900 font-medium"
+                  >
+                    Verify →
+                  </Link>
+                )}
+              </div>
             )}
           </Card>
 

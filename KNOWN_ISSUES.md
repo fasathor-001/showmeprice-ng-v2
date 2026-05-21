@@ -106,6 +106,18 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Fix declined for now:** would require a `profiles.verification_status` query inside middleware, which runs on most requests — wrong trade for a rare edge case. Revisit if it matters.
 
+### K-019 — Phone validation gap (non-NG numbers accepted) + product decision needed (open)
+
+Frank's seller test account `fasathor+seller2@gmail.com` was created with phone `27630377511` (South Africa, +27). Arkesel delivered the OTP successfully — confirming **Arkesel does not restrict by destination country**; the "Nigeria-only" constraint is ShowMePrice product *positioning*, not a vendor capability.
+
+The `isPlausibleNigerianMobile()` validator exists in `src/lib/auth/whatsapp.ts` but either wasn't called during signup or has a gap allowing non-NG numbers through.
+
+**Two separate questions to resolve (next session):**
+1. **Code gap:** why didn't the validator reject `27630377511`? Investigate the signup flow + form submission + action handling (`signUpAction` validates via `validateWhatsAppNumber` → `normalizeNigerianWhatsApp` + `isPlausibleNigerianMobile`; trace where a +27 number slips through).
+2. **Product decision:** should ShowMePrice be strict NG-only, internationally flexible, or hybrid (NG-only sellers, international buyers)? Affects positioning, TAM (NG diaspora), cost structure (SMS variance), and buyer trust signals. **Notably: the founder (Frank) is a Nigerian based in SA — strict NG-only would block the founder's own use case.**
+
+**Severity:** medium. **Surfaced** 2026-05-21 during Stage 2.A SMS smoke validation. **Do NOT implement a code fix until the product decision is banked** (likely D-105).
+
 ## Resolved or superseded
 
 ### K-018 — /verify-phone Skip loop on hard-gated destinations (RESOLVED)
