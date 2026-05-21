@@ -23,7 +23,7 @@
 - Clean tree; Stage 2.A code + docs fully landed.
 
 ## Blockers
-- **Arkesel SMS end-to-end smoke** blocked on sender-ID approval (`ShowMePrice`/`ArkeTest` pending). When approved: set `ARKESEL_SENDER_ID`, run send→verify→toast. If the live success-response shape differs from `arkesel-provider.ts`'s parser, patch it.
+- **Arkesel SMS end-to-end smoke — RESOLVED 2026-05-21.** `ShowMePrice` sender ID approved by Arkesel (Bernice Mensah). SMS smoke test completed successfully — real SMS delivered (`"ShowMePrice: your verification code is 064232. Expires in 10 minutes. We will never ask for this code by phone or message."`), code verified, redirect to `/listings/new` worked (return-to-intent confirmed). Stage 2.A fully validated end-to-end with vendor delivery confirmed; the `arkesel-provider.ts` parser handled the live success response correctly.
 
 ## Open questions / next-session entry point
 - **Stage 2.B — messaging MVP** (scope locked in D-095–D-101): text + images + safety layer (D-101) + first-message templates (D-096) + basic offers (D-099) + presence signals (D-100). Spec callout at `PHASE_E_SPEC.md` §7.
@@ -39,5 +39,5 @@
 
 ## Process notes for the next session
 - **Test the agent-handoff opening protocol (§7) end-to-end** on the first new session. If it runs smoothly, no changes needed; if gaps surface, update `agent-handoff.md` per the §9 drift-resolution rule.
-- **Check the Arkesel dashboard for sender-ID approval before any Stage 2.B work.** If approved, run the SMS smoke (set `ARKESEL_SENDER_ID`, send → verify → toast); if the parser shape differs from the training assumption, patch `arkesel-provider.ts`.
-- **Stage 2.B starts with a schema migration** (conversations + messages tables) per D-095–D-101 scope. Use the established discipline: surface findings → propose schema → review → execute with the §0/§1/§2 pattern.
+- **Stage 2.B kickoff:** schema migration (conversations + messages tables) per D-095–D-101 scope. Use the established discipline: surface findings → propose schema → review → execute with the §0/§1/§2 pattern.
+- **Top up the Arkesel account before public launch** — current balance is sufficient for testing (per Bernice's advice), but production SMS volume will need a top-up.
