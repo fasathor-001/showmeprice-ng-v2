@@ -12,3 +12,6 @@ DATABASE_URL_POOLED=postgresql://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@aws-
 # Paystack (Phase G — leave blank for now)
 NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=
 PAYSTACK_SECRET_KEY=
+
+# Admin bootstrap (D-105). Email that auto-grants admin on signup/signin.
+ADMIN_BOOTSTRAP_EMAIL=

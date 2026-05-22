@@ -8,6 +8,7 @@ export {
   isPhoneVerified,
   requirePhoneVerified,
 } from "./post-auth";
+export { maybeBootstrapAdmin } from "./admin-bootstrap";
 export {
   validateEmail,
   validatePassword,

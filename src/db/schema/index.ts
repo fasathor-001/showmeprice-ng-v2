@@ -35,6 +35,8 @@ export * from "./filter_rules";
 export * from "./admins";
 export * from "./admin_action_log";
 export * from "./admin_emails";
+// Phase E Stage 2.A.1 — admin role provisioning audit (D-105, migration E.2.2.0)
+export * from "./admin_role_changes";
 export * from "./reports";
 export * from "./blocks";
 export * from "./filter_actions_log";

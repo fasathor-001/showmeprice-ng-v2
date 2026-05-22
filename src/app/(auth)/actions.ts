@@ -10,6 +10,7 @@ import {
   hasErrors,
   phoneGateDest,
   isPhoneVerified,
+  maybeBootstrapAdmin,
   type ValidationErrors,
 } from "@/lib/auth";
 import {
@@ -178,6 +179,10 @@ export async function signInAction(
   // verification routing fires at the gated actions, not on every sign-in.
   let dest = "/dashboard";
   if (data.user) {
+    // D-105: admin bootstrap detection (mirror of /auth/callback — K-014
+    // dual-path discipline). Awaited; result intentionally unused for routing.
+    await maybeBootstrapAdmin(data.user.id, data.user.email ?? "");
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("verification_status")

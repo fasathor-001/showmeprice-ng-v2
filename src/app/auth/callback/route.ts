@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { phoneGateDest } from "@/lib/auth";
+import { phoneGateDest, maybeBootstrapAdmin } from "@/lib/auth";
 
 export const runtime = "edge";
 
@@ -38,6 +38,10 @@ export async function GET(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
+      // D-105: admin bootstrap detection. Independent of post-auth routing;
+      // awaited so logs are deterministic, result intentionally unused.
+      await maybeBootstrapAdmin(user.id, user.email ?? "");
+
       const metadata = (user.user_metadata ?? {}) as {
         user_type?: string;
         business_name?: string;
