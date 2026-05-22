@@ -164,17 +164,35 @@ Estimated 1-2 commits. Required before launch. Blocks Stage 2.B kickoff per D-10
 
 Surfaced 2026-05-22 during Stage 2.A.1 smoke test by Frank: "admin account is suppose to have admin button for admin to access admin page not visiting the link directly".
 
-### K-025 — /admin/users displays grant buttons on every non-admin user row; doesn't scale (medium)
+### K-026 — No back-navigation link from /admin sub-pages to /admin landing (low)
 
-Scaling concern surfaced post-Stage-2.A.1 smoke test 2026-05-22. At 1000+ users, the page would be overwhelming with grant buttons on 990+ irrelevant rows.
+After clicking a card on /admin landing (User Management or Business Verifications), admins land on the corresponding sub-page with no visible link to return to /admin. Admins must use the browser back button or the UserMenu dropdown.
 
-Not a security issue — multi-layer guards (route, action, function, RBAC) prevent non-admins from invoking grant. UX/operational/scope concern only.
+UX polish item, not blocking. Browser back works as fallback. Worth resolving before public launch.
 
-Resolved by D-107: rename to /admin/staff, scope to admin users only, search-on-grant pattern for promoting new admins. No general user directory in MVP scope.
+Resolution scope: add "← Back to Admin" link or breadcrumb at top of /admin/staff/page.tsx and /admin/verifications/page.tsx. Single small commit. Mirrors any existing back-link pattern in the codebase if one exists.
 
-Surfaced 2026-05-22 by Frank: "if we have 1000 users as sellers and buyer will all account have the grant admin access? I dont like that... We can have only admin or staff profile to be displayed not all user".
+Surfaced 2026-05-22 by Frank during Stage 2.A.3 smoke test.
+
+### K-027 — grant_admin_role SQL function lacks is_disabled check; defense is at action layer only (low)
+
+The `grant_admin_role` SECURITY DEFINER function (E.2.2.0 migration) checks target existence, already-admin status, and granter activity, but does NOT check whether the target's account is disabled (`is_disabled=true`). Current defense against granting admin to disabled users lives at the `grantAdminAction` server action layer (added in Stage 2.A.3, commit f412dab).
+
+Defense-in-depth concern: the deepest DB-layer guard would be a migration adding an `is_disabled` check inside `grant_admin_role`. The action-layer guard is sufficient for normal app flow but doesn't protect against direct DB execution by service_role contexts that bypass the action.
+
+Pattern parallel to K-021 (`freeze_profile_role` missing `SET search_path = public`). Both are SECURITY DEFINER hardening items worth bundling into a future hardening pass.
+
+Resolution scope: small migration that `CREATE OR REPLACE`s `grant_admin_role` with an `is_disabled` check; behavioral test in §2h to confirm. Defer to a future hardening session.
+
+Surfaced 2026-05-22 during Stage 2.A.3 implementation by the coding agent.
 
 ## Resolved or superseded
+
+### K-025 — /admin/users displayed grant buttons on every non-admin user row; didn't scale (RESOLVED)
+
+Resolved by **D-107** (Stage 2.A.3) shipped in commit `f412dab`. Renamed /admin/users to /admin/staff, scoped to admin users only, replaced row-level grant buttons with a header-level "Grant admin role" button + inline-expand search-and-grant panel. Search excludes existing admins and disabled users; the 200-cap on `auth.admin.listUsers` is documented in `searchUsersAction` code.
+
+End-to-end production smoke test confirmed: search returns matches by name/email, the grant flow promotes a user with reason + audit trail, the panel auto-collapses on success and refreshes the list. K-024 (admin nav entry point) was also resolved by D-106 (Stage 2.A.2) in commit `720fcd9`.
 
 ### K-020 — Admin role provisioning has no app-level path (RESOLVED)
 

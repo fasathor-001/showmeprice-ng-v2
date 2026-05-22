@@ -79,3 +79,21 @@ Naming choice: /admin/staff over /admin/admins because it accommodates future no
 Stage 2.A scope ordering: D-106 (Stage 2.A.2 — header + landing) ships first, then D-107 (Stage 2.A.3 — staff page refactor). Both before Stage 2.B (messaging MVP).
 
 Pattern note: smoke testing surfaces UX/scope gaps that code review and structural verification miss. Stage 2.A.1 shipped technically correct code that nonetheless had the wrong shape for production scale. The discipline of "look at the thing you built and ask if it actually works" caught it.
+
+## Stage 2.A formally complete
+
+Stage 2.A.3 (D-107) shipped in commit f412dab. Renamed /admin/users → /admin/staff, scoped to admin users only, search-and-grant flow operational. End-to-end smoke test passed on production: search excludes existing admins and disabled users, grant flow promotes with audit trail, panel auto-collapses on success.
+
+Two discovered gaps during smoke test banked as K-026 (back-navigation link from /admin sub-pages — low UX polish) and K-027 (DB-layer is_disabled hardening in grant_admin_role — defense-in-depth, parallel to K-021).
+
+Stage 2.A scope ordering achieved:
+- 2.A.1 (D-105) admin provisioning ✓
+- ESLint config fix (unblocks Cloudflare deploys) ✓
+- 2.A.2 (D-106) admin nav ✓
+- 2.A.3 (D-107) staff refactor ✓
+
+Next inflection point: Stage 2.B (messaging MVP, scope locked D-095-D-101). Database migration for conversations + messages tables, then UI implementation.
+
+Pattern observation: this session was a stress test of the agent-handoff protocol. Survived a Claude app freeze (mid-session agent restart via §7 protocol), surfaced and fixed a 2-day production deploy backlog caused by an ESLint config gap, and shipped 16 commits across three commit chains while maintaining documentation discipline. The "verify-actual-state" discipline caught critical issues (production deploy backlog, freeze_profile_role GUC bypass requirement) that would have shipped silently otherwise.
+
+Banked principle: smoke testing on production (not just localhost) is the final gate. Frank's persistent questioning ("the verify button is missing on production") caught the deploy backlog. Dismissive responses ("you're not logged in") delayed diagnosis. Founder instincts about UX gaps are signal, not friction.
