@@ -1315,3 +1315,46 @@ K-020 surfaced that admin features exist (/admin/verifications, Phase C.5.6) gat
 - Per-feature admin permissions (just role='admin' for now; granular permissions deferred to Phase F+ if needed)
 - Notification emails on admin grant/revoke (deferred — audit table is sufficient for MVP)
 - Self-service admin revocation (admins can't revoke themselves; only other admins can revoke them, with last-admin prevention)
+
+---
+
+## D-106: Admin navigation entry point — Stage 2.A.2 scope
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** K-024 (resolved by this decision when implemented), D-105 (admin provisioning — scoping miss being addressed)
+
+### Context
+D-105 banked the admin provisioning mechanism but did not include a navigation entry point for admin users. Discovered during Stage 2.A.1 smoke test 2026-05-22 — admins can access /admin/verifications and /admin/users only by typing the URL directly. Unacceptable for production launch.
+
+### Decision
+
+**1. WHEN:** Stage 2.A.2, inserted between Stage 2.A.1 close and Stage 2.B start. Blocks Stage 2.B kickoff.
+
+**2. PATTERN:** Single "Admin" link in header, visible only when user.role === 'admin'. Will evolve to dropdown when admin page count exceeds 3.
+
+**3. LANDING:** New `/admin` landing page with cards/links to existing admin features (/admin/verifications, /admin/users). Forces conscious choice rather than auto-routing.
+
+**4. VISUAL TREATMENT:** Minimal for MVP — plain text link in header, no pending counts, no special styling. Polish deferred.
+
+### Rationale
+- Production admins won't accept type-the-URL navigation
+- Header link is simplest pattern, fast to ship
+- /admin landing accommodates future admin features cleanly
+- Dropdown evolution path is known and straightforward when needed
+- Minimal visual treatment ships sooner; polish can come later if needed
+
+### Implications
+- Modification to header component to add admin-only link
+- New `src/app/admin/page.tsx` landing page
+- Inline admin guard mirroring /admin/verifications and /admin/users pattern
+- Card components linking to existing admin pages
+- K-024 resolved by implementation
+
+### Out of scope
+- Pending count badges on the Admin link
+- Special header styling for admins
+- Dashboard widget for admin shortcuts (separate concern; possible future enhancement)
+- Mobile navigation considerations (TBD with Stage 2.A.2 implementation)
+- Migration of /admin/verifications and /admin/users inline guards to shared requireAdmin (still deferred)

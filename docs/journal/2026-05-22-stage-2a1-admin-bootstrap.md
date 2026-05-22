@@ -49,3 +49,19 @@
 
 ## Decisions made but not yet banked
 - None outstanding.
+
+## Discovered scope (banked for next session)
+
+During Stage 2.A.1 end-to-end smoke test, two UX gaps surfaced that were not in D-105's original scope:
+
+**K-024 (medium) — Admin navigation entry point missing.** Admins must type /admin/users or /admin/verifications directly. Frank flagged this immediately after the cleanup smoke test succeeded: "admin account is suppose to have admin button for admin to access admin page not visiting the link directly". Banked as D-106 (Stage 2.A.2) — single Admin link in header + /admin landing page + minimal visual treatment. Blocks Stage 2.B kickoff per D-106 §1.
+
+**K-023 (medium-low) — Expired/consumed confirmation link UX.** Re-clicking an already-used Supabase confirmation link redirects to /sign-in with no contextual messaging. Affects all users (not admin-specific). Banked Open for a future session; not blocking Stage 2.A.2 or 2.B.
+
+Both gaps discovered through browser smoke test that pure code review would have missed. Notable pattern: smoke testing real user flows surfaces UX gaps that typecheck and structural verification cannot.
+
+## Next session entry point
+
+Stage 2.A.2 implementation (D-106) — admin navigation. Single coherent commit: header modification + /admin landing page + inline guard. ~30-60 min of agent work.
+
+After Stage 2.A.2 closes, Stage 2.B (messaging MVP, D-095-D-101) is the next inflection point.

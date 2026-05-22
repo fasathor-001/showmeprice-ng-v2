@@ -138,6 +138,32 @@ The `isPlausibleNigerianMobile()` validator exists in `src/lib/auth/whatsapp.ts`
 
 **Surfaced:** during the previous session's E.2.2.0 verification paste-back; banked here for traceability.
 
+### K-023 — Expired/consumed confirmation link redirects to /sign-in without explanation (medium-low)
+
+When a user clicks a Supabase email confirmation link that has already been used (single-use consumed) or expired (>24h), the user is redirected to /sign-in with no specific messaging about what happened. Creates user confusion: "Did I do something wrong?", "Was my account not confirmed?", "Is the system broken?"
+
+Discovered during Stage 2.A.1 smoke test 2026-05-22 when re-clicking the confirmation link for `admin@showmeprice.ng` (already consumed during the original confirmation flow that triggered admin bootstrap).
+
+**Resolution scope:** build a small error-state page or enhance /sign-in with conditional messaging based on auth error params. Two cases to handle:
+1. Link already consumed (account is fine, just sign in)
+2. Link expired (request a new confirmation email)
+
+Estimated 1-2 commits. Affects every user who signs up (not admin-specific). Not blocking Stage 2.A.2 but should resolve before public launch. Separate concern from D-106 (admin navigation).
+
+Surfaced 2026-05-22 during Stage 2.A.1 smoke test by Frank.
+
+### K-024 — No admin navigation entry point; admins must type URLs directly (medium)
+
+Admin users can access /admin/verifications and /admin/users only by typing the URL directly. No visible navigation entry point exists for admin features (header link, dropdown, dashboard widget, etc.).
+
+D-105 banked the admin provisioning mechanism but did not include the navigation entry point — a scoping miss in D-105 that became visible during Stage 2.A.1 smoke test.
+
+**Resolution:** D-106 (banked 2026-05-22) — Stage 2.A.2 covers admin navigation with single header link + /admin landing page + minimal visual treatment.
+
+Estimated 1-2 commits. Required before launch. Blocks Stage 2.B kickoff per D-106 §1.
+
+Surfaced 2026-05-22 during Stage 2.A.1 smoke test by Frank: "admin account is suppose to have admin button for admin to access admin page not visiting the link directly".
+
 ## Resolved or superseded
 
 ### K-020 — Admin role provisioning has no app-level path (RESOLVED)
