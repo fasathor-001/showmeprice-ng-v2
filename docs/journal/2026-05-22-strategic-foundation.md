@@ -20,6 +20,7 @@ Paystack's reply (Tomiwa) confirming they offer **no escrow service** triggered 
 - **D-115 — Launch sequencing.** Three phases: private beta (Mo 3-4) → public beta (Mo 5-6) → public launch (Mo 7-9). Each de-risks the next. *(Changed from the implicit single-MVP-launch plan.)*
 - **D-116 — Tiered listing access.** Level 1 Phone Verified (low-risk categories, <₦20k, max 2) → Level 2 Identity Reviewed (NG gov ID; standard categories, max 5) → Level 3 Business Verified (CAC; all categories, max 20). Visible per-level badge. *Refines D-091; introduces a 3-level verification model.*
 - **D-117 — Privacy/data-protection (PLACEHOLDER).** ID/selfie/CAC/PII storage, access logging, retention/erasure, NDPR/GDPR. Full spec required **before public beta** (D-115 gates on it).
+- **D-118 — Referral & word-of-mouth growth (PLACEHOLDER).** Trust-driven word-of-mouth is the primary growth lever (most credible signal in NG context). Private-beta invites are themselves structured referral. Reward structure / anti-abuse / economics / verification-gating / attribution to be fully specified before public beta. Must align with D-112 (trust-first), D-114 (anti-abuse), D-117 (privacy).
 
 ## Launch sequencing change
 Single MVP launch → **private beta → public beta → public launch** (3-phase rollout). See D-115.
@@ -32,7 +33,7 @@ Escrow · Manual Payout · Transfers-API seller settlement · Transaction Splits
 
 ## Engineering implications for Phase E
 - **Existing Stage 2.B (messaging) work continues unchanged** — foundation closed (see `2026-05-22-stage-2b-db-foundation.md`).
-- **Stage 2.C (trust visibility)** added — verification badges, trust box, price-required UI, signup-flexibility UI.
+- **Stage 2.C (trust visibility)** added — trust box, price-required UI, signup-flexibility UI, and **per-D-112 visible verification badge labels** (Phone Verified / Identity Reviewed / Business Verified): Phase 3 UI work needs badge components on **listing cards and seller profiles** (every listing shows what's checked).
 - **Stage 2.D-light (basic anti-abuse infra)** added — phone normalization, configurable thresholds (`app_settings`), account-state machine.
 - **Stage 4 (tiered listing access, D-116)** added.
 - **Stage 2.E (reporting infra)** — planned for public beta.
@@ -48,11 +49,11 @@ Escrow · Manual Payout · Transfers-API seller settlement · Transaction Splits
 ## Superseded / deferred decisions + now-stale deployed schema (reconciliation backlog)
 These are flagged so Phase 3 planning reconciles them — NOT fixed in this commit:
 - **D-082** (escrow ships Phase E) → escrow-timing portion superseded by D-111; tier framing stands.
-- **D-083** (reveal caps 10/25) → refined by D-113 (20/day + 60s); `get_buyer_reveal_cap()` to be reworked.
+- **D-083** (reveal caps 10/25) → refined by D-113: universal **20/day** anti-harvesting ceiling takes precedence; D-083's tier caps apply *within* it once Buyer Pro ships (new Pro 10/day, established Pro **20/day — capped down from 25**) + 60s cooldown. `get_buyer_reveal_cap()` to be reworked.
 - **D-084** (1 free reveal at signup) → superseded by D-113; `profiles.signup_free_reveals_remaining` DEFAULT 1 now stale.
 - **D-085** (credit packs trial/small/medium/large) → superseded by D-113 (1/5/15 packs); `credit_pack_type` enum + `payments.pack_type` CHECK now mismatched.
 - **D-086** escrow fee mechanics + `compute_escrow_fee()` → dormant (D-111).
-- **K-019** (international phone policy) → resolved by D-114 (recommend KNOWN_ISSUES status move in a follow-up).
+- **K-019** (international phone policy) → **resolved by D-114; moved to KNOWN_ISSUES "Resolved"** this commit. Phone-handling implementation (normalization, uniqueness, +234-vs-international free-reveal gating) is forward Phase 3 work.
 - **PHASE_E_SPEC §1.5 + MONETIZATION-PLAN.md** still frame escrow/old pricing as Phase E → superseded by D-111/D-113; needs a spec pass.
 
 ## Next session

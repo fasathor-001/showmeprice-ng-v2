@@ -106,18 +106,6 @@ Recommend (b) when Phase G arrives — cleaner separation of identity verificati
 
 **Fix declined for now:** would require a `profiles.verification_status` query inside middleware, which runs on most requests — wrong trade for a rare edge case. Revisit if it matters.
 
-### K-019 — Phone validation gap (non-NG numbers accepted) + product decision needed (open)
-
-Frank's seller test account `fasathor+seller2@gmail.com` was created with phone `27630377511` (South Africa, +27). Arkesel delivered the OTP successfully — confirming **Arkesel does not restrict by destination country**; the "Nigeria-only" constraint is ShowMePrice product *positioning*, not a vendor capability.
-
-The `isPlausibleNigerianMobile()` validator exists in `src/lib/auth/whatsapp.ts` but either wasn't called during signup or has a gap allowing non-NG numbers through.
-
-**Two separate questions to resolve (next session):**
-1. **Code gap:** why didn't the validator reject `27630377511`? Investigate the signup flow + form submission + action handling (`signUpAction` validates via `validateWhatsAppNumber` → `normalizeNigerianWhatsApp` + `isPlausibleNigerianMobile`; trace where a +27 number slips through).
-2. **Product decision:** should ShowMePrice be strict NG-only, internationally flexible, or hybrid (NG-only sellers, international buyers)? Affects positioning, TAM (NG diaspora), cost structure (SMS variance), and buyer trust signals. **Notably: the founder (Frank) is a Nigerian based in SA — strict NG-only would block the founder's own use case.**
-
-**Severity:** medium. **Surfaced** 2026-05-21 during Stage 2.A SMS smoke validation. **Do NOT implement a code fix until the product decision is banked** (likely D-105).
-
 ### K-021 — `freeze_profile_role` lacks `SET search_path = public` (low)
 
 **Symptom:** The `freeze_profile_role` trigger function (updated in E.2.2.0 / D-105 to add the GUC-guarded bypass branch) does not pin `SET search_path = public`. Every other SECURITY DEFINER function on this codebase (`mark_phone_verified`, `grant_admin_role`, `revoke_admin_role`, `get_buyer_reveal_cap`, `compute_escrow_fee`) pins search_path; this trigger function predates that discipline and was deliberately left as-is during E.2.2.0 to avoid changing unrelated behavior in the same migration.
@@ -217,6 +205,14 @@ Discovered 2026-05-22 during E.2.4.0 §1 execution. Production `conversations` +
 Surfaced 2026-05-22 during E.2.4.0 execution.
 
 ## Resolved or superseded
+
+### K-019 — Phone validation gap + NG-only-vs-international product decision (RESOLVED)
+
+**Product decision resolved by D-114** (2026-05-22): international phones are allowed — any valid international phone can verify; `+234` verified buyers get automatic free reveals; non-`+234` verified buyers can browse/message but free reveals require admin approval during beta (post-launch can be automated once policy is stable). Phone is the primary identity gate; numbers are normalized before storage (`+234` ≡ `0` prefix) and unique (one phone = one account; banned numbers cannot be reused).
+
+The original "validator should reject non-NG numbers" framing is **superseded** — accepting a non-NG number is now intended behavior, not a bug. The phone-handling implementation (normalization, uniqueness, `+234`-vs-international free-reveal gating per D-114) is **forward Phase 3 work**, not an open defect.
+
+**Resolved:** 2026-05-22 (D-114). Surfaced 2026-05-21 during Stage 2.A SMS smoke validation.
 
 ### K-025 — /admin/users displayed grant buttons on every non-admin user row; didn't scale (RESOLVED)
 

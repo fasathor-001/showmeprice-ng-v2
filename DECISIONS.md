@@ -1589,7 +1589,7 @@ Differentiates from Jiji-style volume marketplaces; honest labels protect the br
 
 **Date:** 2026-05-22
 **Status:** Locked
-**Supersedes:** D-084 (signup free-reveal count: "1 at signup" → configurable 3/2/2 after phone verification); D-085 (credit-pack structure + pricing)
+**Supersedes:** D-084 (signup free-reveal count: "1 at signup" → configurable 3/2/2 after phone verification); D-085 (credit-pack structure + pricing: 4-tier trial/small/medium/large → 3-tier 1/5/15; 50-reveal pack deferred to anti-harvesting maturity)
 **Related:** D-083 (reveal caps — refined below), D-087 (Buyer Pro launch promo — deferred, not superseded), D-111 (platform-payments-only)
 
 ### Context
@@ -1607,7 +1607,7 @@ Learn abuse patterns free during private beta; introduce paid credits only once 
 ### Implications (reconciliation work, NOT this commit)
 - Deployed `profiles.signup_free_reveals_remaining` DEFAULT `1` is now **stale** (→ configurable 3/2/2).
 - Deployed `credit_pack_type` enum (`trial`/`small`/`medium`/`large`) + `payments.pack_type` CHECK **mismatch** the new 1/5/15 packs.
-- `get_buyer_reveal_cap()` (D-083 logic: 10/25) to be reworked to the 20/day + 60s model.
+- **D-083 interaction:** the universal **20/day** anti-harvesting cap takes precedence; D-083's tier-based caps apply *within* that ceiling once Buyer Pro ships — new Pro 10/day, established Pro **20/day (capped down from D-083's 25)**. `get_buyer_reveal_cap()` reworked accordingly, plus the 60s cooldown.
 - All thresholds must be configurable (see D-114), not hardcoded.
 
 ### Out of scope
@@ -1702,7 +1702,8 @@ Lets low-friction Level-1 sellers grow supply in low-risk categories while gatin
 
 ### Implications (future engineering, NOT this commit)
 - Introduces a **3-level `verification_level`** model — distinct from the current binary `businesses.verification_status`.
-- Reshapes the current `isLaunchCategory` allowlist into level×category gating + per-level listing caps (refines D-091's nullable `seller_listing_limit`).
+- Refines D-091: the `businesses.seller_listing_limit` column **stays nullable** (schema unchanged); the **2/5/20 caps are enforced as business rules** by verification level (L1=2, L2=5, L3=20).
+- Reshapes the current `isLaunchCategory` allowlist into level×category gating.
 - Stage 4 (tiered listing access) work.
 
 ### Out of scope
@@ -1726,3 +1727,29 @@ ID/selfie/CAC storage (private/encrypted), access controls, **admin access to do
 
 ### Status
 Acknowledged as critical; detailed policy drafted + banked before public beta. **D-115 gates public beta on this being fully specified.**
+
+---
+
+## D-118: Referral & word-of-mouth growth policy (PLACEHOLDER)
+
+**Date:** 2026-05-22
+**Status:** PLACEHOLDER — full specification required before public beta
+**Supersedes:** None
+**Related:** D-112 (referrals operationalize trust-first positioning), D-114 (referral mechanics must not create abuse vectors), D-117 (referral data must respect the privacy policy), D-115 (phasing)
+
+### Context
+ShowMePrice's growth depends primarily on **trust-driven word-of-mouth**, not paid marketing — the most credible trust signal in the Nigerian context. A formal referral mechanism will be designed to amplify this without creating abuse vectors. Logged tonight as a placeholder to reserve the decision.
+
+### Private beta application
+Private-beta invitations are themselves a form of structured referral: Frank invites trusted contacts; those contacts may suggest others for invitation, subject to Frank's review.
+
+### Scope (to be fully specified before public beta)
+- Referral reward structure (free credits / premium time / badge — TBD).
+- Anti-abuse protections (referrer/referee verification, attribution timing, fraud detection) — must not contradict D-114.
+- Reward economics (CPA vs LTV) — sustainable for a solo founder.
+- Integration with verification levels (only verified users can refer / be rewarded).
+- Direction (sellers refer buyers, buyers refer buyers, or both).
+- Attribution mechanics (cookies, codes, link-based).
+
+### Status
+Acknowledged as a critical growth lever. Detailed policy drafted + banked before public beta. Must align with D-112 (trust-first), D-114 (anti-abuse), and D-117 (privacy).
