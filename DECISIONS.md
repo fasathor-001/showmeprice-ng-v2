@@ -1528,3 +1528,201 @@ This requires **splitting the `email` and `nuban` rules per-context** (they curr
 - Trust-scoring escalation of contact patterns (deferred per D-097).
 - Image OCR safety (`message_image_analysis`, Phase G+).
 - Admin UI for editing filter_rules (exists per §10/§14; not part of 2.B).
+
+---
+
+> **Strategic foundation note (D-111 → D-117, 2026-05-22):** these seven decisions come from a full strategic review (master plan v1.2, kept as a Google Doc outside the repo; see `docs/journal/2026-05-22-strategic-foundation.md` for the in-repo summary). They **supersede/refine several earlier monetization + escrow decisions** — cross-references are in each entry's Supersedes/Related fields. Per the append-only rule, the superseded entries (D-082 escrow-timing, D-083, D-084, D-085) are NOT edited in place; their status is governed by the newer entries below. Reference this foundation before any major Phase E architectural decision.
+
+## D-111: Payment architecture — no buyer-seller money intermediation at MVP
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** the escrow-timing/processor portion of D-082 (escrow no longer "ships Phase E via Paystack")
+**Related:** D-086 (escrow fee mechanics — now dormant until a licensed pilot), D-090 (Paystack channels), D-074/D-078 (payment-provider abstraction), Banked Principle 1 (escrow buyer-gated — dormant until escrow returns)
+
+### Context
+Paystack (Tomiwa) confirmed they offer no escrow service. This prompted a full payment-architecture review against Nigerian regulatory exposure.
+
+### Decision
+ShowMePrice MVP **does not process buyer-seller product payments** — those remain off-platform. ShowMePrice does not hold, settle, release, refund, or guarantee product money at MVP. **Paystack is approved only for platform payments** where the user pays ShowMePrice directly for ShowMePrice services (contact-reveal credits; future Buyer Pro; future seller visibility products). Paystack is **NOT** approved for escrow, Manual Payout, Transfers-API seller settlement, or Transaction Splits for buyer-seller product transactions at MVP. Protected Payment remains a **future pilot requiring a licensed hold/release/refund partner** (Vesicash, EscrowLock, or similar).
+
+### Rationale
+Avoids BOFIA 2020 + CBN regulatory risk (holding/settling third-party funds without a licence) while preserving optionality for a future licensed-partner pilot.
+
+### Implications
+- Paystack onboarding direction: **standard merchant** (platform fees only), awaiting KYB requirements.
+- The empty escrow scaffolding (`orders`, `escrow_transactions`, `escrow_orders`) and `compute_escrow_fee()` stay **dormant** at MVP — not removed.
+- **Spec drift to reconcile (not this commit):** `PHASE_E_SPEC.md §1.5` + `MONETIZATION-PLAN.md` still frame escrow as Phase E — superseded by this decision; needs a future spec pass.
+
+### Out of scope
+- Protected Payment pilot design (future, licensed partner).
+- Removing the dormant escrow tables/function (kept for the future pilot).
+
+---
+
+## D-112: Trust-first positioning with operationalized verification
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-102 (marketing precision), D-032 (hard verification gate), D-030 (verified badge), Banked Principles 2 & 5
+
+### Context
+Positioning must be a structural differentiator, not a slogan — and must never overclaim.
+
+### Decision
+ShowMePrice competes on **trust integrity, not listing volume.** Four structural differentiators, each operationally enforced: (1) **real prices required** on every listing (form validation); (2) **multi-level verification with honest labels** — Phone Verified / Identity Reviewed / Business Verified — never "verified = safe"; (3) **logged contact reveal** with anti-harvesting controls; (4) **active fraud prevention** (rule-based detection + admin review queue). Tagline: **"Real prices. Verified sellers. Safer deals."** Marketing constraints LOCKED: NEVER claim guarantees / refunds / held money / "verified = safe"; ALWAYS state what verification actually means at each level.
+
+### Rationale
+Differentiates from Jiji-style volume marketplaces; honest labels protect the brand and limit liability (consistent with D-102 + Principle 2).
+
+### Implications
+- Stage 2.C (trust visibility) surfaces per-level badges + a trust box + "what's checked" copy.
+- "Safer deals" (comparative) — never "safe" (absolute) — in all copy.
+
+### Out of scope
+- Specific badge visual design (Stage 2.C).
+
+---
+
+## D-113: Monetization phasing with anti-abuse coupling
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** D-084 (signup free-reveal count: "1 at signup" → configurable 3/2/2 after phone verification); D-085 (credit-pack structure + pricing)
+**Related:** D-083 (reveal caps — refined below), D-087 (Buyer Pro launch promo — deferred, not superseded), D-111 (platform-payments-only)
+
+### Context
+Monetization must be phased and coupled to anti-abuse, not switched on at launch.
+
+### Decision
+- **Private beta (Months 3-4):** no monetization. Free reveals (default **3**/buyer), manual moderation, no Paystack.
+- **Public beta + launch (Months 5+):** configurable free reveals after phone verification. Paid reveal credits via Paystack — **1 / 5 / 15 packs at ₦300 / ₦1,200 / ₦3,000.** No 50-pack at launch (anti-harvesting). Hard caps even for paid users: **20/day, 60-second cooldown.**
+- **Default free reveal counts (configurable per stage):** private beta 3 · public beta 2 · public launch 2 (tunable to 1 if abuse warrants).
+- **Future phases, traction-triggered (not calendar):** Buyer Pro (with a monthly cap, not unlimited), category listing fees (property/vehicles/generators), listing boosts + Seller Pro, advertising, optional escrow via licensed partner (per D-111).
+
+### Rationale
+Learn abuse patterns free during private beta; introduce paid credits only once anti-abuse infra exists; caps prevent contact-harvesting (the core marketplace abuse vector).
+
+### Implications (reconciliation work, NOT this commit)
+- Deployed `profiles.signup_free_reveals_remaining` DEFAULT `1` is now **stale** (→ configurable 3/2/2).
+- Deployed `credit_pack_type` enum (`trial`/`small`/`medium`/`large`) + `payments.pack_type` CHECK **mismatch** the new 1/5/15 packs.
+- `get_buyer_reveal_cap()` (D-083 logic: 10/25) to be reworked to the 20/day + 60s model.
+- All thresholds must be configurable (see D-114), not hardcoded.
+
+### Out of scope
+- Buyer Pro / Seller Pro / boosts / ads pricing (future, traction-triggered).
+
+---
+
+## D-114: Anti-abuse operating policy + signup/identity model
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None outright
+**Related:** Refines D-022 + D-040 (signup model); D-009 + D-055 (phone format/normalization); D-110 (messaging filter); **Resolves K-019** (international phone policy — recommend moving K-019 → Resolved in a KNOWN_ISSUES follow-up)
+
+### Context
+Every trust claim needs an operational enforcement mechanism, and the signup/identity model needs to support flexible onboarding while keeping phone as the identity gate.
+
+### Decision
+**Detection is rule-based at MVP** (no ML); every flag explainable to admin; reports create review *priority*, not auto-suspension; hard auto-actions only on severe, clearly-defined triggers.
+
+**Signup flexibility:** sign up with EITHER email OR phone. **Phone OTP is the identity gate REQUIRED before any trust-sensitive action** (messaging, offers, reveals, reports), regardless of signup path. Email optional when phone-first (recommended for recovery, with honest copy); email required when email-first. Missing credential can be added later.
+**Identity hierarchy:** phone = primary gate; email = secondary infra (recovery, receipts, notifications).
+**Phone uniqueness:** one phone = one account; normalized before storage (`+234` ≡ `0` prefix); banned numbers cannot be reused.
+**International phone:** any valid international phone can verify. `+234` verified buyers get automatic free reveals; non-`+234` verified buyers can browse/message but free reveals require admin approval during beta.
+
+**Buyer rules (action):** 5+ reveals/1h → throttle to 1/5min for 24h · 10+ reveals/24h **with other signals** → admin review (reveal-without-message alone is NOT abuse — many NG buyers prefer calls) · 2 sellers report same buyer → soft flag · 3 sellers/7d → hard flag (message-restricted) · WhatsApp/Signal/Telegram + payment URLs → blocked (D-110) + admin notified · IP rate limits (3 signups/IP/24h) = **risk signal, not hard block** (shared NG IPs) · account-age-before-first-reveal: 0min private / 10min public beta / 10-30min launch (configurable) · reveal cooldown 60s (configurable).
+**Seller rules:** price <30% category median → soft flag · 3+ listings/1h → soft flag · 2 buyer reports/14d → soft flag · 3 buyer reports/14d → hard flag (listings paused) · 3+ contact-detail changes/30d → soft flag.
+**Escalation:** soft flag → hard flag (activity paused) → admin decision (approve/restrict/suspend/ban/dismiss) → permanent ban (phone/IP/document blocklist).
+**Account states (progressive):** active / limited / under_review / suspended / banned.
+**Coordinated-abuse defense:** admin reviews shared patterns (phone, IP, photos, contacts, listing language); **no automated suspension on report count alone.**
+**Configurability principle:** all thresholds (free-reveal counts, cooldowns, age delays, rate limits) stored as configurable settings (`app_settings`/feature-flags), **never hardcoded.**
+
+### Rationale
+Nigerian-market realities (shared IPs, call-first buyers) mean naive hard blocks produce false positives; rule-based + admin-review keeps enforcement explainable and tunable.
+
+### Implications (future engineering, NOT this commit)
+- New tables eventually: `contact_reveals`, `buyer_reveal_credits`, `reports`, `blocks`, `admin_actions`, `otp_attempts`, `account_status_history`, `risk_events`, `listing_moderation_events`, `app_settings`.
+- New profile fields eventually: `phone_normalized`, `account_status`, `verification_level`, `free_reveals_used`, `paid_reveals_balance`, `signup_ip_hash`, `last_ip_hash`, `report_count`, `block_count`.
+- `app_settings` table (do NOT create now — future Stage 2.D-light work).
+
+### Out of scope
+- Advanced anti-abuse (browser fingerprinting, reverse image search, cross-account graph analysis, ML) — deferred post-beta unless patterns force it earlier.
+
+---
+
+## D-115: Launch sequencing and scope control
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None (launch sequencing not previously banked)
+**Related:** D-113 (monetization phasing), D-117 (privacy — required before public beta)
+
+### Context
+A single public launch risks shipping unproven trust/anti-abuse claims at scale.
+
+### Decision
+Three-phase rollout (NOT public-first):
+- **Private Beta (Months 3-4):** invite-only (50-100 users), Frank manually moderates, NO Paystack, NO paid reveals (all free), limited categories matched to verification readiness. Goal: validate trust positioning, learn real abuse patterns, build supply, test verification at small scale.
+- **Public Beta (Months 5-6):** open signup (500-2,000), ships Stage 2.D-light anti-abuse + Stage 2.E (reporting) + Stage 2.F (reveal credits) + Stage 3.A (Paystack). **D-117 (privacy) must be fully specified before this stage.** Goal: validate monetization willingness + anti-abuse under load.
+- **Public Launch (Months 7-9):** full marketing, systems stable, revenue flowing, press/influencer outreach. Goal: 5,000+ users.
+
+### Rationale
+Each phase de-risks the next; abuse patterns and monetization willingness are learned at increasing scale before marketing spend.
+
+### Implications
+- Advanced anti-abuse is a post-beta enhancement unless beta patterns force it earlier.
+- Engineering stages map to phases (see journal).
+
+### Out of scope
+- Marketing/press specifics (Public Launch planning).
+
+---
+
+## D-116: Tiered listing access (verification level × category risk)
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** Refines D-091 (Phase E "unlimited listings" → per-level caps); D-032 (verification gate); D-042 (taxonomy); D-112 (honest verification labels); the current `isLaunchCategory` allowlist (code)
+
+### Context
+Listing permission should scale with how much the seller has been verified and how risky the category is.
+
+### Decision
+- **Level 1 — Phone Verified (supply growth):** publish ONLY books, small household items, low-value accessories, fashion < ₦20,000. Cannot publish phones/laptops/electronics/vehicles/property/generators/major appliances or anything > ₦20,000. **Max 2 active listings.**
+- **Level 2 — Identity Reviewed (standard):** MVP accepts NIN / voter card / Nigerian driver's licence / Nigerian international passport. Publish phones/laptops/electronics/appliances/fashion/beauty/baby/standard household. Cannot publish vehicles/property/generators/business-scale. **Max 5.** (MVP requires Nigerian government ID; international seller verification deferred post-launch.)
+- **Level 3 — Business Verified (full):** CAC document checked against CAC public search / reliable business evidence where available. Publish all categories incl. vehicles/property/generators/business-scale. **Max 20.**
+- Every listing must display the seller's verification level via a **visible badge.** Marketing: "sellers verified at multiple levels — every listing shows what's checked," never implying levels are equivalent.
+
+### Rationale
+Lets low-friction Level-1 sellers grow supply in low-risk categories while gating high-value/high-fraud categories behind stronger verification — directly operationalizes D-112's honest-labels differentiator.
+
+### Implications (future engineering, NOT this commit)
+- Introduces a **3-level `verification_level`** model — distinct from the current binary `businesses.verification_status`.
+- Reshapes the current `isLaunchCategory` allowlist into level×category gating + per-level listing caps (refines D-091's nullable `seller_listing_limit`).
+- Stage 4 (tiered listing access) work.
+
+### Out of scope
+- International seller verification (post-launch).
+- Per-category fee logic (D-113 future phase).
+
+---
+
+## D-117: Data protection & privacy operating policy (PLACEHOLDER)
+
+**Date:** 2026-05-22
+**Status:** PLACEHOLDER — full specification required before public beta (est. Months 4-5)
+**Supersedes:** None
+**Related:** D-116 (ID/selfie/CAC capture), D-114 (PII: phone/IP), K-009 (banking-placeholder PII), D-031 (NDPR posture)
+
+### Context
+ID documents, selfies, CAC documents, phone numbers, and IP hashes are sensitive PII. A privacy/data-protection policy is critical and must not be forgotten — logged tonight as a placeholder to reserve the decision.
+
+### Scope (to be fully specified before public beta)
+ID/selfie/CAC storage (private/encrypted), access controls, **admin access to documents must be logged**, retention/deletion + right-to-erasure mechanism, privacy policy (required before public launch), data minimization, breach response, **NDPR** compliance, **GDPR** considerations for diaspora users.
+
+### Status
+Acknowledged as critical; detailed policy drafted + banked before public beta. **D-115 gates public beta on this being fully specified.**
