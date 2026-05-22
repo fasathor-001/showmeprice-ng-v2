@@ -16,6 +16,20 @@ export interface AdminActionResult {
   error?: string;
 }
 
+export interface AdminSearchUser {
+  id: string;
+  email: string;
+  displayName: string;
+}
+
+interface SearchResult {
+  users?: AdminSearchUser[];
+  error?: string;
+}
+
+const SEARCH_MIN = 3;
+const SEARCH_LIMIT = 10;
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REASON_MIN = 5;
@@ -76,10 +90,24 @@ export async function grantAdminAction(
   const validated = validateInputs(targetUserId, reason);
   if ("error" in validated) return { error: validated.error };
 
+  const admin = createAdminClient();
+
+  // Defense in depth: grant_admin_role does NOT check is_disabled, so refuse
+  // granting admin to a disabled account here (pairs with the search filter
+  // that excludes disabled users). Read via the admin client because
+  // profiles_public_read RLS hides is_disabled=true rows.
+  const { data: target } = await admin
+    .from("profiles")
+    .select("is_disabled")
+    .eq("id", targetUserId)
+    .maybeSingle();
+  if (target?.is_disabled) {
+    return { error: "Cannot grant admin to a disabled account." };
+  }
+
   // p_granter_id = the calling admin → SQL routes through the 'granted'
   // (delegated) branch, not bootstrap. Idempotent: already-admin returns
   // false (no-op, no audit row) — we treat that as success.
-  const admin = createAdminClient();
   const { error } = await admin.rpc("grant_admin_role", {
     p_target_user_id: targetUserId,
     p_granter_id: auth.userId,
@@ -121,4 +149,67 @@ export async function revokeAdminAction(
     reason: validated.reason,
   });
   return { ok: true };
+}
+
+/**
+ * Search users to promote to admin (D-107). Admin-only (returns emails).
+ * Matches email or display_name (case-insensitive substring, min 3 chars),
+ * excludes existing admins and disabled accounts, returns the top matches.
+ */
+export async function searchUsersAction(query: string): Promise<SearchResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { error: authError(auth.reason) };
+
+  const q = query.trim().toLowerCase();
+  if (q.length < SEARCH_MIN) return { users: [] };
+
+  const admin = createAdminClient();
+
+  // LIMITATION: auth.admin.listUsers caps at 200 results per page; users beyond
+  // that aren't searchable. Acceptable for MVP scale. Replace with scalable
+  // hybrid (profiles ILIKE + getUserById enrichment) when total user count
+  // approaches the cap. Tracked as future enhancement.
+  const { data: authList, error: listErr } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+  });
+  if (listErr) {
+    console.error("[searchUsersAction] listUsers failed", listErr.message);
+    return { error: "Search is temporarily unavailable. Please try again." };
+  }
+
+  const { data: profiles } = await admin
+    .from("profiles")
+    .select("id, display_name, role, is_disabled")
+    .limit(200);
+
+  type ProfileLite = {
+    id: string;
+    display_name: string | null;
+    role: string | null;
+    is_disabled: boolean;
+  };
+  const profileById = new Map<string, ProfileLite>(
+    ((profiles ?? []) as ProfileLite[]).map((p) => [p.id, p]),
+  );
+
+  const matches: AdminSearchUser[] = [];
+  for (const u of authList?.users ?? []) {
+    const p = profileById.get(u.id);
+    // Exclude existing admins (already admin, can't re-grant) and disabled
+    // accounts (not admin candidates; pairs with the grantAdminAction guard).
+    if (p?.role === "admin") continue;
+    if (p?.is_disabled) continue;
+    const email = (u.email ?? "").toLowerCase();
+    const name = (p?.display_name ?? "").toLowerCase();
+    if (email.includes(q) || name.includes(q)) {
+      matches.push({
+        id: u.id,
+        email: u.email ?? "—",
+        displayName: p?.display_name ?? "—",
+      });
+      if (matches.length >= SEARCH_LIMIT) break;
+    }
+  }
+  return { users: matches };
 }

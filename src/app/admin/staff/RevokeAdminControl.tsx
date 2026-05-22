@@ -1,30 +1,27 @@
 "use client";
 
-// Inline grant/revoke control for one user row (D-105 Commit 5). Mirrors the
-// ReviewActions inline-expand pattern (no Modal primitive exists): a button
-// swaps in place for a reason field + Confirm/Cancel. The Commit-4 actions
-// take direct args (not FormData), so they're called directly inside
-// useTransition rather than via useFormState. router.refresh() on success
-// re-renders the server list with the new role. Self-revoke and last-admin
-// revocation are disabled here (defense in depth — the SQL functions also
-// guard), with explanatory helper text.
+// Row-level revoke control for an admin (D-107, extracted from the former
+// dual-purpose UserAdminControls — the staff page lists only admins, so grant
+// moved to GrantAdminPanel). Inline-expand pattern (no Modal primitive): the
+// button swaps in place for a reason field + Confirm/Cancel. revokeAdminAction
+// takes direct args, so it's called inside useTransition; router.refresh() on
+// success re-renders the server list. Self-revoke and last-admin revocation are
+// disabled here with helper text (defense in depth — the SQL function guards too).
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { grantAdminAction, revokeAdminAction } from "./actions";
+import { revokeAdminAction } from "./actions";
 
 interface Props {
   userId: string;
   displayName: string;
-  isAdmin: boolean;
   revokeDisabledReason: "self" | "last_admin" | null;
 }
 
-export function UserAdminControls({
+export function RevokeAdminControl({
   userId,
   displayName,
-  isAdmin,
   revokeDisabledReason,
 }: Props) {
   const router = useRouter();
@@ -33,8 +30,8 @@ export function UserAdminControls({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Revoke blocked (self or last admin) — show a disabled button + reason.
-  if (isAdmin && revokeDisabledReason) {
+  // Revoke blocked (self or last admin) — disabled button + explanatory text.
+  if (revokeDisabledReason) {
     return (
       <div className="text-right">
         <Button type="button" variant="ghost" size="sm" disabled>
@@ -53,27 +50,24 @@ export function UserAdminControls({
     return (
       <Button
         type="button"
-        variant={isAdmin ? "ghost" : "primary"}
+        variant="ghost"
         size="sm"
         onClick={() => {
           setError(null);
           setOpen(true);
         }}
       >
-        {isAdmin ? "Revoke admin" : "Grant admin"}
+        Revoke admin
       </Button>
     );
   }
 
-  const verb = isAdmin ? "Revoke" : "Grant";
   const canSubmit = reason.trim().length >= 5 && !isPending;
 
   function onConfirm() {
     setError(null);
     startTransition(async () => {
-      const res = isAdmin
-        ? await revokeAdminAction(userId, reason)
-        : await grantAdminAction(userId, reason);
+      const res = await revokeAdminAction(userId, reason);
       if (res.error) {
         setError(res.error);
         return;
@@ -87,9 +81,7 @@ export function UserAdminControls({
   return (
     <div className="space-y-3 w-full max-w-sm">
       <p className="text-sm text-ink">
-        {isAdmin
-          ? `Revoke admin access from ${displayName}?`
-          : `Grant admin access to ${displayName}?`}
+        Revoke admin access from {displayName}?
       </p>
       {error && (
         <div
@@ -101,13 +93,13 @@ export function UserAdminControls({
       )}
       <div>
         <label
-          htmlFor={`admin-reason-${userId}`}
+          htmlFor={`revoke-reason-${userId}`}
           className="block text-sm font-medium text-ink mb-1.5"
         >
           Reason (recorded in the audit log)
         </label>
         <textarea
-          id={`admin-reason-${userId}`}
+          id={`revoke-reason-${userId}`}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           required
@@ -115,25 +107,17 @@ export function UserAdminControls({
           minLength={5}
           maxLength={500}
           className="block w-full bg-white border border-neutral-300 rounded-lg text-base text-ink px-3 py-2.5 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400"
-          placeholder={
-            isAdmin
-              ? "Why is this admin being revoked?"
-              : "Why is this user being granted admin?"
-          }
+          placeholder="Why is this admin being revoked?"
         />
       </div>
       <div className="flex gap-2">
         <Button
           type="button"
-          variant={isAdmin ? "danger" : "primary"}
+          variant="danger"
           disabled={!canSubmit}
           onClick={onConfirm}
         >
-          {isPending
-            ? isAdmin
-              ? "Revoking…"
-              : "Granting…"
-            : `Confirm ${verb.toLowerCase()}`}
+          {isPending ? "Revoking…" : "Confirm revoke"}
         </Button>
         <Button
           type="button"

@@ -7,10 +7,9 @@ import { Card, ToastFromSearchParams } from "@/components/ui";
 export const runtime = "edge";
 
 // Admin landing page (D-106 / Stage 2.A.2). Inline admin guard mirrors
-// /admin/users and /admin/verifications (shared requireAdmin migration still
-// deferred). Cards link to existing admin features; per D-107 sequencing the
-// User Management card points at /admin/users now and updates atomically with
-// the /admin/staff rename in Stage 2.A.3.
+// /admin/staff and /admin/verifications (shared requireAdmin migration still
+// deferred). Cards link to existing admin features. The User Management card
+// points at /admin/staff (renamed from /admin/users in Stage 2.A.3 / D-107).
 export default async function AdminLandingPage() {
   const supabase = createClient();
   const {
@@ -27,9 +26,9 @@ export default async function AdminLandingPage() {
 
   const cards = [
     {
-      href: "/admin/users",
+      href: "/admin/staff",
       title: "User Management",
-      description: "Grant or revoke admin role; manage user accounts.",
+      description: "Grant or revoke admin role; manage staff accounts.",
     },
     {
       href: "/admin/verifications",
