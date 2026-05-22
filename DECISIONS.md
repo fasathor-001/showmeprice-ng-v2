@@ -1358,3 +1358,71 @@ D-105 banked the admin provisioning mechanism but did not include a navigation e
 - Dashboard widget for admin shortcuts (separate concern; possible future enhancement)
 - Mobile navigation considerations (TBD with Stage 2.A.2 implementation)
 - Migration of /admin/verifications and /admin/users inline guards to shared requireAdmin (still deferred)
+
+---
+
+## D-107: Admin user management — rename /admin/users to /admin/staff, scope to admin/staff only
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-105 (admin provisioning), D-106 (admin navigation), K-025
+
+### Context
+Stage 2.A.1 shipped /admin/users listing ALL users with grant/revoke buttons per row. Post-smoke-test review revealed this doesn't scale: at 1000+ users, 990+ irrelevant grant buttons would clutter the page.
+
+On further analysis, MVP doesn't actually need a general user-directory feature. Admin operations are scoped:
+- Business verification reviews happen on /admin/verifications (existing queue)
+- Admin role management happens on the page we built tonight
+- Casual user browsing has no MVP use case
+- Rare user lookup (fraud, support) can use SQL Editor temporarily
+
+The right MVP scope is: rename and refocus the page to admin/staff role management only. No general user directory.
+
+### Decision
+
+**1. RENAME:** `/admin/users` becomes `/admin/staff`. URL change reflects the page's actual purpose. Folder rename in `src/app/admin/users/` → `src/app/admin/staff/`.
+
+**2. SCOPE:** The page lists only users with `role = 'admin'`. Regular sellers/buyers are not displayed in any default list view.
+
+**3. GRANT FLOW:** Single "Grant admin role" button at top of page. Click opens a search dialog. Admin types email (with live debounced search across all users, ~300ms debounce, minimum 3 chars). Admin selects match → reason field (5-500 chars, reusing existing validation) → confirms grant. After grant, new admin appears in the list.
+
+**4. REVOKE FLOW:** Existing revoke pattern preserved (inline expand on row, reason field, confirm). Self-revoke and last-admin protections preserved unchanged.
+
+**5. NO GENERAL USER DIRECTORY:** No browse-all-users feature in MVP. When a future use case emerges (fraud investigation, support tools, etc.), a separate /admin/users-search or /admin/find-user feature gets banked as its own decision.
+
+**6. NAMING CHOICE:** "staff" over "admins" because the page will accommodate future role types (moderator, content-admin, support-agent) without another rename.
+
+### Rationale
+- MVP admin operations are scoped; no real user-directory use case yet
+- Smaller surface area = less to maintain, faster to ship
+- Naming /admin/staff is honest about page purpose
+- Search-on-grant pattern handles "find a user to promote" without a full directory
+- Future user-directory feature gets proper scoping when its use case is concrete
+- The /admin/staff naming accommodates future non-admin staff roles
+
+### Implications
+- Rename route from /admin/users to /admin/staff (folder rename)
+- Refactor existing page to filter by `role = 'admin'` only (query change in page.tsx)
+- Remove grant/revoke buttons from row context; replace row-level grant with header-level "Grant admin" button + search dialog
+- Build search-and-select dialog component (reusable for future use cases)
+- Existing UserAdminControls.tsx splits: revoke logic stays as row action; grant logic moves to a new SearchAndGrant dialog
+- /admin landing page (per D-106) links to /admin/staff (not /admin/users)
+- Update K-024 to reflect /admin/staff as the route name when implementing D-106
+- Server actions grantAdminAction and revokeAdminAction unchanged (no signature changes)
+- Backend search query: server action or API route that joins auth.users (admin client) with profiles, returns paginated matches by email (exact) or name (fuzzy ILIKE)
+
+### Out of scope
+- General user directory (browse all users by filters) — defer until concrete use case
+- User profile detail pages — defer until needed
+- Bulk operations — defer
+- Search filters beyond email/name — basic search only
+- Visual polish — separate concern, future work
+- Admin role types beyond 'admin' (moderator, content-admin, etc.) — defer
+- Mobile responsive considerations for search dialog — TBD with implementation
+- Pagination on search results — limit to top N matches for MVP
+
+### Scope ordering
+- **D-106 (Stage 2.A.2)** ships first: header link + /admin landing page + cards (cards link to /admin/staff per this decision). Single commit, ~30-60 min.
+- **D-107 (Stage 2.A.3)** ships second: route rename + scope refactor + search-and-grant dialog. Larger commit chain, ~2-3 hours.
+- Both before Stage 2.B (messaging MVP).

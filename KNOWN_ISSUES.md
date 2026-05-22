@@ -164,6 +164,16 @@ Estimated 1-2 commits. Required before launch. Blocks Stage 2.B kickoff per D-10
 
 Surfaced 2026-05-22 during Stage 2.A.1 smoke test by Frank: "admin account is suppose to have admin button for admin to access admin page not visiting the link directly".
 
+### K-025 — /admin/users displays grant buttons on every non-admin user row; doesn't scale (medium)
+
+Scaling concern surfaced post-Stage-2.A.1 smoke test 2026-05-22. At 1000+ users, the page would be overwhelming with grant buttons on 990+ irrelevant rows.
+
+Not a security issue — multi-layer guards (route, action, function, RBAC) prevent non-admins from invoking grant. UX/operational/scope concern only.
+
+Resolved by D-107: rename to /admin/staff, scope to admin users only, search-on-grant pattern for promoting new admins. No general user directory in MVP scope.
+
+Surfaced 2026-05-22 by Frank: "if we have 1000 users as sellers and buyer will all account have the grant admin access? I dont like that... We can have only admin or staff profile to be displayed not all user".
+
 ## Resolved or superseded
 
 ### K-020 — Admin role provisioning has no app-level path (RESOLVED)

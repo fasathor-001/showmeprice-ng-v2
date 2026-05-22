@@ -65,3 +65,17 @@ Both gaps discovered through browser smoke test that pure code review would have
 Stage 2.A.2 implementation (D-106) — admin navigation. Single coherent commit: header modification + /admin landing page + inline guard. ~30-60 min of agent work.
 
 After Stage 2.A.2 closes, Stage 2.B (messaging MVP, D-095-D-101) is the next inflection point.
+
+## Additional discovered scope (post-K-024 banking)
+
+After D-106 + K-024 banking (commit 2ac23e3), a second architectural concern emerged from continued Stage 2.A.1 review:
+
+**K-025 — Grant buttons don't scale.** Frank flagged that the /admin/users page lists ALL users with grant/revoke buttons, and at production scale (1000+ users) this becomes overwhelming. The architectural insight: MVP doesn't actually need a general user directory feature — admin operations are scoped (verifications + admin role management), and casual user browsing has no use case yet.
+
+Banked as D-107 (Stage 2.A.3): rename /admin/users to /admin/staff, scope to admin users only, replace row-level grant buttons with a search-and-grant dialog at the top of the page. Search-first pattern handles "find a user to promote" without listing everyone.
+
+Naming choice: /admin/staff over /admin/admins because it accommodates future non-admin staff roles (moderator, content-admin) without another rename.
+
+Stage 2.A scope ordering: D-106 (Stage 2.A.2 — header + landing) ships first, then D-107 (Stage 2.A.3 — staff page refactor). Both before Stage 2.B (messaging MVP).
+
+Pattern note: smoke testing surfaces UX/scope gaps that code review and structural verification miss. Stage 2.A.1 shipped technically correct code that nonetheless had the wrong shape for production scale. The discipline of "look at the thing you built and ask if it actually works" caught it.
