@@ -186,6 +186,16 @@ Resolution scope: small migration that `CREATE OR REPLACE`s `grant_admin_role` w
 
 Surfaced 2026-05-22 during Stage 2.A.3 implementation by the coding agent.
 
+### K-028 — ACTUAL_SCHEMA missing policy bodies for ~19 deployed E.1.x tables (low)
+
+Phase 1 verification (2026-05-22) confirmed **29 public tables have RLS policies deployed**, but ACTUAL_SCHEMA's "RLS Policies" section documents policy bodies only for the Phase A/C.5 tables plus (now) `conversations` + `messages`. Roughly **19 E.1.x tables have deployed policies whose bodies are not transcribed** in the doc: `admin_action_log`, `admin_emails`, `admins`, `admin_role_changes` (1 each), `blocks` (4), `credit_balances` (2), `filter_actions_log` (2), `filter_rules` (2), `notification_log` (3), `notification_preferences` (3), `payments` (2), `price_history` (1), `reports` (3), `saved_listings` (5), `search_query_log` (2), `tier_features` (2), `user_tier_history` (2).
+
+**Severity:** low. Policies ARE deployed and enforced — this is a documentation-completeness gap, not a security gap. The actively-misleading part (the blanket "RLS pending E.1.4" claim) was fixed in the D-108/109/110 docs commit.
+
+**Resolution scope:** a doc-completeness pass that queries `pg_policies` for each table and transcribes the bodies into ACTUAL_SCHEMA with paste-back verification. Not blocking Stage 2.B.
+
+Surfaced 2026-05-22 during Phase 1 verification.
+
 ## Resolved or superseded
 
 ### K-025 — /admin/users displayed grant buttons on every non-admin user row; didn't scale (RESOLVED)

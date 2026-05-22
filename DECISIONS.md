@@ -1426,3 +1426,103 @@ The right MVP scope is: rename and refocus the page to admin/staff role manageme
 - **D-106 (Stage 2.A.2)** ships first: header link + /admin landing page + cards (cards link to /admin/staff per this decision). Single commit, ~30-60 min.
 - **D-107 (Stage 2.A.3)** ships second: route rename + scope refactor + search-and-grant dialog. Larger commit chain, ~2-3 hours.
 - Both before Stage 2.B (messaging MVP).
+
+---
+
+## D-108: First-message template tracking storage
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-096 (first-message templates), Stage 2.B messaging MVP
+
+### Context
+D-096 requires first-message template usage to be tracked (response-quality + abuse-analysis signal), but no storage location was specified. Options: (A) `messages.metadata.template_id` JSONB field; (B) new `message_templates` table + `messages.template_id` FK column; (C) separate audit table.
+
+### Decision
+Track template usage in the existing `messages.metadata` JSONB column (no schema change). Locked shape:
+- `metadata.template_id: string | null` — the template identifier when a message used a template; null/absent otherwise.
+- `metadata.template_edited: boolean` (optional) — true if the user started from a template then modified the text (quality signal for later).
+
+### Rationale
+- `metadata` already exists (NOT NULL DEFAULT `'{}'`); zero schema change.
+- Queryable for "which templates are used" at MVP scale.
+- Migratable to a dedicated `message_templates` table later if template management grows complex.
+
+### Implications
+- The send-message server action sets `metadata.template_id` (and optionally `template_edited`) when a buyer sends from a template.
+- This metadata key shape is the contract across the action + future analytics; documented here to prevent drift.
+- No migration required.
+
+### Out of scope
+- Dedicated template-management table / admin template CRUD (defer until non-trivial).
+- Seller quick-reply template tracking (§8) — separate concern.
+
+---
+
+## D-109: Last-seen signal storage (response-time deferred)
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-100 (presence signals), §8/§16 reply-rate (Phase F+), Stage 2.B
+
+### Context
+D-100 ships "last-seen + response-time signals" in the MVP but specified no storage location. Last-seen options: (A) `profiles.last_seen_at` column; (B) computed-on-read from messages; (C) separate `user_presence` table.
+
+### Decision
+1. Add `profiles.last_seen_at timestamptz` (nullable) — the persistent last-seen signal (A).
+2. **Response-time is NOT stored in this phase.** It is a separate aggregate that overlaps the Phase F+ reply-rate work (§8/§16) and is deferred there; computed-on-read from `messages` is acceptable if a signal is needed before then.
+3. `last_seen_at` is updated on exactly three events: **sign-in, opening a conversation, and sending a message.** No every-page-load updates (write amplification on a read-hot table).
+4. **Asymmetric visibility:** seller `last_seen_at` is displayed to buyers (trust signal — "seller last active 2h ago"); buyer `last_seen_at` is NOT displayed to sellers in MVP (no clear trust benefit; avoids a surveillance feel). Revisit if product research surfaces value.
+
+### Rationale
+- User-scoped signal → `profiles` column is the natural home (not conversation-scoped).
+- Cheap UPDATE + indexed SELECT; ephemeral Realtime presence is a separate concern.
+- Bundling response-time as a stored column now would collide with the F+ reply-rate design — defer.
+
+### Implications
+- A later migration adds `profiles.last_seen_at` (NOT part of the Phase 2 docs commit).
+- Drizzle mirror (`src/db/schema/profiles.ts`) + ACTUAL_SCHEMA updated when that migration ships.
+- Updating `last_seen_at` fires the `profiles` `set_updated_at` trigger (bumps `updated_at`) — accepted side effect.
+- Display layer enforces the asymmetric-visibility rule.
+
+### Out of scope
+- Response-time / reply-rate aggregate (Phase F+).
+- Realtime/ephemeral presence ("typing", online dot) — deferred per D-095/D-100.
+- Buyer-last-seen-visible-to-seller (MVP excludes).
+
+---
+
+## D-110: Messaging safety layer — reuse §10 filter_rules (Interpretation C reconciliation)
+
+**Date:** 2026-05-22
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-097, D-101 (safety layer = warnings in MVP), §10 PII filter, E.2.3.0 migration
+
+### Context
+D-101 requires a non-negotiable conversation safety layer; D-097 scopes the MVP to **warnings** (not hard blocks). Phase 1 verification confirmed the §10 `filter_rules` / `filter_actions_log` infra supports per-context targeting (`applies_to_context` jsonb incl. `'message'`) and per-tier targeting, with `filter_actions_log` logging by `context` / `context_id` / `rule_id`. It also revealed 14 seeded rules already exist — several with message-context `action='block'` (WhatsApp/Signal/Telegram links, payment_url, shortened_url), and `email` + `nuban` blocking in BOTH message and listing contexts.
+
+### Decision
+Reuse the §10 `filter_rules` / `filter_actions_log` infrastructure (no parallel system). Reconcile the seeded rules to **Interpretation C** for the `message` context:
+- **Hard block in messages** (off-platform-handoff / fraud-vector threats): WhatsApp, Signal, Telegram links; `payment_url`; `shortened_url`.
+- **Warn in messages** (allow with friction): `email`, `nuban`, `phone`, `social_handle`.
+- **Listings unchanged** — `listing_description` retains the existing strict block policy (anti-spam / anti-fraud).
+
+This requires **splitting the `email` and `nuban` rules per-context** (they currently apply `block` to both): keep `block` for `listing_description`, add a new `warn` rule for `message`. Executed in migration **E.2.3.0**. The link/payment/shortened-url message blocks are already correct and stay as-is.
+
+### Rationale
+- Don't duplicate filter infrastructure; §10 already supports typed patterns + per-context action + action logging.
+- Interpretation C balances D-101 (keep the worst off-platform-scam vectors hard-blocked even in messages) with D-097 (warn, don't block, for softer PII a buyer may legitimately choose to share).
+- Listings are public and a different threat surface; their strict policy is correct and untouched.
+
+### Implications
+- E.2.3.0 splits `email` + `nuban` rules per-context (block→listing only; add warn→message).
+- The send-message action runs content through the filter scoped to `applies_to_context @> '["message"]'::jsonb`, logs to `filter_actions_log` (context='message', context_id=message_id), and surfaces warn vs block per the matched rule's action.
+- The §10 hard-block-everything-in-messages matrix (spec lines 524-534) is post-MVP / full-feature behavior, NOT current MVP scope.
+
+### Out of scope
+- Trust-scoring escalation of contact patterns (deferred per D-097).
+- Image OCR safety (`message_image_analysis`, Phase G+).
+- Admin UI for editing filter_rules (exists per §10/§14; not part of 2.B).

@@ -16,7 +16,9 @@
 
 ## Tables (`public` schema)
 
-**43 tables total.** All Phase A/C.5/D tables have RLS enabled. Phase E.1.x new tables have RLS to be added in E.1.4 (pending — do NOT assume RLS is on for any table created in E.1.1 / E.1.2 / E.1.3 until that block ships). The Stage 2.A.1 `admin_role_changes` table (E.2.2.0) is the exception among the Phase E additions: it ships with RLS enabled AND an admin-only SELECT policy in the same migration.
+**44 tables total** (verified 2026-05-22), **all with RLS enabled.** Of these, **29 have RLS policies deployed** and **15 are RLS-enabled with zero policies** — the latter are deferred/empty feature tables (and service-role-only tables like `phone_verifications`) that are secure-by-default until their feature ships. The 15 zero-policy tables: `delivery_partners`, `escrow_transactions`, `institution_accounts`, `kyc_documents`, `message_image_analysis`, `message_reactions`, `orders`, `order_status_history`, `phone_verifications`, `push_subscriptions`, `restricted_categories`, `saved_searches`, `seller_auto_reply`, `shipping_addresses`, `shipping_quotes`.
+
+> **Drift correction (2026-05-22):** an earlier note here claimed "Phase E.1.x RLS to be added in E.1.4 (pending)." That was stale — RLS policies ARE deployed across the E.1.x tables. Policy bodies are documented below for Phase A/C.5 tables + `conversations`/`messages`; the remaining ~19 policied tables' bodies are tracked for transcription in K-028.
 
 Per D-081, `admin_audit_log` (Phase A) was dropped in micro-migration E.1.3.1. `admin_action_log` (E.1.2) is the canonical admin moderation audit table.
 
@@ -205,17 +207,28 @@ WhatsApp-style chat between a buyer and a seller about a specific listing. One c
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| buyer_id | uuid → profiles(id) | NO | — |
-| seller_id | uuid → profiles(id) | NO | — |
-| listing_id | uuid → products(id) | NO | — |
+| buyer_id | uuid → profiles(id) RESTRICT | NO | — |
+| seller_id | uuid → profiles(id) RESTRICT | NO | — |
+| listing_id | uuid → products(id) RESTRICT | NO | — |
 | conversation_type | text | NO | `'buyer_seller'` |
-| status | text | YES | `'active'` (`'active'`, `'archived'`, `'listing_sold'`, `'listing_deleted'`) |
+| status | text | **NO** | `'active'` |
 | last_message_at | timestamptz | YES | — |
 | last_message_type | text | YES | — |
 | created_at | timestamptz | NO | now() |
 
-**Indexes:**
+**Constraints (verified 2026-05-22):**
+- `conversations_status_check` CHECK (`status IN ('active','archived','listing_sold','listing_deleted')`)
+- FKs use Postgres-default `_fkey` names (raw-SQL created), all **ON DELETE RESTRICT**: `conversations_buyer_id_fkey`, `conversations_seller_id_fkey`, `conversations_listing_id_fkey`.
+
+**Indexes (verified 2026-05-22):**
 - `conversations_buyer_seller_listing_unique` partial UNIQUE on (buyer_id, seller_id, listing_id) WHERE conversation_type = 'buyer_seller'
+- `conversations_buyer_idx` btree on (buyer_id, last_message_at DESC)
+- `conversations_seller_idx` btree on (seller_id, last_message_at DESC)
+- `conversations_listing_idx` btree on (listing_id)
+
+**RLS:** enabled, 4 policies (admin_all / buyer_insert / party_read / party_update) — see RLS Policies section.
+
+**Realtime:** NOT in the `supabase_realtime` publication as of 2026-05-22 — **pending the E.2.4.0 migration** (Stage 2.B requires Realtime delivery per spec §7).
 
 ### `credit_balances`
 
@@ -312,8 +325,8 @@ Admin-editable PII filter rules. Seeded with initial Nigerian-tuned ruleset in E
 | rule_type | text | NO | — (`'phone'`, `'whatsapp_link'`, `'bank_account'`, etc.) |
 | pattern | text | NO | — (regex) |
 | action | text | NO | — (CHECK `IN ('block', 'warn', 'allow')`) |
-| applies_to_tier | text[] | YES | — (`['free']` for soft-warn-then-allow on free; `['free', 'pro']` for universal blocks) |
-| applies_to_context | text[] | YES | — (`['message', 'listing_description']`) |
+| applies_to_tier | **jsonb** | YES | — (JSON array, e.g. `["free"]` for soft-warn-then-allow on free; `["free","pro"]` for universal blocks. Documented as text[] pre-2026-05-22; verified jsonb.) |
+| applies_to_context | **jsonb** | YES | — (JSON array, e.g. `["message","listing_description"]`. Documented as text[] pre-2026-05-22; verified jsonb. Query with `applies_to_context @> '["message"]'::jsonb`.) |
 | description | text | YES | — |
 | active | boolean | YES | true |
 | created_at | timestamptz | YES | now() |
@@ -390,14 +403,26 @@ In-conversation messages. Phase E ships `text` and `image` message types; Phase 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| conversation_id | uuid → conversations(id) | NO | — |
-| sender_id | uuid → profiles(id) | NO | — |
+| conversation_id | uuid → conversations(id) CASCADE | NO | — |
+| sender_id | uuid → profiles(id) RESTRICT | NO | — |
 | message_type | text | NO | `'text'` |
 | content | text | YES | — |
-| metadata | jsonb | YES | `'{}'` |
+| metadata | jsonb | **NO** | `'{}'` |
 | attachment_url | text | YES | — (Supabase Storage URL for images) |
 | read_at | timestamptz | YES | — (null until recipient reads) |
 | created_at | timestamptz | NO | now() |
+
+**Constraints (verified 2026-05-22):**
+- `messages_message_type_check` CHECK (`message_type IN ('text','image','voice_note','offer','system')`) — note `'offer'` is already allowed, so D-099 basic offers (`message_type='offer'` + amount in `metadata`) need NO schema change.
+- FKs (Postgres-default `_fkey` names): `messages_conversation_id_fkey` **ON DELETE CASCADE** (deleting a conversation removes its messages); `messages_sender_id_fkey` **ON DELETE RESTRICT**.
+
+**Indexes (verified 2026-05-22):**
+- `messages_conversation_idx` btree on (conversation_id, created_at)
+- `messages_unread_idx` partial btree on (conversation_id) WHERE `read_at IS NULL` — fast unread-count lookups.
+
+**RLS:** enabled, 4 policies (admin_all / party_read / party_update / sender_insert) — see RLS Policies section.
+
+**Realtime:** NOT in the `supabase_realtime` publication as of 2026-05-22 — **pending the E.2.4.0 migration** (Stage 2.B requires Realtime delivery per spec §7).
 
 ### `nigerian_states`
 
@@ -910,9 +935,9 @@ Eleven custom enums in the `public` schema. (Originally thirteen; `subscription_
 
 ## RLS Policies
 
-**Phase A/C.5 tables** — RLS enabled, policies documented below.
+**Verified state (2026-05-22):** all 44 tables have RLS enabled; 29 have policies deployed; 15 are RLS-enabled-zero-policies (deferred-feature/service-role-only tables — see the Tables note above for the list). The earlier "Phase E.1.x policies not yet applied / pending E.1.4" claim was stale and is removed.
 
-**Phase E.1.x tables (32)** — RLS policies are NOT yet applied. Tables exist with RLS implicitly enabled (Supabase default) but with zero policies, meaning all authenticated access is denied until E.1.4 ships. Application code that writes to these tables in Stage 2+ must wait for E.1.4 OR run under service_role (which bypasses RLS).
+Policy bodies below cover the Phase A/C.5 tables + `conversations` + `messages`. The other ~19 policied E.1.x tables (`blocks`, `reports`, `notification_log`, `notification_preferences`, `filter_rules`, `filter_actions_log`, `saved_listings`, `search_query_log`, `credit_balances`, `payments`, `price_history`, `tier_features`, `user_tier_history`, `admin_action_log`, `admin_emails`, `admins`) have deployed policies whose bodies are not yet transcribed here — tracked as **K-028** (doc-completeness pass).
 
 ### `admin_role_changes` (Phase E.2.2.0 / D-105)
 - `admin_role_changes_select_admins` (SELECT): `public.is_admin(auth.uid())` — admins read the audit trail
@@ -934,10 +959,22 @@ Eleven custom enums in the `public` schema. (Originally thirteen; `subscription_
 - Pre-E.1.1 had buyer_insert, buyer_read, seller_read, admin_read policies. E.1.1 reshape preserved RLS, but the policy bodies reference column names that no longer exist (e.g., the seller_read policy depended on `auth.uid() = seller_id`, which still works since `seller_id` is unchanged).
 - **TODO confirm during E.1.4:** verify each existing policy still matches the new column shape. The reshape kept buyer/seller/product columns but renamed `product_id → listing_id`. Any policy referencing `product_id` needs updating.
 
+### `conversations` (Phase E.1.x; verified deployed 2026-05-22)
+- `conversations_admin_all` (ALL): `is_admin(auth.uid())`
+- `conversations_buyer_insert` (INSERT): WITH CHECK `auth.uid() = buyer_id` (only the buyer creates a conversation)
+- `conversations_party_read` (SELECT): `auth.uid() = buyer_id OR auth.uid() = seller_id`
+- `conversations_party_update` (UPDATE): USING + WITH CHECK `auth.uid() = buyer_id OR auth.uid() = seller_id`
+
 ### `escrow_orders`
 - `escrow_orders_admin_all` (ALL): admin only
 - `escrow_orders_buyer_insert` (INSERT): WITH CHECK `auth.uid() = buyer_id`
 - `escrow_orders_party_read` (SELECT): `auth.uid() = buyer_id OR auth.uid() = seller_id`
+
+### `messages` (Phase E.1.x; verified deployed 2026-05-22)
+- `messages_admin_all` (ALL): `is_admin(auth.uid())`
+- `messages_party_read` (SELECT): EXISTS a `conversations` row where `c.id = messages.conversation_id AND (auth.uid() = c.buyer_id OR auth.uid() = c.seller_id)`
+- `messages_party_update` (UPDATE): USING + WITH CHECK — same party-of-conversation EXISTS check (drives `read_at` updates)
+- `messages_sender_insert` (INSERT): WITH CHECK `auth.uid() = sender_id AND` party-of-conversation EXISTS check (a sender can only post into a conversation they belong to)
 
 ### `nigerian_states`
 - `nigerian_states_admin_write` (ALL): admin only
