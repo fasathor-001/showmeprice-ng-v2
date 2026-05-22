@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,js,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{ts,js,json,md}\"",
     "cf:build": "npx @cloudflare/next-on-pages",
@@ -49,6 +50,7 @@
     "tsx": "^4.22.0",
     "typescript": "^5",
     "vercel": "^54.0.0",
+    "vitest": "^2",
     "wrangler": "^4.91.0"
   }
 }

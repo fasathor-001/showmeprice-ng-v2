@@ -51,6 +51,12 @@ export const profiles = pgTable("profiles", {
   tier_started_at: timestamp("tier_started_at", { withTimezone: true }),
   tier_expires_at: timestamp("tier_expires_at", { withTimezone: true }),
 
+  // Stage 2.B / D-109 (migration E.2.5.0). Persistent last-seen signal,
+  // written by messaging actions on send / open-thread / open-list. Nullable;
+  // no backfill. Asymmetric DISPLAY (seller→buyer yes, buyer→seller no) is a
+  // Stage 2.C UI concern — the column just stores the timestamp.
+  last_seen_at: timestamp("last_seen_at", { withTimezone: true }),
+
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

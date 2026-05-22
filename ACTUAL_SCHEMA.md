@@ -651,6 +651,7 @@ User profiles. One-to-one with `auth.users`. Created automatically via `handle_n
 | **tier_expires_at** | timestamptz | YES | — (Phase E.1.0) |
 | **signup_free_reveals_remaining** | integer | NO | `1` (Phase E.2.0.0 / D-084; 1 free contact reveal granted at signup. Backfill on deploy: profiles created ≥30 days prior → 0; <30 days → 1) |
 | **pro_activated_at** | timestamptz | YES | — (Phase E.2.0.1 / D-083; set on first Pro subscription activation, backfilled from `MIN(subscriptions.started_at)`. NULL = never activated Pro. Drives the new/established Pro reveal-cap tenure check) |
+| **last_seen_at** | timestamptz | YES | — (Stage 2.B / D-109 / migration **E.2.5.0**, verified live 2026-05-22; no backfill. Written by messaging server actions on send / open-thread / open-list. Asymmetric display per D-109 — seller→buyer shown, buyer→seller not, in MVP. Every write also bumps `updated_at` via `set_updated_at` — accepted.) |
 | created_at | timestamptz | NO | now() |
 | updated_at | timestamptz | NO | now() |
 
