@@ -8,9 +8,10 @@ import { signOutAction } from "@/app/(auth)/actions";
 interface UserMenuProps {
   displayName: string;
   email: string;
+  isAdmin?: boolean;
 }
 
-export function UserMenu({ displayName, email }: UserMenuProps) {
+export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +65,16 @@ export function UserMenu({ displayName, email }: UserMenuProps) {
           >
             Dashboard
           </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="block px-4 py-2 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+            >
+              Admin
+            </Link>
+          )}
           <form action={signOutAction}>
             <button
               type="submit"

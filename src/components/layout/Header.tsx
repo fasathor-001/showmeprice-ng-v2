@@ -12,13 +12,15 @@ export async function Header() {
   } = await supabase.auth.getUser();
 
   let displayName: string | null = null;
+  let isAdmin = false;
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("display_name")
+      .select("display_name, role")
       .eq("id", user.id)
       .single();
     displayName = profile?.display_name ?? user.email?.split("@")[0] ?? "Account";
+    isAdmin = profile?.role === "admin";
   }
 
   return (
@@ -51,7 +53,7 @@ export async function Header() {
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {user ? (
-              <UserMenu displayName={displayName ?? "Account"} email={user.email ?? ""} />
+              <UserMenu displayName={displayName ?? "Account"} email={user.email ?? ""} isAdmin={isAdmin} />
             ) : (
               <>
                 <Link
