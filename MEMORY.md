@@ -224,6 +224,16 @@ Drizzle's convention: `<table>_<col>_<reftable>_<refcol>_fk`. PostgreSQL's auto-
 
 **Operational:** plan for at least one follow-up commit per section that involves runtime behavior, file I/O, redirects, or external service interaction. Make hard-stop smoke tests the actual gate, not the build gate.
 
+### Production build runs ESLint, not just TypeScript. Typecheck-clean is necessary but not sufficient.
+
+Cloudflare Pages build pipeline runs `next build` which includes both TypeScript compilation AND ESLint validation. ESLint failures break the production deploy even though `tsc --noEmit` passes.
+
+Banking: before claiming "build will deploy cleanly," run the full production build command locally (`npm run build` / `pnpm build` / whatever the project uses), not just `tsc --noEmit`. The typecheck only catches type errors; the full build catches lint errors, import errors, and other issues that production won't tolerate.
+
+**The `npm run build` / `pnpm build` command IS the pre-commit gate going forward.** The `tsc --noEmit` typecheck is necessary but not sufficient — keep running it for fast feedback during development, but don't ship commits without verifying the full build passes.
+
+Discovered 2026-05-22 after Cloudflare deployment had been stuck for 2 days on an ESLint error (unused params in otp-actions.ts). Twelve commits to main had been pushed but not deployed because they all inherited the underlying build failure. Root cause: the default `@typescript-eslint/no-unused-vars` (`args: "after-used"`) flagged `sendPhoneOtpAction(_prev, _formData)` because BOTH params are unused with none used after; fixed by adding `argsIgnorePattern: "^_"` (+ vars/caughtErrors) to `.eslintrc.json`.
+
 ### Database freeze triggers shape application architecture, not the other way around
 
 Phase C.5's submit flow was redesigned because Phase A's `businesses_freeze_verification` trigger blocks non-admin writes to `verification_status`. Initial approaches (service role wrapper, custom trigger relaxation) worked against the security model. Final approach (seller writes to audit table, admin actions consume it) works with it.
