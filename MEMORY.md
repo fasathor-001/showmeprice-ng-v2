@@ -610,6 +610,16 @@ WHERE routine_schema='public' AND routine_name='fn';
 
 This applies to EVERY future `SECURITY DEFINER` function on this codebase. Writing one with only `REVOKE FROM PUBLIC` reopens the same self-grant vector — treat the triple-REVOKE + grant-audit as a non-negotiable checklist item, paired with `SET search_path = public`.
 
+## GUC-guarded trigger bypass for SECURITY DEFINER admin operations
+
+Triggers protecting columns (e.g. `profiles_freeze_role`, `businesses_freeze_verification`) that check `auth.uid()` cannot be bypassed by `service_role`-executed SECURITY DEFINER functions, because `auth.uid()` is NULL under service_role.
+
+Pattern: gate the trigger's exception path on a transaction-local GUC (e.g. `app.role_change_authorized`), and have the SECURITY DEFINER function set it inside the transaction before the protected UPDATE. The GUC dies at transaction end (LOCAL scope). Authorization lives entirely inside the function (which is triple-REVOKE'd to service_role).
+
+Critical: the GUC must NEVER be settable from anywhere except the SECURITY DEFINER functions. Verify the trigger source has only one valid bypass condition (the GUC check), and the EXECUTE permissions on the functions follow triple-REVOKE. (`set_config` lives in `pg_catalog`, not the exposed `public` schema, so it is not callable via PostgREST `rpc` — confirm no `public`-schema wrapper exposes it.)
+
+Discovered during D-105 (admin role provisioning) implementation, 2026-05-22.
+
 ## Verify actual deployed state, not apparent success
 
 A migration that throws no error has **succeeded**, not necessarily **achieved its intent**. "No error" ≠ "the deployed state matches the design." Every migration must include §2 verification queries that read `information_schema` / `pg_catalog` and confirm the real post-state — column nullability/defaults, constraint definitions, `prosecdef`/`proconfig`, **grantees** — and the operator pastes them back.
