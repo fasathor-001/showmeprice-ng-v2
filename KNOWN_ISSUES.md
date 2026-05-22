@@ -118,37 +118,42 @@ The `isPlausibleNigerianMobile()` validator exists in `src/lib/auth/whatsapp.ts`
 
 **Severity:** medium. **Surfaced** 2026-05-21 during Stage 2.A SMS smoke validation. **Do NOT implement a code fix until the product decision is banked** (likely D-105).
 
-### K-020 — Admin role provisioning has no app-level path; bootstrap path undecided (Open, blocking next admin work)
+### K-021 — `freeze_profile_role` lacks `SET search_path = public` (low)
 
-Admin features exist (`/admin/verifications`, Phase C.5.6) but no path provisions the first admin. Manual DB intervention via the `profiles_freeze_role` trigger workaround technically works but is unacceptable as ongoing process — Frank does not want to run SQL to access admin features.
+**Symptom:** The `freeze_profile_role` trigger function (updated in E.2.2.0 / D-105 to add the GUC-guarded bypass branch) does not pin `SET search_path = public`. Every other SECURITY DEFINER function on this codebase (`mark_phone_verified`, `grant_admin_role`, `revoke_admin_role`, `get_buyer_reveal_cap`, `compute_escrow_fee`) pins search_path; this trigger function predates that discipline and was deliberately left as-is during E.2.2.0 to avoid changing unrelated behavior in the same migration.
 
-The architectural escape: the `profiles_freeze_role` trigger was added (correctly — prevents role tampering), admin features were built gated by `role='admin'`, but an admin bootstrap mechanism was never built.
+**Severity:** low. The body references only unqualified `profiles` plus `current_setting`/`auth.uid()`; exploiting it would require creating a same-named object in an earlier-resolving schema AND getting it onto the function's search_path — not possible via the exposed API at v2 scale.
 
-**Decisions needed (next session, before any admin-related code work):**
+**Surfaced + deferred:** Stage 2.A.1 (E.2.2.0, 2026-05-22). Deliberately deferred to a future hardening pass.
 
-1. **WHEN does admin bootstrap get built?**
-   - Inserted as Stage 2.A.1 (between 2.A close and 2.B start)
-   - Folded into Stage 2.B
-   - Deferred to Phase F+
-   - Other
+**Fix when prioritised:** `CREATE OR REPLACE FUNCTION freeze_profile_role() ... SET search_path = public` (online, no lock). Apply alongside any future touch of the trigger; consider auditing all trigger functions for the same gap in the same pass.
 
-2. **HOW does the FIRST admin get provisioned?**
-   - Designated bootstrap email (env var, auto-admin on signup)
-   - One-time deploy script
-   - Pre-seeded in initial migration
-   - Manual DB for first admin only (then UI for subsequent)
-   - Other
+### K-022 — E.2.2.0 migration §2c verification query uses `polname` (low, verification-only)
 
-3. **HOW do SUBSEQUENT admins get granted?**
-   - Admin UI calling a SECURITY DEFINER server action
-   - Approval workflow (multi-admin sign-off)
-   - Other
+**Symptom:** In `migrations/E.2.2.0-admin-role-provisioning.sql`, the §2c RLS verification query selected `polname` from `pg_policies`, but `pg_policies` exposes the column as `policyname` (`polname` is the column on the lower-level `pg_policy` catalog). Re-running §2c as originally written errors with `column "polname" does not exist`.
 
-Surfaced 2026-05-21 during Stage 2.A close. Frank explicitly stated the DB workaround is not the answer — admin must work as a product feature.
+**Severity:** low. **Verification-only** — does NOT affect the applied migration (§1 ran clean and was confirmed by the other §2 queries + the §2h behavioral tests). Only a §2c re-run was affected.
 
-This is a real scope decision that needs banking as **D-105** before code work proceeds.
+**Fixed:** the in-place `polname → policyname` correction landed in the Commit 6 docs sweep (2026-05-22), same commit as this entry. The deployed schema was never wrong — only the verification SQL text.
+
+**Surfaced:** during the previous session's E.2.2.0 verification paste-back; banked here for traceability.
 
 ## Resolved or superseded
+
+### K-020 — Admin role provisioning has no app-level path (RESOLVED)
+
+Resolved by **D-105** (admin role provisioning, Stage 2.A.1) and its commit chain:
+- `4460e88` — D-105 banked
+- `80e4913` — E.2.2.0 migration: `admin_role_changes` audit table, `grant_admin_role` + `revoke_admin_role` SECURITY DEFINER functions (triple-REVOKE'd), GUC-guarded `freeze_profile_role` bypass
+- `73a37ce` — bootstrap detection (`maybeBootstrapAdmin`, wired into `/auth/callback` + `signInAction`)
+- `fa0929f` — shared `requireAdmin` + `grantAdminAction` / `revokeAdminAction`
+- `ff83c69` — `/admin/users` UI (grant/revoke flow)
+
+The first admin is now provisioned by matching `ADMIN_BOOTSTRAP_EMAIL` on signup/signin (no SQL workaround); subsequent admins are granted/revoked via `/admin/users`, with self-revoke and last-admin protection at both SQL and UI layers, every change audited in `admin_role_changes`.
+
+**End-to-end validated in production 2026-05-22:** bootstrap fired for `admin@showmeprice.ng`; the two pre-existing test admins (originally provisioned via the SQL trigger workaround) were revoked through the new UI — confirming the revoke path end-to-end. End state: one active admin.
+
+**Production note:** `ADMIN_BOOTSTRAP_EMAIL` must be set in Cloudflare Pages env vars before the next production deploy (local dev validated; production not yet).
 
 ### K-018 — /verify-phone Skip loop on hard-gated destinations (RESOLVED)
 

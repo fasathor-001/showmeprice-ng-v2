@@ -276,7 +276,7 @@ ORDER BY conname;
 -- 2c. RLS enabled + the admin-only SELECT policy present.
 SELECT
   (SELECT relrowsecurity FROM pg_class WHERE oid='public.admin_role_changes'::regclass) AS rls_enabled,
-  polname, cmd, qual
+  policyname, cmd, qual
 FROM pg_policies
 WHERE schemaname='public' AND tablename='admin_role_changes';
 

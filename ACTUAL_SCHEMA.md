@@ -8,13 +8,15 @@
 >
 > **Phase E Sprint 3 seller-foundation applied (Gap A + Gap D), V-verified 2026-05-20:** `businesses.is_founding_seller` + `businesses.founding_seller_granted_at` + `businesses.grandfathered_pro_price_kobo` (D-088); `businesses.city_area` + `products.city_area` (Gap D.1); new Tier 1 `Power & Generators` parent + 4 subcategories (Gap D.0a, confirmed live via categories SELECT); `electronics.search_aliases` extended to 23 (Gap D.0b). `product_status` enum value `'sold'` now reachable via the seller mark-as-sold flow (Gap B). Table count unchanged at 42.
 >
+> **Phase E Stage 2.A.1 admin role provisioning applied (E.2.2.0, D-105), V-verified end-to-end 2026-05-22:** new `admin_role_changes` audit table (append-only; admin-only SELECT RLS, no write policy — written only via the functions below or service_role); SECURITY DEFINER functions `grant_admin_role(uuid, uuid, text)` + `revoke_admin_role(uuid, uuid, text)`, both triple-REVOKE'd to `service_role`; `freeze_profile_role` gained a transaction-local GUC bypass branch (`app.role_change_authorized`, set only inside those two functions). Table count now **43**.
+>
 > If you change the schema (new tables, new columns, new policies, new triggers, new enums), update this file in the same commit.
 
 ---
 
 ## Tables (`public` schema)
 
-**42 tables total.** All Phase A/C.5/D tables have RLS enabled. Phase E.1.x new tables have RLS to be added in E.1.4 (pending — do NOT assume RLS is on for any table created in E.1.1 / E.1.2 / E.1.3 until that block ships).
+**43 tables total.** All Phase A/C.5/D tables have RLS enabled. Phase E.1.x new tables have RLS to be added in E.1.4 (pending — do NOT assume RLS is on for any table created in E.1.1 / E.1.2 / E.1.3 until that block ships). The Stage 2.A.1 `admin_role_changes` table (E.2.2.0) is the exception among the Phase E additions: it ships with RLS enabled AND an admin-only SELECT policy in the same migration.
 
 Per D-081, `admin_audit_log` (Phase A) was dropped in micro-migration E.1.3.1. `admin_action_log` (E.1.2) is the canonical admin moderation audit table.
 
@@ -56,6 +58,33 @@ Outbound email log for admin-to-user communications. Phase E ships email channel
 
 **Indexes:**
 - `admin_emails_recipient_idx` btree on (recipient_user_id, sent_at)
+
+### `admin_role_changes`
+
+Append-only audit of admin role grants/revokes (Phase E Stage 2.A.1 / E.2.2.0 / D-105). Written ONLY by the SECURITY DEFINER functions `grant_admin_role` / `revoke_admin_role` (owner-run, RLS-bypassing) or service_role — there is no API-level INSERT/UPDATE/DELETE policy. RLS enabled with an admin-only SELECT policy.
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| id | uuid | NO | gen_random_uuid() |
+| target_user_id | uuid → profiles(id) RESTRICT | NO | — |
+| granter_id | uuid → profiles(id) SET NULL | YES | — (NULL for bootstrap — no granter) |
+| action | text | NO | — (CHECK `IN ('granted', 'revoked', 'bootstrap')`) |
+| reason | text | YES | — |
+| created_at | timestamptz | NO | now() |
+
+**Constraints:**
+- `admin_role_changes_target_user_id_profiles_id_fk` (→ profiles, ON DELETE RESTRICT)
+- `admin_role_changes_granter_id_profiles_id_fk` (→ profiles, ON DELETE SET NULL)
+- `admin_role_changes_action_check` CHECK (action IN ('granted', 'revoked', 'bootstrap'))
+
+**Indexes:**
+- `admin_role_changes_target_user_id_idx` btree on (target_user_id)
+- `admin_role_changes_granter_id_idx` btree on (granter_id)
+- `admin_role_changes_created_at_idx` btree on (created_at DESC)
+
+**Notes:**
+- `action='bootstrap'` = first admin auto-granted on `ADMIN_BOOTSTRAP_EMAIL` match (`granter_id` NULL, service_role-trusted path). `'granted'`/`'revoked'` = delegated by an existing active admin (`granter_id` set).
+- Drizzle mirror at `src/db/schema/admin_role_changes.ts` (the CHECK lives in SQL only, per mirror convention).
 
 ### `admins`
 
@@ -885,6 +914,10 @@ Eleven custom enums in the `public` schema. (Originally thirteen; `subscription_
 
 **Phase E.1.x tables (32)** — RLS policies are NOT yet applied. Tables exist with RLS implicitly enabled (Supabase default) but with zero policies, meaning all authenticated access is denied until E.1.4 ships. Application code that writes to these tables in Stage 2+ must wait for E.1.4 OR run under service_role (which bypasses RLS).
 
+### `admin_role_changes` (Phase E.2.2.0 / D-105)
+- `admin_role_changes_select_admins` (SELECT): `public.is_admin(auth.uid())` — admins read the audit trail
+- No INSERT/UPDATE/DELETE policy — append-only from the API's perspective; writes happen only via the `grant_admin_role`/`revoke_admin_role` SECURITY DEFINER functions or service_role.
+
 ### `businesses`
 - `businesses_admin_update` (UPDATE): admin only
 - `businesses_owner_insert` (INSERT): WITH CHECK `auth.uid() = owner_id`
@@ -962,7 +995,7 @@ Business-logic triggers (excluding auto-generated FK constraint triggers).
 - **`products_price_change_log`** (AFTER UPDATE OF price_kobo) — Phase E.1.2. Fires WHEN `OLD.price_kobo IS DISTINCT FROM NEW.price_kobo`. Calls `log_product_price_change()` to insert a row into `price_history`.
 
 ### `profiles`
-- **`profiles_freeze_role`** (BEFORE UPDATE) — blocks non-admin changes to `role`
+- **`profiles_freeze_role`** (BEFORE UPDATE) — blocks non-admin changes to `role`. Phase E.2.2.0 / D-105 added a transaction-local GUC bypass branch: if `current_setting('app.role_change_authorized', true) = 'on'` the change is allowed. That GUC is set (LOCAL scope, dies at txn end) only inside `grant_admin_role` / `revoke_admin_role` (both service_role-locked); `set_config` lives in `pg_catalog`, not exposed via PostgREST, so no other caller can set it. The original admin-EXISTS check is otherwise intact. (Note: this function does NOT pin `SET search_path` — tracked as K-021.)
 - `profiles_set_updated_at` (BEFORE UPDATE)
 
 ### `subscriptions`
@@ -985,6 +1018,8 @@ Business-logic triggers (excluding auto-generated FK constraint triggers).
 | **`log_product_price_change`** | (trigger context) | trigger | Phase E.1.2. Inserts a row into `price_history` (product_id, price_kobo, changed_by = NEW.seller_id) on every price_kobo change. Per D-071, `changed_by` attribution uses `NEW.seller_id` — best-effort, since DB triggers can't reliably resolve `auth.uid()`. Admin price overrides are captured in `admin_action_log` instead. |
 | **`get_buyer_reveal_cap`** | `p_user_id uuid` | integer | Phase E.2.0.1 / D-083. Returns the daily contact-reveal cap for a buyer. Free → 0 (convention: no per-day cap; caller checks `signup_free_reveals_remaining` + `credit_balances`). Pro new (<30d) / missing `pro_activated_at` / has open reports → 10. Pro established (30+d, no open reports) → 25. Institution → 25 (Phase E placeholder). Legacy `'premium'` → treated as Pro (defensive; shouldn't exist post-D-082). STABLE, SECURITY DEFINER, `search_path=public`. Open-reports check computed-on-read against `reports` (target_type='user', status IN 'new'/'in_review'). |
 | **`compute_escrow_fee`** | `p_amount_kobo bigint, p_user_id uuid` | bigint | Phase E.2.0.2 / D-086. Returns escrow fee in kobo. Raises exception below ₦50,000 (5,000,000 kobo). Pro rate 1.2% + ₦100 if an active subscription exists (`status='active' AND current_period_end > NOW()`), else standard 1.5% + ₦100. Integer half-up rounding `(amount × rate + 500) / 1000 + 10000`. Reads billing-authoritative `subscriptions` (NOT `profiles.tier`) — catches cancelled-but-tier-stale + past-due edge cases. STABLE, SECURITY DEFINER, `search_path=public`. |
+| **`grant_admin_role`** | `p_target_user_id uuid, p_granter_id uuid, p_reason text` | boolean | Phase E.2.2.0 / D-105. Atomic admin grant + audit. `p_granter_id` NULL = bootstrap (service_role-trusted; the calling action guarantees `email = ADMIN_BOOTSTRAP_EMAIL`); NOT NULL must be an active admin (defense in depth). Idempotent: already-admin → returns `false`, no audit row. Sets the `app.role_change_authorized` GUC (LOCAL) to pass `freeze_profile_role`, UPDATEs `profiles.role='admin'`, INSERTs an `admin_role_changes` row (`action` = `'bootstrap'`/`'granted'`). SECURITY DEFINER, `search_path=public`. **EXECUTE locked down**: triple-`REVOKE` from `anon`/`authenticated`/`PUBLIC`, then `GRANT` to `service_role` only. |
+| **`revoke_admin_role`** | `p_target_user_id uuid, p_granter_id uuid, p_reason text` | boolean | Phase E.2.2.0 / D-105. Atomic admin revoke + audit. No bootstrap path — `p_granter_id` must be an active admin. Self-revoke forbidden (raises). Idempotent: non-admin target → returns `false`, no audit row. Last-active-admin guard (defense in depth; normally shadowed by the self-revoke + granter-must-be-admin guards). Sets the `app.role_change_authorized` GUC (LOCAL), UPDATEs `profiles.role=NULL`, INSERTs an `admin_role_changes` row (`action='revoked'`). SECURITY DEFINER, `search_path=public`. Same triple-`REVOKE` + `service_role`-only lockdown as `grant_admin_role`. |
 | **`mark_phone_verified`** | `p_verification_id uuid, p_user_id uuid, p_provider_tag text` | boolean | Phase E.2.1.1 / Stage 2.A. Atomic verify-success across two tables: under `FOR UPDATE`, validates the row belongs to `p_user_id` and is unconsumed, sets `consumed_at`, then idempotently appends `'phone_verified'` to `profiles.verification_status` and `p_provider_tag` (e.g. `'arkesel_phone'`) to `profiles.auth_providers`. Returns `true` on success, `false` if no row / wrong user / already consumed (benign concurrent-consume — the action gates validity; this gates atomicity). SECURITY DEFINER, `search_path=public`. **EXECUTE locked down**: triple-`REVOKE` from `anon`, `authenticated`, AND `PUBLIC`, then `GRANT` to `service_role` only — Supabase auto-grants anon/authenticated on public functions, and `REVOKE FROM PUBLIC` alone does NOT remove those (the lockdown gap caught at E.2.1.1 §2d; commit `13bf8d4`). |
 
 **Critical:** `is_admin` requires a `uuid` argument. There is NO parameterless `is_admin()` form. RLS policies and triggers must call `is_admin(auth.uid())`.
@@ -995,7 +1030,7 @@ Business-logic triggers (excluding auto-generated FK constraint triggers).
 
 ## Foreign Key Constraints
 
-**~70 FK constraints total** across the 42 tables. Documented below by category. Two naming conventions coexist on this database:
+**~70 FK constraints total** across the 43 tables (plus the two `admin_role_changes` FKs added in E.2.2.0 — RESTRICT on `target_user_id`, SET NULL on `granter_id`). Documented below by category. Two naming conventions coexist on this database:
 - Drizzle migration default: `<table>_<col>_<reftable>_<refcol>_fk`
 - PostgreSQL auto-naming for raw `ALTER TABLE`: `<table>_<col>_fkey`
 

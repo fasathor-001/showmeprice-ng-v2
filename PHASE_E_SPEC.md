@@ -2,7 +2,7 @@
 
 **Project:** ShowMePrice.ng v2 (https://showmeprice-ng-v2.pages.dev)
 **Phase:** E — Buyer-Side Infrastructure + Pro Monetization
-**Document version:** 1.2 (Stage 2.A complete; Stage 2.B MVP scope tightened)
+**Document version:** 1.3 (Stage 2.A.1 admin provisioning complete; Stage 2.B not started)
 **Predecessor phase:** D (shipped — 25 commits across categories, images, CRUD, search)
 **Local repo:** `C:\Users\fasat\showmeprice-ng-v2\`
 
@@ -11,6 +11,11 @@
 > **Spec revision note (v1.1 → v1.2):**
 > - **Stage 2.A — Phone OTP Verification: COMPLETE** (code-validated 2026-05-21; SMS end-to-end pending Arkesel sender-ID approval). Commits: `f302483`, `5599bac`, `13bf8d4`, `46680b5`, `ba77bfe`, `c27132e`, `b69bb98`, `00d92c7`. See §4. Architecture per **D-094** (delivery-only OTP provider abstraction; active provider Arkesel, Termii swap-ready).
 > - **Stage 2.B — Messaging: MVP scope tightened** per **D-095 through D-101**. §7–8 below remain the architectural reference (full feature set), but the **MVP ships a reduced surface** — see the scope callout at the top of §7. Features beyond MVP are deferred to subsequent stages (2.B.2/2.B.3/2.B.5) and Phase F.
+>
+> **Spec revision note (v1.2 → v1.3):**
+> - **Stage 2.A SMS validated end-to-end** 2026-05-21 — Arkesel `ShowMePrice` sender ID approved; real OTP delivered + verified + return-to-intent redirect confirmed. (Supersedes the v1.2 "SMS end-to-end pending Arkesel sender-ID approval" note in §4.)
+> - **Stage 2.A.1 — Admin role provisioning: COMPLETE** (validated end-to-end in production 2026-05-22) per **D-105**. Inserted between Stage 2.A close and Stage 2.B start. Shipped: `admin_role_changes` audit table + `grant_admin_role`/`revoke_admin_role` SECURITY DEFINER functions + GUC-guarded `freeze_profile_role` bypass (migration E.2.2.0), `ADMIN_BOOTSTRAP_EMAIL` bootstrap detection, and the `/admin/users` grant/revoke UI. Resolves K-020. Commits `4460e88`, `80e4913`, `73a37ce`, `fa0929f`, `ff83c69`, + this docs commit.
+> - **Stage 2.B — Messaging MVP: not started** — the next inflection point (scope locked D-095–D-101).
 
 ---
 
@@ -96,7 +101,7 @@ Carried over from `DECISIONS.md`. The PII filter rules designed in §10 below ap
 
 ## 4. BUYER AUTHENTICATION
 
-> **STATUS — Stage 2.A COMPLETE (code-validated 2026-05-21).** Phone OTP verification shipped: `phone_verifications` table + `mark_phone_verified` fn, delivery-only provider abstraction (`src/lib/otp/`, D-094), `send`/`verifyPhoneOtpAction`, `/verify-phone` route, post-auth soft-prompt gate (callback + sign-in), and the listing-creation hard gate (D-093 forward-notes contact-reveal). Active provider: **Arkesel** (Termii swap-ready, one env var). Outstanding: SMS end-to-end smoke, blocked on Arkesel sender-ID approval. Commits `f302483`→`00d92c7`. NOTE: "via Termii" below is historical — provider is now config-selected.
+> **STATUS — Stage 2.A COMPLETE (code-validated 2026-05-21).** Phone OTP verification shipped: `phone_verifications` table + `mark_phone_verified` fn, delivery-only provider abstraction (`src/lib/otp/`, D-094), `send`/`verifyPhoneOtpAction`, `/verify-phone` route, post-auth soft-prompt gate (callback + sign-in), and the listing-creation hard gate (D-093 forward-notes contact-reveal). Active provider: **Arkesel** (Termii swap-ready, one env var). SMS end-to-end validated 2026-05-21 (Arkesel `ShowMePrice` sender ID approved; real OTP delivered + verified + return-to-intent redirect confirmed). Commits `f302483`→`00d92c7`. NOTE: "via Termii" below is historical — provider is now config-selected.
 
 ### Decision summary
 **Phone-primary OTP via Termii, password required, email optional with prominent prompt, display_name required, full_name and state_id optional.**
