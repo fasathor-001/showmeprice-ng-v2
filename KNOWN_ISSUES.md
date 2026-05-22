@@ -196,6 +196,16 @@ Phase 1 verification (2026-05-22) confirmed **29 public tables have RLS policies
 
 Surfaced 2026-05-22 during Phase 1 verification.
 
+### K-029 — NUBAN filter pattern `\b\d{10}\b` false-positives on any 10-digit number (low)
+
+The `nuban` filter rule (now `warn` in messages per E.2.3.0 / D-110) uses pattern `\b\d{10}\b`, which matches *any* 10-digit run — not just bank account numbers. It will warn on prices, order IDs, product codes, and phone numbers written without a country code. In MVP it only produces an over-eager **warning** (not a block), so the blast radius is small, but it adds friction noise.
+
+**Severity:** low. Warn-only (E.2.3.0); no block. UX-noise, not correctness/security.
+
+**Resolution scope:** the Phase 3+ send-message action that runs content through the filter must apply a context-aware whitelist (§10 price/negotiation whitelist — `₦450k`, `450,000`, etc.) before surfacing the NUBAN warning, and ideally narrow the pattern (e.g. exclude values adjacent to currency markers). Application-layer concern, not a rule-row change.
+
+Surfaced 2026-05-22 during E.2.3.0 reconciliation prep.
+
 ## Resolved or superseded
 
 ### K-025 — /admin/users displayed grant buttons on every non-admin user row; didn't scale (RESOLVED)

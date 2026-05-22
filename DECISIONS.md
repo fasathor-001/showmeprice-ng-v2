@@ -1510,6 +1510,8 @@ Reuse the §10 `filter_rules` / `filter_actions_log` infrastructure (no parallel
 - **Warn in messages** (allow with friction): `email`, `nuban`, `phone`, `social_handle`.
 - **Listings unchanged** — `listing_description` retains the existing strict block policy (anti-spam / anti-fraud).
 
+**Tier targeting:** message-context warn rules apply to `tier=['free']` only (Pro exempt). Mirrors the existing `phone` + `social_handle` rules and the §10 Pro-relaxation model.
+
 This requires **splitting the `email` and `nuban` rules per-context** (they currently apply `block` to both): keep `block` for `listing_description`, add a new `warn` rule for `message`. Executed in migration **E.2.3.0**. The link/payment/shortened-url message blocks are already correct and stay as-is.
 
 ### Rationale
@@ -1519,7 +1521,7 @@ This requires **splitting the `email` and `nuban` rules per-context** (they curr
 
 ### Implications
 - E.2.3.0 splits `email` + `nuban` rules per-context (block→listing only; add warn→message).
-- The send-message action runs content through the filter scoped to `applies_to_context @> '["message"]'::jsonb`, logs to `filter_actions_log` (context='message', context_id=message_id), and surfaces warn vs block per the matched rule's action.
+- The send-message action runs content through the filter scoped to `'message' = ANY(applies_to_context)` (the column is `text[]`, NOT jsonb — confirmed E.2.3.0 §0), logs to `filter_actions_log` (context='message', context_id=message_id), and surfaces warn vs block per the matched rule's action.
 - The §10 hard-block-everything-in-messages matrix (spec lines 524-534) is post-MVP / full-feature behavior, NOT current MVP scope.
 
 ### Out of scope

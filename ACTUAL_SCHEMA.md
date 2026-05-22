@@ -325,8 +325,8 @@ Admin-editable PII filter rules. Seeded with initial Nigerian-tuned ruleset in E
 | rule_type | text | NO | — (`'phone'`, `'whatsapp_link'`, `'bank_account'`, etc.) |
 | pattern | text | NO | — (regex) |
 | action | text | NO | — (CHECK `IN ('block', 'warn', 'allow')`) |
-| applies_to_tier | **jsonb** | YES | — (JSON array, e.g. `["free"]` for soft-warn-then-allow on free; `["free","pro"]` for universal blocks. Documented as text[] pre-2026-05-22; verified jsonb.) |
-| applies_to_context | **jsonb** | YES | — (JSON array, e.g. `["message","listing_description"]`. Documented as text[] pre-2026-05-22; verified jsonb. Query with `applies_to_context @> '["message"]'::jsonb`.) |
+| applies_to_tier | text[] | YES | — (`{free}` for soft-warn-then-allow on free; `{free,pro}` for universal blocks) |
+| applies_to_context | text[] | YES | — (`{message,listing_description}`; query with `'message' = ANY(applies_to_context)`) |
 | description | text | YES | — |
 | active | boolean | YES | true |
 | created_at | timestamptz | YES | now() |
@@ -338,6 +338,10 @@ Admin-editable PII filter rules. Seeded with initial Nigerian-tuned ruleset in E
 
 **Indexes:**
 - `filter_rules_active_idx` btree on (active, rule_type) — for active-rules lookup pattern
+
+**Notes:**
+- `applies_to_context` / `applies_to_tier` are **`text[]`** (NOT jsonb). A 2026-05-22 doc edit briefly mis-recorded these as `jsonb` (inferred from Supabase's JSON-like CSV rendering of `text[]`-of-strings); reverted here — the original `text[]` was correct, and `information_schema` (`data_type='ARRAY'`, `udt_name='_text'`) is authoritative. Query containment with `'message' = ANY(applies_to_context)`, not `@>`.
+- **E.2.3.0 reconciliation (D-110 Interpretation C, 2026-05-22):** `email` + `nuban` were split per-context — `block` for `listing_description` (tier `{free,pro}`), `warn` for `message` (tier `{free}`, Pro-exempt). Off-platform-handoff patterns (whatsapp/signal/telegram/payment_url/shortened_url) remain hard `block` in messages; listings unchanged.
 
 ### `institution_accounts`
 

@@ -234,6 +234,18 @@ Banking: before claiming "build will deploy cleanly," run the full production bu
 
 Discovered 2026-05-22 after Cloudflare deployment had been stuck for 2 days on an ESLint error (unused params in otp-actions.ts). Twelve commits to main had been pushed but not deployed because they all inherited the underlying build failure. Root cause: the default `@typescript-eslint/no-unused-vars` (`args: "after-used"`) flagged `sendPhoneOtpAction(_prev, _formData)` because BOTH params are unused with none used after; fixed by adding `argsIgnorePattern: "^_"` (+ vars/caughtErrors) to `.eslintrc.json`.
 
+### Rendered output is never authoritative for schema state — only information_schema queries are.
+
+Supabase SQL Editor (and most psql-style clients) render `text[]`-of-strings in a JSON-like form indistinguishable from `jsonb` in CSV output. The same pattern applies to other type inferences from rendered output: numeric precision, timestamp precision, JSON shape inside JSON columns, etc.
+
+For migration prep, schema documentation, or any code path that depends on a column's actual type or constraints, query `information_schema.columns` (or `pg_catalog.pg_attribute` for deeper details) — not the rendered output of a SELECT against the table.
+
+Banking 2026-05-22 after the same trap bit twice in one session:
+- Phase 1 verification inferred `jsonb` from CSV-rendered `["message","listing_description"]` output → wrong inference reached a committed doc (Commit A, `b33d1c6`).
+- E.2.3.0 §0 pre-flight (the `information_schema.columns` definitive check) caught it before §1 ran a migration that would have type-errored at the first UPDATE.
+
+Discipline: §0 pre-flight reads (`information_schema.columns`) ARE part of the migration, not optional setup. They go first, get pasted, and get verified before §1 executes.
+
 ### Database freeze triggers shape application architecture, not the other way around
 
 Phase C.5's submit flow was redesigned because Phase A's `businesses_freeze_verification` trigger blocks non-admin writes to `verification_status`. Initial approaches (service role wrapper, custom trigger relaxation) worked against the security model. Final approach (seller writes to audit table, admin actions consume it) works with it.
