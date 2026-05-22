@@ -1270,3 +1270,48 @@ The new structured format is canonical going forward. Old entries (D-001 through
 ### Out of scope
 - Mass-rewriting D-001 through D-102
 - Format negotiation per-decision (the template is the standard)
+
+---
+
+## D-105: Admin role provisioning — Stage 2.A.1 scope
+
+**Date:** 2026-05-23
+**Status:** Locked
+**Supersedes:** None
+**Related:** K-020 (resolved by this decision), MEMORY.md "SECURITY DEFINER lockdown" principle, MEMORY.md "Frozen columns need provisioning paths" principle
+
+### Context
+K-020 surfaced that admin features exist (/admin/verifications, Phase C.5.6) gated by `role = 'admin'`, but no app-level path provisions the first admin. The `profiles_freeze_role` trigger blocks app-level role changes. Manual DB intervention works but Frank explicitly rejected it as ongoing process — admin must function as a product feature, not a SQL recipe.
+
+### Decision
+
+**1. WHEN:** Admin bootstrap built as Stage 2.A.1, inserted between Stage 2.A close and Stage 2.B start. Blocks Stage 2.B kickoff.
+
+**2. HOW first admin gets provisioned:** Designated bootstrap email via environment variable `ADMIN_BOOTSTRAP_EMAIL` (set per environment in `.dev.vars` for local dev, Cloudflare Pages env for production). Bootstrap email for ShowMePrice is `admin@showmeprice.ng`. On any signup or signin where the authenticated user's email matches `ADMIN_BOOTSTRAP_EMAIL` AND their `profiles.role` is not already 'admin', auto-grant admin role via SECURITY DEFINER function. Idempotent — repeated signins by the bootstrap user are no-ops once admin role is set.
+
+**3. HOW subsequent admins get granted:** Admin UI at `/admin/users`, gated by `requireAdmin()`. Server actions `grantAdminAction(targetUserId, reason)` and `revokeAdminAction(targetUserId, reason)` execute via SECURITY DEFINER function with triple-REVOKE lockdown (anon + authenticated + PUBLIC, then GRANT to service_role). Audit logged to new `admin_role_changes` table (append-only). UI and server-side both prevent revoking the last admin (deadlock prevention).
+
+### Rationale
+- ENV var approach works across dev/staging/prod without code changes; idempotent and revocable by removing the env var
+- `admin@showmeprice.ng` separates "Frank the person" from "ShowMePrice admin" — cleaner mental model, supports future co-founders / staff
+- Triple-REVOKE pattern is the banked MEMORY principle from Stage 2.A's E.2.1.1 security fix; reused here
+- requireAdmin() is the established Phase C.5.6 pattern
+- Audit table provides paper trail without requiring multi-admin sign-off (which would add friction for solo-founder phase without delivering value yet)
+- Last-admin-revocation prevention at both UI and server layers (defense-in-depth, established pattern)
+
+### Implications
+- New env var `ADMIN_BOOTSTRAP_EMAIL` in `.dev.vars` and Cloudflare Pages
+- New SECURITY DEFINER function `grant_admin_role(target_user_id uuid, granter_id uuid, reason text)` with triple-REVOKE
+- New SECURITY DEFINER function `revoke_admin_role(target_user_id uuid, granter_id uuid, reason text)` — same lockdown
+- New table `admin_role_changes` (id uuid pk, target_user_id uuid fk, granter_id uuid nullable fk for bootstrap (no granter), action text 'granted'|'revoked'|'bootstrap', reason text, created_at timestamptz)
+- New helper in /auth/callback or signup action: bootstrap detection logic
+- New route `/admin/users` with user list + grant/revoke buttons
+- Server actions `grantAdminAction` and `revokeAdminAction` (both gated by requireAdmin())
+- K-020 resolved by this commit chain
+
+### Out of scope
+- Multi-admin sign-off for grants (deferred; YAGNI for solo-founder phase)
+- Admin role expiry / time-bound admin grants (deferred)
+- Per-feature admin permissions (just role='admin' for now; granular permissions deferred to Phase F+ if needed)
+- Notification emails on admin grant/revoke (deferred — audit table is sufficient for MVP)
+- Self-service admin revocation (admins can't revoke themselves; only other admins can revoke them, with last-admin prevention)
