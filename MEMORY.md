@@ -246,6 +246,14 @@ Banking 2026-05-22 after the same trap bit twice in one session:
 
 Discipline: §0 pre-flight reads (`information_schema.columns`) ARE part of the migration, not optional setup. They go first, get pasted, and get verified before §1 executes.
 
+**Addendum: read queries returning empty result sets are not authoritative either.**
+
+Same session, same project: Phase 1 `pg_publication_tables` query AND the E.2.4.0 §0a pre-flight (run ~5 min before §1) both returned "0 rows" for conversations/messages publication membership. §1's first `ALTER PUBLICATION ... ADD TABLE` then errored `42710` (already-member). A §0a re-run AFTER the failed/rolled-back §1 returned both tables present — and REPLICA IDENTITY FULL was already set too (our ALTERs never ran, since the txn aborted on the first statement). So the target state pre-existed; the read queries reported its absence inconsistently.
+
+Possible causes (none confirmed): Supabase SQL Editor session/cache anomaly; `pg_publication_tables` visibility behavior we don't understand; out-of-band config change. Tracked as K-030.
+
+Discipline: the ultimate proof of state isn't a SELECT — it's the operation itself succeeding or failing. Read queries inform the plan; the migration statement defines reality. "Verify queries lying about absence" is a real failure mode — design migrations (idempotency guards, §0 gates, transactional rollback) so a surprise pre-existing state fails safe rather than corrupting.
+
 ### Database freeze triggers shape application architecture, not the other way around
 
 Phase C.5's submit flow was redesigned because Phase A's `businesses_freeze_verification` trigger blocks non-admin writes to `verification_status`. Initial approaches (service role wrapper, custom trigger relaxation) worked against the security model. Final approach (seller writes to audit table, admin actions consume it) works with it.

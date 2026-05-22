@@ -206,6 +206,16 @@ The `nuban` filter rule (now `warn` in messages per E.2.3.0 / D-110) uses patter
 
 Surfaced 2026-05-22 during E.2.3.0 reconciliation prep.
 
+### K-030 — supabase_realtime publication + REPLICA IDENTITY FULL on conversations/messages: provenance unknown (low)
+
+Discovered 2026-05-22 during E.2.4.0 §1 execution. Production `conversations` + `messages` were **already** in the `supabase_realtime` publication with `REPLICA IDENTITY FULL`, despite Phase 1 query 10 + E.2.4.0 §0a both returning 0 rows for publication membership. §1's first `ALTER PUBLICATION ... ADD TABLE` errored `42710` (already-member); the transaction rolled back cleanly (so our `REPLICA IDENTITY FULL` statements never ran — that state pre-existed too). The post-rollback re-query confirmed both tables present + FULL.
+
+**Severity:** low. Production is in the correct end state for Stage 2.B (the planned E.2.4.0 migration was a no-op and was not shipped). This is a provenance/observability question, not a correctness gap.
+
+**Resolution scope (future session):** check Supabase project settings for any auto-realtime-configuration behavior; inspect Supabase logs for publication/replica-identity ALTER operations around the E.1.x table-creation dates; determine whether the SQL Editor read-query inconsistency is reproducible. Pairs with the MEMORY "rendered output / empty result sets are not authoritative" lesson.
+
+Surfaced 2026-05-22 during E.2.4.0 execution.
+
 ## Resolved or superseded
 
 ### K-025 — /admin/users displayed grant buttons on every non-admin user row; didn't scale (RESOLVED)

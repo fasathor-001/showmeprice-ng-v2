@@ -228,7 +228,7 @@ WhatsApp-style chat between a buyer and a seller about a specific listing. One c
 
 **RLS:** enabled, 4 policies (admin_all / buyer_insert / party_read / party_update) — see RLS Policies section.
 
-**Realtime:** NOT in the `supabase_realtime` publication as of 2026-05-22 — **pending the E.2.4.0 migration** (Stage 2.B requires Realtime delivery per spec §7).
+**Realtime:** in the `supabase_realtime` publication with **REPLICA IDENTITY FULL** — verified live 2026-05-22. (Both were already in this end state before the planned E.2.4.0 migration ran — §1's first `ALTER PUBLICATION ADD TABLE` errored 42710 "already member" and rolled back, so no migration file was shipped. Earlier Phase 1 query 10 + the E.2.4.0 §0a both reported 0 publication rows; the post-rollback re-query showed both tables present + FULL. Provenance unclear — see K-030.)
 
 ### `credit_balances`
 
@@ -426,7 +426,7 @@ In-conversation messages. Phase E ships `text` and `image` message types; Phase 
 
 **RLS:** enabled, 4 policies (admin_all / party_read / party_update / sender_insert) — see RLS Policies section.
 
-**Realtime:** NOT in the `supabase_realtime` publication as of 2026-05-22 — **pending the E.2.4.0 migration** (Stage 2.B requires Realtime delivery per spec §7).
+**Realtime:** in the `supabase_realtime` publication with **REPLICA IDENTITY FULL** — verified live 2026-05-22. (Both were already in this end state before the planned E.2.4.0 migration ran — §1's first `ALTER PUBLICATION ADD TABLE` errored 42710 "already member" and rolled back, so no migration file was shipped. Earlier Phase 1 query 10 + the E.2.4.0 §0a both reported 0 publication rows; the post-rollback re-query showed both tables present + FULL. Provenance unclear — see K-030.)
 
 ### `nigerian_states`
 
