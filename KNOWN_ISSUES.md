@@ -204,6 +204,16 @@ Discovered 2026-05-22 during E.2.4.0 §1 execution. Production `conversations` +
 
 Surfaced 2026-05-22 during E.2.4.0 execution.
 
+### K-031 — `/dev/messaging-smoke` harness must be removed or admin-gated before public beta (low)
+
+Stage 2.B Commit 1.5 added `src/app/dev/messaging-smoke/` — a dev-only harness that invokes the messaging server actions and renders their results, for verifying Commit 1 in isolation. It is guarded by `notFound()` when `NODE_ENV === 'production'`, so it 404s on the deployed site and is only reachable via `pnpm dev` on localhost (which shares the production Supabase instance).
+
+**Severity:** low. Not reachable in production (hard 404 guard). It does, however, ship in the bundle and reads `filter_actions_log` via the service-role admin client (dev convenience).
+
+**Resolution before public beta:** delete the route, OR replace the `NODE_ENV` guard with a `requireAdmin` gate if a persistent internal tool is wanted. Tracked so it isn't forgotten when the app goes to wider access.
+
+Surfaced 2026-05-22 (Stage 2.B Commit 1.5).
+
 ## Resolved or superseded
 
 ### K-019 — Phone validation gap + NG-only-vs-international product decision (RESOLVED)
