@@ -3,27 +3,28 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchMyUnreadMessagesCount } from "@/lib/messaging/unread-action";
 
-// Stage 2.B Commit 5.1 — global Messages icon button with a realtime-updating
-// red count badge.
+// Stage 2.B Commit 5.1 + 5.3 + 5.4 — global Messages icon button with a
+// realtime-updating red count badge.
 //
-// Server-rendered initial count (from getUnreadMessagesCount, passed in as
-// prop). On mount, subscribes to messages INSERT / UPDATE events and adjusts
-// the local count. Supabase Realtime's RLS filtering ensures we only see
-// events for messages in this user's conversations.
+// COMMIT 5.4 fix: Frank reported "unread counter stays on the notification
+// after messages are read". Root cause is two-fold:
+//   1. Realtime UPDATE payload.old.read_at may be undefined in some payload
+//      shapes (REPLICA IDENTITY FULL is set per K-030, but Supabase Realtime
+//      doesn't always deliver complete OLD rows on UPDATE). With strict
+//      "was null AND now set" detection, those events fell through silently.
+//   2. There's no fallback if realtime drops an event entirely.
 //
-// Counter logic:
-//   - INSERT where sender ≠ me → unread +1.
-//   - UPDATE that transitions read_at from null → set, sender ≠ me → unread −1.
-//   - UPDATE that transitions read_at from set → null, sender ≠ me → unread +1.
-//
-// REPLICA IDENTITY FULL on `messages` (K-030) gives us payload.old so we can
-// detect the read_at transition direction.
-//
-// The badge styling — bg-red-500 + white number — follows iMessage / Messenger
-// (D-121 reaffirmation: mature-competitor pattern for unread notifications).
-// 99+ cap above three digits. Hidden entirely when count === 0 (no chrome
-// for an empty state).
+// Fixes applied:
+//   - Permissive UPDATE detection: treat any non-own UPDATE where new.read_at
+//     is set as a probable read transition. False positives are bounded by
+//     the periodic refetch (see below) which converges to the server's truth.
+//   - Periodic refetch every 30s via fetchMyUnreadMessagesCount() — safety
+//     net so the count is correct within 30s even if realtime drops events.
+//   - Visibility-change refetch on tab refocus — catches up after backgrounded
+//     periods where realtime may have buffered.
+//   - Dev-only console logging of every realtime event for diagnosis.
 
 interface MessagesIconWithBadgeProps {
   userId: string;
@@ -36,31 +37,25 @@ interface MessageRowSubset {
   read_at?: string | null;
 }
 
+const FALLBACK_REFRESH_INTERVAL_MS = 30_000;
+
 export function MessagesIconWithBadge({
   userId,
   initialCount,
 }: MessagesIconWithBadgeProps) {
   const [count, setCount] = useState(initialCount);
 
-  // Re-sync to server-rendered value on navigation (Header re-renders, prop
-  // updates). Otherwise client-side realtime drift would compound over time.
   useEffect(() => {
     setCount(initialCount);
   }, [initialCount]);
 
+  // Realtime subscription — primary update path.
   useEffect(() => {
     if (!userId) return;
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
 
-    // Commit 5.3 fix: ensure the realtime client has the user's JWT BEFORE
-    // subscribing. @supabase/ssr's browser client sets realtime auth via an
-    // auth-state-change listener, but the listener may not have fired by the
-    // time this useEffect runs (cookie-session load vs. subscribe race).
-    // Without the JWT, realtime authenticates as anon and RLS-filtered
-    // postgres_changes events on `messages` never arrive — exactly the
-    // "unread counter didn't update until refresh" symptom Frank reported.
     (async () => {
       const {
         data: { session },
@@ -77,9 +72,10 @@ export function MessagesIconWithBadge({
           { event: "INSERT", schema: "public", table: "messages" },
           (payload) => {
             const row = payload.new as MessageRowSubset | undefined;
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MessagesIconWithBadge] INSERT received:", row);
+            }
             if (!row || row.sender_id === userId) return;
-            // RLS already restricted to this user's conversations. The
-            // message is from someone else → bump unread.
             setCount((c) => c + 1);
           },
         )
@@ -89,25 +85,29 @@ export function MessagesIconWithBadge({
           (payload) => {
             const oldRow = payload.old as MessageRowSubset | undefined;
             const newRow = payload.new as MessageRowSubset | undefined;
-            if (!oldRow || !newRow) return;
-            if (newRow.sender_id === userId) return; // not our unread counter
-            const wasUnread = oldRow.read_at === null;
-            const nowRead =
-              newRow.read_at !== null && newRow.read_at !== undefined;
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MessagesIconWithBadge] UPDATE received:", {
+                old: oldRow,
+                new: newRow,
+              });
+            }
+            if (!newRow || newRow.sender_id === userId) return;
+
+            // Commit 5.4 permissive detection: oldRow.read_at may be
+            // undefined in some Realtime payload shapes. Use !falsy on
+            // oldRow.read_at (undefined OR null both count as "was unread")
+            // and !!truthy on newRow.read_at (any set value = read).
+            const wasUnread = !oldRow?.read_at;
+            const nowRead = !!newRow.read_at;
             if (wasUnread && nowRead) {
               setCount((c) => Math.max(0, c - 1));
-            } else if (!wasUnread && newRow.read_at === null) {
-              // Rare: server re-cleared read_at (e.g., admin). Defensive +1.
-              setCount((c) => c + 1);
             }
+            // Skip the rare unread-restored case — periodic refetch handles
+            // any drift if it does happen.
           },
         )
         .subscribe((status) => {
           if (process.env.NODE_ENV !== "production") {
-            // Dev-only diagnostic so subscription health is visible in
-            // browser DevTools. Should log "SUBSCRIBED" once on mount.
-            // Anything else (TIMED_OUT / CHANNEL_ERROR / CLOSED) signals
-            // a realtime infra problem worth investigating.
             console.log(
               "[MessagesIconWithBadge] realtime subscription status:",
               status,
@@ -124,11 +124,46 @@ export function MessagesIconWithBadge({
     };
   }, [userId]);
 
+  // Fallback refetch — periodic + on tab refocus. Safety net so the badge
+  // converges to the server's authoritative count within 30s even if a
+  // realtime event was dropped.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        const fresh = await fetchMyUnreadMessagesCount();
+        if (cancelled) return;
+        setCount(fresh);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[MessagesIconWithBadge] fallback refetch:", fresh);
+        }
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("[MessagesIconWithBadge] refetch failed:", err);
+        }
+      }
+    };
+
+    // Refresh on visibility change (tab refocus from background).
+    const visHandler = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", visHandler);
+
+    // Periodic refresh as the long-tail safety net.
+    const interval = setInterval(refresh, FALLBACK_REFRESH_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", visHandler);
+      clearInterval(interval);
+    };
+  }, [userId]);
+
   const display = count > 99 ? "99+" : String(count);
-  const ariaLabel =
-    count > 0
-      ? `Messages, ${count} unread`
-      : "Messages";
+  const ariaLabel = count > 0 ? `Messages, ${count} unread` : "Messages";
 
   return (
     <Link
@@ -136,11 +171,7 @@ export function MessagesIconWithBadge({
       aria-label={ariaLabel}
       className="relative inline-flex items-center justify-center w-11 h-11 rounded-full text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 transition-colors"
     >
-      {/* D-121 reaffirmation (Commit 5.2): square chat icon (rounded rect
-          with a corner notch) per Frank's directive. Standard "message-square"
-          glyph — same shape used in Lucide / Feather icon sets. Replaces the
-          previous elliptical chat-bubble. Matched in EmptyThreadPane so the
-          messaging surface uses one icon family. */}
+      {/* Square chat icon (Commit 5.2). */}
       <svg
         viewBox="0 0 24 24"
         className="w-5 h-5"

@@ -140,6 +140,9 @@ export function MessagesShell({
           { event: "INSERT", schema: "public", table: "messages" },
           (payload) => {
             const row = payload.new as Record<string, unknown>;
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MessagesShell] INSERT received:", row);
+            }
             if (!row) return;
             dispatch({
               type: "REALTIME_INSERT",
@@ -153,6 +156,12 @@ export function MessagesShell({
           { event: "UPDATE", schema: "public", table: "messages" },
           (payload) => {
             const row = payload.new as Record<string, unknown>;
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MessagesShell] UPDATE received:", {
+                old: payload.old,
+                new: row,
+              });
+            }
             if (!row) return;
             dispatch({
               type: "REALTIME_UPDATE",
@@ -200,6 +209,13 @@ export function MessagesShell({
         createdAt: new Date().toISOString(),
         pending: true,
       };
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[MessagesShell] OPTIMISTIC_ADD dispatched", {
+          conversationId,
+          tempId,
+          contentPreview: (partial.content ?? "").slice(0, 40),
+        });
+      }
       dispatch({ type: "OPTIMISTIC_ADD", conversationId, message });
       return tempId;
     },
@@ -208,6 +224,13 @@ export function MessagesShell({
 
   const confirmSend = useCallback(
     (conversationId: string, tempId: string, real: MessageRow) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[MessagesShell] SERVER_CONFIRMED dispatched", {
+          conversationId,
+          tempId,
+          realId: real.id,
+        });
+      }
       dispatch({
         type: "SERVER_CONFIRMED",
         conversationId,
@@ -219,6 +242,12 @@ export function MessagesShell({
   );
 
   const failSend = useCallback((conversationId: string, tempId: string) => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MessagesShell] SERVER_FAILED dispatched", {
+        conversationId,
+        tempId,
+      });
+    }
     dispatch({ type: "SERVER_FAILED", conversationId, tempId });
   }, []);
 

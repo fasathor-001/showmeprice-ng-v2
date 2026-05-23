@@ -117,6 +117,14 @@ function Composer({
     const text = content;
     setContent("");
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MessageComposer] handleSend start", {
+        conversationId,
+        currentUserId,
+        textPreview: text.slice(0, 40),
+      });
+    }
+
     // Optimistic: dispatch to shell, get tempId for later reconciliation.
     const tempId = optimisticSend(conversationId, {
       conversationId,
@@ -128,8 +136,15 @@ function Composer({
       readAt: null,
     });
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MessageComposer] optimisticSend returned tempId:", tempId);
+    }
+
     try {
       const result = await sendMessage(conversationId, text);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[MessageComposer] sendMessage result:", result);
+      }
 
       // Auth / participation errors → redirect (rare; backstop).
       if (result.error === "Unauthorized") {
