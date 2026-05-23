@@ -94,6 +94,13 @@ export function MessageThread({
     prevSender = msg.senderId;
   }
 
+  // Commit 4.1 — key on the last message id forces ScrollToBottom to remount
+  // (and re-fire its scrollIntoView) whenever a new message arrives via
+  // router.refresh() after send. Without this, the parent re-render doesn't
+  // trigger the effect and the user has to manually scroll to see their
+  // just-sent message.
+  const lastMsgId = messages[messages.length - 1]?.id ?? "empty";
+
   return (
     <div className="px-3 sm:px-6 py-4">
       {hasMore && (
@@ -102,7 +109,7 @@ export function MessageThread({
         </div>
       )}
       {items}
-      <ScrollToBottom />
+      <ScrollToBottom key={lastMsgId} />
     </div>
   );
 }

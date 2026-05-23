@@ -1,17 +1,16 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui";
 
-// Commit 3 — sticky header for /messages/[conversationId].
+// Commit 3 — header for /messages/[conversationId]. Commit 4.1 dropped the
+// `sticky top-16 z-30` here because the route's container is now `position:
+// fixed` (page.tsx) — ThreadHeader sits at the top of a flex column that
+// doesn't scroll, so sticky becomes a no-op. Keeping it would be confusing.
 //
 // Two stacked regions:
 //   1. Back button + other-party display name + Phone verified badge.
 //   2. Listing context strip: thumbnail + title + price + optional status badge.
 //      Clickable to /listings/[id] when the listing still exists; non-clickable
 //      div when the listing has been deleted (listing=null) — defensive UX.
-//
-// Sits BELOW the global Header (which is `sticky top-0` with z-40), so this
-// uses `top-16` (matches Header h-16) + z-30. Defensive z-index ordering
-// avoids the iOS Safari sticky-stacking quirk surfaced in Commit 3 findings.
 
 interface ThreadHeaderProps {
   otherParty: {
@@ -112,7 +111,7 @@ export function ThreadHeader({
   );
 
   return (
-    <div className="sticky top-16 z-30 bg-white border-b border-neutral-200">
+    <div className="bg-white border-b border-neutral-200 shrink-0">
       <div className="px-3 sm:px-6 py-2 flex items-center gap-3 min-w-0">
         <Link
           href="/messages"

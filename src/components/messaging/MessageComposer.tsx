@@ -51,7 +51,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   if (!isPhoneVerified) {
     return (
-      <div className="px-3 sm:px-6 py-4 border-t border-neutral-200 bg-white">
+      <div className="px-3 sm:px-6 py-4 border-t border-neutral-200 bg-white shrink-0">
         <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5 text-center max-w-md mx-auto">
           <h2 className="text-sm font-medium text-ink mb-2">
             Verify your phone to send messages
@@ -194,7 +194,7 @@ function Composer({ conversationId }: { conversationId: string }) {
     : "border-neutral-200 focus:ring-teal-400 focus:border-teal-400";
 
   return (
-    <div className="px-3 sm:px-6 py-3 border-t border-neutral-200 bg-white">
+    <div className="px-3 sm:px-6 py-3 border-t border-neutral-200 bg-white shrink-0">
       {warning && (
         <div className="mb-2 px-3 py-2 rounded-lg bg-warning-bg text-warning-text text-xs flex items-start gap-2">
           <span className="flex-1">{warning}</span>

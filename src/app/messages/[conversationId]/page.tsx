@@ -11,17 +11,38 @@ import { ThreadHeader } from "@/components/messaging/ThreadHeader";
 export const runtime = "edge";
 
 // Stage 2.B Commit 3 — message thread page (`/messages/[conversationId]`).
+// Composer wired in Commit 4; layout refactored to fixed-fullheight in 4.1.
 //
-// Server Component. Two parallel fetches:
+// Server Component. Three parallel fetches:
 //   1. `getMessages(conversationId, 50)` — Commit 1 server action; returns
 //      messages + hasMore, and already marks unread → read on initial render.
 //   2. Conversation context (other-party + listing + primary image) via a
 //      single Supabase query with FK-name embeds. Used by ThreadHeader.
+//   3. Current user's verification_status — drives the composer's D-114
+//      phone-verified gate.
 //
 // Permission denied behavior (privacy hygiene): NotFound and Forbidden both
 // map to `notFound()` so a malicious actor probing IDs can't distinguish
 // "doesn't exist" from "exists but you can't see it." Defense-in-depth on
 // top of the data-layer RLS check inside getMessages.
+//
+// ARCHITECTURAL SHIFT (Commit 4.1, 2026-05-23): this route uses a different
+// scroll model from the rest of the app. The body is normal-flow (Header
+// sticky-top, main flex-1, Footer at bottom), but the thread page returns a
+// `position: fixed` container that covers the area below Header to the
+// dynamic viewport bottom (`100dvh - 4rem`). Three consequences:
+//   1. The Footer is NOT accessible from this route — it's hidden behind
+//      the fixed container. Users navigate elsewhere to reach Footer content.
+//   2. The body cannot scroll-to-reveal Footer (the fixed container has
+//      no document-flow contribution; body height = Header + Footer ≈ viewport).
+//   3. iOS Safari keyboard handling: `100dvh` shrinks when the virtual
+//      keyboard appears, so the composer (bottom of the flex column) rises
+//      with the keyboard automatically. Sticky/fixed-bottom alternatives
+//      that reference layout viewport hide behind the keyboard.
+//
+// The header-height coupling (`top-16` + `calc(100dvh - 4rem)`) reflects
+// Header's `h-16`. If Header height changes, update both here and consider
+// extracting a CSS variable.
 
 interface Props {
   params: { conversationId: string };
@@ -141,7 +162,9 @@ export default async function MessageThreadPage({ params }: Props) {
   }
 
   return (
-    <>
+    // Fixed full-height container (Commit 4.1). See ARCHITECTURAL SHIFT note
+    // at the top of this file. Inner middle div is the only scrollable region.
+    <div className="fixed left-0 right-0 top-16 z-20 bg-white flex flex-col h-[calc(100dvh-4rem)]">
       <ThreadHeader
         otherParty={otherParty}
         listing={
@@ -157,15 +180,17 @@ export default async function MessageThreadPage({ params }: Props) {
         primaryImageUrl={primaryImageUrl}
         conversationStatus={ctx.status}
       />
-      <MessageThread
-        messages={msgResult.messages ?? []}
-        hasMore={msgResult.hasMore ?? false}
-        currentUserId={user.id}
-      />
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <MessageThread
+          messages={msgResult.messages ?? []}
+          hasMore={msgResult.hasMore ?? false}
+          currentUserId={user.id}
+        />
+      </div>
       <MessageComposer
         conversationId={conversationId}
         isPhoneVerified={phoneVerified}
       />
-    </>
+    </div>
   );
 }
