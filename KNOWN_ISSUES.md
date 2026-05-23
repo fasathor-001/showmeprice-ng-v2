@@ -341,13 +341,13 @@ Stage 2.B Commit 1.6 smoke testing (2026-05-23) confirmed: 7+ BLOCK events fired
 
 Surfaced 2026-05-23 during D-119 production smoke testing.
 
-### K-040 — Header "Messages" link — unread-presence dot (low, Commit 6 polish)
+### K-040 — Header Messages icon — unread-presence dot (low, Commit 6 polish)
 
-Stage 2.B Commit 2 ships the header `/messages` link without any unread indicator (G1 from Commit 2 surface findings). Adding a small boolean **"has unread?"** presence dot next to the link is materially cheaper than counting all unreads (a per-row `unread_count`-sum traversal), and the dot is the standard UX cue ("you have something to see") without committing to a number.
+Stage 2.B Commit 2 shipped the header `/messages` link without any unread indicator (G1 from Commit 2 surface findings). Adding a small boolean **"has unread?"** presence dot next to the entry point is materially cheaper than counting all unreads (a per-row `unread_count`-sum traversal), and the dot is the standard UX cue ("you have something to see") without committing to a number.
 
-**Scope expanded (Commit 3, 2026-05-23):** Commit 3 adds a second entry point — "Messages" in the **UserMenu** dropdown (mobile-reachable per Frank's bundled scope). The presence dot must surface in BOTH places when shipped:
-1. Inline `lg+` header nav link (current Commit 2 entry point).
-2. UserMenu dropdown "Messages" row (new Commit 3 entry point — primary path on mobile).
+**Scope (post-Commit 5 update, 2026-05-23):** Commit 5 dropped the desktop inline text link and replaced it with a header icon button visible at all viewports. UserMenu retains a textual "Messages" backup. Net: TWO entry points need the dot when shipped:
+1. **Header Messages icon button** (primary at all viewports — Commit 5).
+2. **UserMenu "Messages" dropdown row** (textual backup — Commit 3).
 
 **Resolution scope (Commit 6 polish):**
 - Add a small server-side helper `hasUnreadMessages(userId)` that does a single `EXISTS` query on `messages` joined to `conversations`:
@@ -389,28 +389,13 @@ Stage 2.B Commit 4.2 polish review (under D-121) surfaced the question of loadin
 
 Surfaced 2026-05-23 during Commit 4.2 polish review.
 
-### K-042 — Split-pane (WhatsApp Web-style) desktop layout (medium, post-Stage-2.B)
+### K-042 — Split-pane (WhatsApp Web-style) desktop layout — RESOLVED in Commit 5 (2026-05-23)
 
-Stage 2.B Commits 2 + 3 ship `/messages` and `/messages/[conversationId]` as separate routes with single-column layouts at all viewports — mobile-first design. WhatsApp Web's two-column desktop pattern (conversation list on the left, currently-open thread on the right) is a meaningful UX upgrade for desktop users but was deferred because:
+**Status:** Closed by Stage 2.B Commit 5. Shipped as `Server-layout + responsive client shell` (surface findings B): `src/app/messages/layout.tsx` (Server Component, fetches initial list) + `src/components/messaging/MessagesShell.tsx` (client wrapper owning realtime + split-pane CSS). At `lg+` the layout renders a fixed-width sidebar (`w-96` = 384px) + flex-thread main pane; below `lg` the layout collapses to single-column stack navigation (aside-OR-main via responsive `hidden lg:flex`). URL `/messages/[id]` deep-linking preserved — segment-driven thread render in the main pane.
 
-1. **Mobile is the primary Nigerian marketplace traffic surface.** Single-column with route-level navigation works correctly on mobile; split-pane only benefits desktop users.
-2. **Architectural cost is non-trivial.** Implementations require either Next.js parallel routes (`@list` + `@thread` slots wired via `app/messages/layout.tsx`) OR custom client-side layout state that bypasses the file-system router. Either path retrofits Commits 2 + 3 work.
-3. **Real user behavior should inform the decision.** Validate via private-beta usage data before investing in the refactor — desktop traffic share, time-on-thread, and conversation-switching frequency all signal whether the pattern is worth the cost.
-4. **Stage 2.B private-beta end-state doesn't require it.** Single-column meets the trust-first messaging goals; split-pane is convenience.
+**Architectural note (D-121):** chose B over Next.js parallel routes for materially less file restructuring at equivalent UX. Documented in commit and in MessagesShell file-level comment block.
 
-**Resolution scope (post-Stage-2.B, after Commits 5/6/7 are live):**
-- Choose between Next.js parallel routes vs client-side layout. Parallel routes preserve server-rendered semantics + deep linking; client-side state is simpler but loses the per-thread URL contract for the right pane.
-- At `lg+` breakpoint, the `/messages` route becomes a split layout: list on the left, thread on the right. Selecting a list row updates the right pane without a full page navigation (URL still updates to `/messages/[id]`).
-- At `<lg` breakpoint, current single-column behavior is preserved verbatim — no regressions.
-- Column proportions deferred to the agent's design judgment at implementation time (likely in the 30/70 to 40/60 range based on the comparable patterns).
-- Existing components (`ConversationList`, `ConversationRow`, `MessageThread`, `ThreadHeader`, `MessageComposer`) need minimal changes — the wrap is at the route/layout level.
-- Stickies need re-testing: thread header's `sticky top-16` may need adjustment in split-pane mode (no global header above the right column? or still under it?).
-
-**Severity:** medium. UX upgrade, not a private-beta blocker. Schedule after smoke data from Commits 5/6/7 shows desktop-user demand.
-
-**Related:** Commit 2 (conversation list), Commit 3 (thread view), K-040/K-041 (Commit 6 polish — these can ship in parallel; they don't depend on K-042's layout choice).
-
-Surfaced 2026-05-23 during Commit 4 banking pass (Frank's direction post-approval).
+See entry in "Resolved" section below for original framing.
 
 ### K-041 — Read receipts on sent messages (low, Commit 6 polish)
 

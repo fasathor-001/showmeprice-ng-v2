@@ -1,26 +1,31 @@
+"use client";
+
+import { useEffect } from "react";
 import { formatThreadDateDivider } from "@/lib/time";
 import type { MessageRow } from "@/lib/messaging/types";
+import type { ThreadMessage } from "@/lib/messaging/realtime";
+import { useMessagesShell } from "./MessagesShell";
 import { MessageBubble } from "./MessageBubble";
 import { ScrollToBottom } from "./ScrollToBottom";
 
-// Commit 3 — wraps the message list with date dividers, sender grouping,
-// and the scroll-to-bottom marker. Server Component (date-divider rendering
-// and grouping are pure functions of the message array).
+// Stage 2.B Commit 5 — message thread (client component as of this commit).
 //
-// Messages arrive from getMessages already in chronological order (oldest
-// first). When two adjacent messages have:
-//   - different calendar days → insert a date divider between them.
-//   - same sender within the same day → render grouped (smaller gap).
+// Hydration pattern: the page (Server Component) calls getMessages() server-
+// side and passes the result as `initialMessages`. On mount we SEED these
+// into the shell's reducer state, then read live state back from the shell.
+// All subsequent updates — realtime INSERTs, optimistic sends, server
+// confirmations, send failures — flow through the shell's reducer and
+// reactively re-render this thread.
 //
-// `hasMore` from getMessages indicates older messages exist — pagination
-// ("Load older") is deferred to Commit 6 polish, so we surface a placeholder
-// line at the top so smoke testing doesn't silently lose data.
+// hasMore stays in the public API; "Load older" UI still deferred to Commit 6
+// polish per Commit 4.2's earlier surface findings.
 
 interface MessageThreadProps {
-  messages: MessageRow[];
+  conversationId: string;
+  initialMessages: MessageRow[];
   hasMore: boolean;
   currentUserId: string;
-  /** Frozen `now` for deterministic SSR; defaults to current time. */
+  /** Frozen `now` for deterministic SSR — uses Date.now() if omitted. */
   now?: Date;
 }
 
@@ -45,11 +50,32 @@ function DateDivider({ date, now }: { date: Date; now: Date }) {
 }
 
 export function MessageThread({
-  messages,
+  conversationId,
+  initialMessages,
   hasMore,
   currentUserId,
   now = new Date(),
 }: MessageThreadProps) {
+  const { state, seedActive, dismissFailed } = useMessagesShell();
+
+  // Seed shell state with the server-rendered initial messages on first mount
+  // (or when the conversation changes). The reducer's SEED_ACTIVE is idempotent
+  // — subsequent re-renders with the same conversationId no-op.
+  useEffect(() => {
+    seedActive(conversationId, initialMessages as ThreadMessage[]);
+  }, [conversationId, initialMessages, seedActive]);
+
+  // Live messages from the shell. Falls back to initialMessages until SEED_ACTIVE
+  // has committed (first render race — useEffect runs after paint).
+  const messages: ThreadMessage[] =
+    state.activeConversationId === conversationId && state.activeSeeded
+      ? state.activeMessages
+      : (initialMessages as ThreadMessage[]);
+
+  // hasMore param retained in the public API; Commit 6 polish wires
+  // "Load older" UI. Reference here to silence unused-param lint.
+  void hasMore;
+
   if (messages.length === 0) {
     return (
       <div className="px-3 sm:px-6 py-12 text-center text-sm text-ink-600">
@@ -59,8 +85,6 @@ export function MessageThread({
     );
   }
 
-  // Build the render list — interleave date dividers between days, mark
-  // bubbles grouped-with-previous when same sender within same day.
   const items: React.ReactNode[] = [];
   let prevDate: Date | null = null;
   let prevSender: string | null = null;
@@ -78,7 +102,6 @@ export function MessageThread({
     const groupedWithPrevious =
       prevSender === msg.senderId &&
       !dayChanged &&
-      // System messages never group with surrounding user messages.
       msg.messageType !== "system";
 
     items.push(
@@ -87,6 +110,11 @@ export function MessageThread({
         message={msg}
         isCurrentUser={msg.senderId === currentUserId}
         groupedWithPrevious={groupedWithPrevious}
+        onDismissFailed={
+          msg.failed
+            ? () => dismissFailed(conversationId, msg.id)
+            : undefined
+        }
       />,
     );
 
@@ -94,20 +122,9 @@ export function MessageThread({
     prevSender = msg.senderId;
   }
 
-  // Commit 4.1 — key on the last message id forces ScrollToBottom to remount
-  // (and re-fire its scrollIntoView) whenever a new message arrives via
-  // router.refresh() after send. Without this, the parent re-render doesn't
-  // trigger the effect and the user has to manually scroll to see their
-  // just-sent message.
+  // ScrollToBottom keyed on the last message's id so it re-fires whenever a
+  // new message (optimistic, realtime, or server-confirmed) lands at the end.
   const lastMsgId = messages[messages.length - 1]?.id ?? "empty";
-
-  // D-121 (Commit 4.2): the "Earlier messages not shown — coming soon"
-  // placeholder was dropped. 50-message initial page covers >95% of active
-  // conversations at private-beta scale; the placeholder read as developer-
-  // facing copy. Real "Load older" pagination lands in Commit 6 polish.
-  // `hasMore` is intentionally referenced here so the param stays in the
-  // public API; future Commit-6 work will wire a real button.
-  void hasMore;
 
   return (
     <div className="px-3 sm:px-6 py-4">

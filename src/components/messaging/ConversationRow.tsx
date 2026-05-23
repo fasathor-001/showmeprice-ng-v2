@@ -1,23 +1,35 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui";
 import { formatConversationTime, formatLastActive } from "@/lib/time";
 import type { ConversationSummary } from "@/lib/messaging/types";
 
-// Commit 2 — single row in the conversation list. Server Component (no
-// client state at this commit; realtime layered in Commit 5).
+// Commit 2 — single row in the conversation list (client component as of
+// Commit 5 to support active-state styling + realtime flash on new-message
+// arrival).
 //
-// Layout (mobile-first):
+// Layout (mobile-first, ~92px tall after Commit 4.2 typography bump):
 //   ┌─────────┬───────────────────────────────────────┬──────────┐
 //   │  thumb  │  display name + verified badge        │ HH:mm    │
 //   │ 56×56   │  Buying/Selling   last-message-preview │  [3]     │
-//   │         │  Active 5h ago    listing title • ₦   │          │
+//   │         │  Active 5h ago    listing title · Sold │          │
 //   └─────────┴───────────────────────────────────────┴──────────┘
 //
-// Non-active status (sold / deleted / archived) shows a small ghost label
-// next to the listing title.
+// Active-state styling (Commit 5, surface findings H): when this row's
+// conversation matches the URL [conversationId], the row gets bg-neutral-100
+// persistently. Hover (bg-neutral-50) is CONDITIONAL — only applied on
+// non-active rows so the active tint doesn't get overridden when hovered.
+//
+// Flash animation (Commit 5, surface findings C): when this conversation's
+// lastMessageAt changes (new message arrived via realtime), the row briefly
+// tints teal-50 then fades back. ~700ms total via transition-colors.
 
 interface ConversationRowProps {
   conversation: ConversationSummary;
+  /** True when the URL segment matches this row's id (desktop split-pane highlight). */
+  isActive?: boolean;
   /** Frozen `now` for deterministic SSR — uses Date.now() if omitted. */
   now?: Date;
 }
@@ -51,8 +63,6 @@ function previewText(
 }
 
 function ListingPlaceholder() {
-  // Inline SVG — preserves visual rhythm when listing is deleted or has no
-  // image (B1). Muted neutral palette so it never reads as a real product.
   return (
     <div
       className="flex items-center justify-center w-14 h-14 rounded-lg bg-neutral-100 shrink-0"
@@ -73,14 +83,29 @@ function ListingPlaceholder() {
   );
 }
 
-export function ConversationRow({ conversation, now }: ConversationRowProps) {
+export function ConversationRow({
+  conversation,
+  isActive = false,
+  now,
+}: ConversationRowProps) {
   const { id, role, otherParty, listing, lastMessage, unreadCount, lastMessageAt } =
     conversation;
 
+  // Flash on new-message arrival — detect lastMessageAt changes and pulse the
+  // background for ~700ms. Skipped on first mount (no flash on initial render).
+  const [flashing, setFlashing] = useState(false);
+  const prevLastMessageAtRef = useRef<string | null | undefined>(lastMessageAt);
+  useEffect(() => {
+    if (prevLastMessageAtRef.current === lastMessageAt) return;
+    prevLastMessageAtRef.current = lastMessageAt;
+    setFlashing(true);
+    const t = setTimeout(() => setFlashing(false), 700);
+    return () => clearTimeout(t);
+  }, [lastMessageAt]);
+
   const hasUnread = unreadCount > 0;
-  // D-109 asymmetric last-active: shown only when current user is the BUYER
-  // (seller's last-active visible to buyer). Hidden when current user is the
-  // seller (buyer's last-active not shown to seller).
+  // D-109 asymmetric: seller's last-active is shown TO the buyer; the buyer's
+  // last-active is hidden from the seller.
   const showLastActive = role === "buyer" && Boolean(otherParty.lastSeenAt);
   const lastActive = showLastActive
     ? formatLastActive(otherParty.lastSeenAt, now)
@@ -96,12 +121,24 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
     ? lastMessage.senderId !== otherParty.id
     : false;
 
+  // Background-color cascade:
+  //   - Active row: always bg-neutral-100 (sticky, no hover override).
+  //   - Flashing (just got a new message): bg-teal-50, fades out.
+  //   - Non-active idle: hover:bg-neutral-50 conditional class.
+  // Conditional hover keeps the active highlight stable when hovered (H ref).
+  const bgClass = isActive
+    ? "bg-neutral-100"
+    : flashing
+      ? "bg-teal-50"
+      : "hover:bg-neutral-50";
+
   return (
     <Link
       href={`/messages/${id}`}
-      className={`group flex items-start gap-3 px-3 py-3 sm:px-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-inset ${
+      className={`group flex items-start gap-3 px-3 py-3 sm:px-4 transition-colors duration-700 border-b border-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-inset ${bgClass} ${
         isNonActiveListing ? "opacity-75" : ""
       }`}
+      aria-current={isActive ? "page" : undefined}
     >
       {/* Thumbnail */}
       {listing?.primaryImageUrl ? (
@@ -118,9 +155,7 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
 
       {/* Main column */}
       <div className="flex-1 min-w-0">
-        {/* Line 1: display name + verified badge.
-            D-121 (Commit 4.2): name bumped from text-sm to text-base (16px)
-            for mobile readability — matches WhatsApp Web / Telegram density. */}
+        {/* Line 1: display name + verified badge */}
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={`truncate text-base ${
@@ -136,9 +171,7 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
           )}
         </div>
 
-        {/* Line 2: role label (muted, stays text-xs) + preview.
-            D-121: preview bumped to text-sm (14px) — preview is the
-            content the user scans; role is meta-info, stays smaller. */}
+        {/* Line 2: role label + preview */}
         <div className="flex items-center gap-2 min-w-0 mt-0.5">
           <span className="text-xs text-ink-400 shrink-0">
             {role === "buyer" ? "Buying" : "Selling"}
@@ -152,11 +185,7 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
           </span>
         </div>
 
-        {/* Line 3: optional last-active + listing title + status label.
-            D-121 (Commit 4.2): if the listing was deleted entirely (the
-            FK joined to no row) we render "Listing removed" so the row
-            doesn't silently lose its context. Mirrors the ThreadHeader
-            null-listing fallback. */}
+        {/* Line 3: optional last-active + listing title + status label */}
         <div className="flex items-center gap-2 min-w-0 mt-0.5 text-xs text-ink-400">
           {lastActive && <span className="shrink-0">{lastActive}</span>}
           {lastActive && <span aria-hidden>·</span>}

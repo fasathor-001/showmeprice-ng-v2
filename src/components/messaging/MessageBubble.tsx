@@ -1,29 +1,28 @@
 import type { MessageRow } from "@/lib/messaging/types";
+import type { ThreadMessage } from "@/lib/messaging/realtime";
 
-// Commit 3 — single message bubble. Server Component (no client state).
+// Stage 2.B Commit 3 — single message bubble. Pending / failed visual states
+// added in Commit 5 for optimistic-UI feedback (surface findings E).
 //
-// Layout:
-//   Current user's messages → right-aligned, teal-50 bubble.
-//   Other party's messages  → left-aligned, neutral-100 bubble.
-//   Bubble max-width: 75% mobile / 60% desktop.
-//   Timestamp: HH:mm under the bubble, ink-400.
+// Visual states for current-user bubbles:
+//   - normal: full opacity, no indicator
+//   - pending (server insert in flight): opacity-60, small ⌚ next to timestamp
+//   - failed (server returned error): danger border, "Tap to retry" link
+//   - confirmed (server returned success): same as normal
 //
-// Sender grouping: when `groupedWithPrevious=true` (consecutive messages from
-// the same sender within the same day), reduce the gap above this bubble so
-// the group reads as a single block.
-//
-// Non-text message types render an emoji placeholder per Commit 3 approval —
-// real image / voice / offer rendering ships Commit 6+.
+// Other-party bubbles never carry pending/failed state — they only ever
+// arrive via realtime, fully-formed from the database.
 //
 // `metadata.contains_warning` is NOT surfaced in the bubble (K-038 trust-
 // positioning: filter signals are admin-only, not user-facing).
-//
 // Read receipts (K-041) deferred to Commit 6 polish.
 
 interface MessageBubbleProps {
-  message: MessageRow;
+  message: MessageRow | ThreadMessage;
   isCurrentUser: boolean;
   groupedWithPrevious: boolean;
+  /** When set, the bubble is in failed state and clicking the retry link calls this. */
+  onDismissFailed?: () => void;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -36,10 +35,9 @@ export function MessageBubble({
   message,
   isCurrentUser,
   groupedWithPrevious,
+  onDismissFailed,
 }: MessageBubbleProps) {
-  // System messages render centered, no bubble — typically auto-generated
-  // status text. Keep them visually distinct so they don't get confused with
-  // user-authored content.
+  // System messages render centered, no bubble.
   if (message.messageType === "system") {
     return (
       <div className="text-center text-xs text-ink-400 my-3 px-4">
@@ -49,20 +47,34 @@ export function MessageBubble({
   }
 
   const typeLabel = TYPE_LABEL[message.messageType];
-  const content =
-    typeLabel ?? (message.content?.trim() || "");
+  const content = typeLabel ?? (message.content?.trim() || "");
 
   const t = new Date(message.createdAt);
   const hh = String(t.getHours()).padStart(2, "0");
   const mm = String(t.getMinutes()).padStart(2, "0");
   const timeText = `${hh}:${mm}`;
 
+  const threadMsg = message as Partial<ThreadMessage>;
+  const isPending = Boolean(threadMsg.pending);
+  const isFailed = Boolean(threadMsg.failed);
+
   const gapClass = groupedWithPrevious ? "mt-0.5" : "mt-3";
   const alignClass = isCurrentUser ? "justify-end" : "justify-start";
   const colAlignClass = isCurrentUser ? "items-end" : "items-start";
-  const bubbleClass = isCurrentUser
-    ? "bg-teal-50 text-ink"
-    : "bg-neutral-100 text-ink";
+
+  // Bubble background:
+  //   - failed: danger-bg + danger-text border (signals problem)
+  //   - normal current-user: teal-50
+  //   - normal other-party: neutral-100
+  const bubbleClass = isFailed
+    ? "bg-danger-bg text-ink border border-danger-text/40"
+    : isCurrentUser
+      ? "bg-teal-50 text-ink"
+      : "bg-neutral-100 text-ink";
+
+  // Pending bubbles fade slightly so users can distinguish optimistic
+  // (still-sending) from confirmed messages without the bubble looking broken.
+  const opacityClass = isPending ? "opacity-60" : "opacity-100";
 
   return (
     <div className={`flex ${alignClass} ${gapClass}`}>
@@ -70,15 +82,42 @@ export function MessageBubble({
         className={`flex flex-col max-w-[75%] sm:max-w-[60%] ${colAlignClass}`}
       >
         <div
-          /* D-121 (Commit 4.2): bubble padding px-3.5 py-2 → px-4 py-2.5
-             — aligns with WhatsApp Web / iMessage breathing-room standard. */
-          className={`rounded-2xl px-4 py-2.5 text-sm break-words whitespace-pre-wrap ${bubbleClass}`}
+          className={`rounded-2xl px-4 py-2.5 text-sm break-words whitespace-pre-wrap transition-opacity duration-200 ${bubbleClass} ${opacityClass}`}
         >
           {content || (
             <span className="text-ink-400 italic">[empty]</span>
           )}
         </div>
-        <span className="text-xs text-ink-400 mt-0.5 px-1">{timeText}</span>
+        <div className="flex items-center gap-1.5 mt-0.5 px-1">
+          <span className="text-xs text-ink-400">{timeText}</span>
+          {isPending && (
+            // Tiny clock indicator next to the timestamp — WhatsApp pattern.
+            <svg
+              viewBox="0 0 24 24"
+              className="w-3 h-3 text-ink-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-label="Sending"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path
+                d="M12 7v5l3 2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </div>
+        {isFailed && onDismissFailed && (
+          <button
+            type="button"
+            onClick={onDismissFailed}
+            className="mt-1 text-xs text-danger-text hover:underline focus:outline-none focus-visible:underline"
+          >
+            Failed to send. Tap to dismiss.
+          </button>
+        )}
       </div>
     </div>
   );

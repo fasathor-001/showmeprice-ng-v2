@@ -116,11 +116,13 @@ export function ThreadHeader({
         {/* D-121 (Commit 4.2): chevron-left icon button with a 44×44 tap
             target. Replaces the previous "← Back" text link, which was
             ~24px tall (below WCAG mobile minimum). Negative margin keeps
-            the icon visually inset while the hit area extends beyond. */}
+            the icon visually inset while the hit area extends beyond.
+            Commit 5: `lg:hidden` — on desktop split-pane the sidebar is
+            already visible, so the back chevron is redundant chrome. */}
         <Link
           href="/messages"
           aria-label="Back to conversations"
-          className="inline-flex items-center justify-center w-11 h-11 -ml-1 sm:-ml-2 rounded-lg text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 shrink-0 transition-colors"
+          className="inline-flex lg:hidden items-center justify-center w-11 h-11 -ml-1 sm:-ml-2 rounded-lg text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 shrink-0 transition-colors"
         >
           <svg
             viewBox="0 0 24 24"

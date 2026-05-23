@@ -11,44 +11,43 @@ import {
 } from "react";
 import { Button } from "@/components/ui";
 import { sendMessage } from "@/lib/messaging/actions";
+import { useMessagesShell } from "./MessagesShell";
 
-// Stage 2.B Commit 4 — message composer for /messages/[conversationId].
-// Pure client component; the only client JS in the route besides
-// ScrollToBottom. Wires `sendMessage` (Commit 1 server action) directly —
-// router.refresh() handles post-send list update (Commit 5 layers
-// optimistic UI + realtime reconciliation on top).
+// Stage 2.B Commit 4 — message composer (refactored for optimistic UI in
+// Commit 5 per surface findings E + F).
 //
-// Architecture decisions (per Commit 4 surface findings):
-//   A. Natural end of page — composer is the last component in the page,
-//      not sticky-bottom-of-viewport. Pairs with ScrollToBottom on initial
-//      load so composer + latest message are visible.
+// Architecture decisions (current, includes Commit 5 changes marked ←):
+//   A. Natural end of page → Commit 4.1 lifted layout to fixed-fullheight at
+//      route-segment level; this composer is the last child of that column.
 //   B. Multi-line textarea, auto-grow 1-5 rows then scroll.
 //   C. Enter sends + Shift+Enter newline (uniform). `enterkeyhint="send"`
 //      gives mobile virtual keyboards a hint.
-//   D. No template selector (D-108 templates ship in Commit 7 with
-//      MessageSellerButton, where first-message context applies).
-//   E. ContainsWarning → POST-send inline notice (matches D-119 "warning
-//      at every send"). PERSISTENT until user-dismissed (Commit 4.2 strict
-//      D-119 read — earlier 10s auto-dismiss removed). Consecutive warn
-//      sends REPLACE the previous notice rather than stack.
+//   D. No template selector (D-108 templates ship in Commit 7).
+//   E. ContainsWarning → persistent inline notice; replace, not stack.
 //   F. Phone-unverified → REPLACE composer with verify CTA card.
 //   G. Composer always enabled regardless of conversation status.
-//   H. Simple `router.refresh()` after send — no optimistic UI at Commit 4.
+//   ← H. Commit 5: OPTIMISTIC SEND. Append a temp bubble immediately via the
+//        shell context, clear the textarea, then call sendMessage. On server
+//        confirmation: shell swaps tempId → realId. On error: shell marks
+//        the bubble as failed; user can dismiss via the bubble itself.
+//        Auth / participation / filter errors still surface inline; the
+//        optimistic bubble is rolled back via dismiss-on-fail semantics.
 //   I. No D-120 share button hooks (separate commit).
 
 const MAX_LEN = 2000;
-const COUNTER_THRESHOLD = 1600; // show counter at 80%+ of limit
-// Max textarea pixel height — ~5 rows at ~24px line height plus padding.
+const COUNTER_THRESHOLD = 1600;
 const MAX_TEXTAREA_HEIGHT = 5 * 24 + 16;
 
 interface MessageComposerProps {
   conversationId: string;
   isPhoneVerified: boolean;
+  currentUserId: string;
 }
 
 export function MessageComposer({
   conversationId,
   isPhoneVerified,
+  currentUserId,
 }: MessageComposerProps) {
   if (!isPhoneVerified) {
     return (
@@ -72,11 +71,23 @@ export function MessageComposer({
     );
   }
 
-  return <Composer conversationId={conversationId} />;
+  return (
+    <Composer
+      conversationId={conversationId}
+      currentUserId={currentUserId}
+    />
+  );
 }
 
-function Composer({ conversationId }: { conversationId: string }) {
+function Composer({
+  conversationId,
+  currentUserId,
+}: {
+  conversationId: string;
+  currentUserId: string;
+}) {
   const router = useRouter();
+  const { optimisticSend, confirmSend, failSend } = useMessagesShell();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -91,13 +102,6 @@ function Composer({ conversationId }: { conversationId: string }) {
     el.style.height = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT) + "px";
   }, [content]);
 
-  // D-121 / D-119 strict read (Commit 4.2): warn notices are PERSISTENT until
-  // the user clicks Dismiss. D-119 says "AT EVERY SEND (not dismissed after
-  // first acceptance)" — an auto-dismiss after a few seconds contradicts
-  // that. Consecutive warn-tier sends REPLACE the previous notice (single-
-  // string state, setWarning() overwrites) rather than stack — keeps the
-  // composer free of accumulated chrome.
-
   const trimmedLen = content.trim().length;
   const isEmpty = trimmedLen === 0;
   const isOverLimit = content.length > MAX_LEN;
@@ -108,67 +112,108 @@ function Composer({ conversationId }: { conversationId: string }) {
     if (sendDisabled) return;
     setIsSending(true);
     setError(null);
-    setWarning(null);
-    try {
-      const result = await sendMessage(conversationId, content);
 
-      // Auth / participation errors → redirect (page-level fallback).
+    // Capture text + clear textarea immediately for snappy UX.
+    const text = content;
+    setContent("");
+
+    // Optimistic: dispatch to shell, get tempId for later reconciliation.
+    const tempId = optimisticSend(conversationId, {
+      conversationId,
+      senderId: currentUserId,
+      messageType: "text",
+      content: text,
+      metadata: {},
+      attachmentUrl: null,
+      readAt: null,
+    });
+
+    try {
+      const result = await sendMessage(conversationId, text);
+
+      // Auth / participation errors → redirect (rare; backstop).
       if (result.error === "Unauthorized") {
+        failSend(conversationId, tempId);
         router.push(`/sign-in?next=/messages/${conversationId}`);
         return;
       }
       if (result.error === "PhoneVerificationRequired") {
+        failSend(conversationId, tempId);
         router.push(`/verify-phone?next=/messages/${conversationId}`);
         return;
       }
       if (result.error === "NotFound" || result.error === "Forbidden") {
-        // Conversation deleted out from under user, or permission lost.
+        failSend(conversationId, tempId);
         router.push("/messages");
         return;
       }
 
-      // Filter / validation errors → inline banner, keep content for edit.
+      // Filter / validation errors → mark bubble failed + inline banner.
       if (result.error === "ContentBlocked") {
+        failSend(conversationId, tempId);
         setError(result.reason ?? "This message can't be sent.");
+        // Restore content so the user can edit + retry.
+        setContent(text);
         return;
       }
       if (result.error === "TooLong") {
+        failSend(conversationId, tempId);
         setError(`Message is too long (${MAX_LEN} character maximum).`);
+        setContent(text);
         return;
       }
       if (result.error === "Empty") {
+        failSend(conversationId, tempId);
         setError("Type a message first.");
+        setContent(text);
         return;
       }
       if (result.error === "FilterUnavailable") {
+        failSend(conversationId, tempId);
         setError("Couldn't check message safety — please try again.");
+        setContent(text);
         return;
       }
       if (result.error === "Unknown") {
+        failSend(conversationId, tempId);
         setError("Couldn't send. Please try again.");
+        setContent(text);
         return;
       }
 
-      // Success: clear input, surface warn notice if present, refresh thread.
-      setContent("");
+      // Success — swap tempId for real message via the shell.
+      if (result.messageId) {
+        confirmSend(conversationId, tempId, {
+          id: result.messageId,
+          conversationId,
+          senderId: currentUserId,
+          messageType: "text",
+          content: text,
+          metadata: {},
+          attachmentUrl: null,
+          readAt: null,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
       if (result.containsWarning) {
         setWarning(
           "Your message contained content that may move the conversation off-platform. Keep important details on ShowMePrice for safety.",
         );
       }
-      router.refresh();
-      // Return focus to textarea so user can keep typing.
+
       textareaRef.current?.focus();
     } catch (err) {
       console.error("[MessageComposer] send failed", err);
+      failSend(conversationId, tempId);
       setError("Couldn't send. Please try again.");
+      setContent(text);
     } finally {
       setIsSending(false);
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter sends; Shift+Enter inserts newline.
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -177,19 +222,15 @@ function Composer({ conversationId }: { conversationId: string }) {
 
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
-    // Edit clears the previous error — signal that the user is addressing it.
     if (error) setError(null);
   };
 
-  // Counter color tier: red if over limit, ink if close (>=1900), muted otherwise.
   const counterClass = isOverLimit
     ? "text-danger-text"
     : content.length >= 1900
       ? "text-ink"
       : "text-ink-400";
 
-  // Defensive: red border on the textarea when over limit so the visual cue
-  // matches the counter color.
   const textareaBorderClass = isOverLimit
     ? "border-danger-text focus:ring-danger-text focus:border-danger-text"
     : "border-neutral-200 focus:ring-teal-400 focus:border-teal-400";

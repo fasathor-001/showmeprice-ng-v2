@@ -49,17 +49,37 @@ export async function Header() {
             <Link href="/sell" className="hover:text-ink transition-colors">
               Sell
             </Link>
-            {user && (
-              // Stage 2.B Commit 2 — minimal entry to the conversation list.
-              // No unread-count badge here; K-040 tracks the polish item to
-              // surface a presence dot in Commit 6.
-              <Link href="/messages" className="hover:text-ink transition-colors">
-                Messages
-              </Link>
-            )}
+            {/* Stage 2.B Commit 5: the inline "Messages" text link was DROPPED
+                in favour of the icon button below (matches WhatsApp Web /
+                Messenger pattern under D-121 — header has only the chat icon,
+                no text). The icon is the primary entry; UserMenu has a
+                textual backup. */}
           </nav>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {user && (
+              // Stage 2.B Commit 5 — Messages icon button. 44×44 tap target,
+              // visible at all viewports (mobile + desktop). K-040 (unread
+              // presence dot) wires in here in Commit 6 polish.
+              <Link
+                href="/messages"
+                aria-label="Messages"
+                className="inline-flex items-center justify-center w-11 h-11 rounded-full text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 transition-colors"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+              </Link>
+            )}
             {user ? (
               <UserMenu displayName={displayName ?? "Account"} email={user.email ?? ""} isAdmin={isAdmin} />
             ) : (
