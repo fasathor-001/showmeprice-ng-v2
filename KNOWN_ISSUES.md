@@ -370,6 +370,29 @@ Stage 2.B Commit 2 ships the header `/messages` link without any unread indicato
 
 Surfaced 2026-05-23 during Commit 2 surface findings (Question G2); scope expanded 2026-05-23 during Commit 3 surface findings (Question E).
 
+### K-042 — Split-pane (WhatsApp Web-style) desktop layout (medium, post-Stage-2.B)
+
+Stage 2.B Commits 2 + 3 ship `/messages` and `/messages/[conversationId]` as separate routes with single-column layouts at all viewports — mobile-first design. WhatsApp Web's two-column desktop pattern (conversation list on the left, currently-open thread on the right) is a meaningful UX upgrade for desktop users but was deferred because:
+
+1. **Mobile is the primary Nigerian marketplace traffic surface.** Single-column with route-level navigation works correctly on mobile; split-pane only benefits desktop users.
+2. **Architectural cost is non-trivial.** Implementations require either Next.js parallel routes (`@list` + `@thread` slots wired via `app/messages/layout.tsx`) OR custom client-side layout state that bypasses the file-system router. Either path retrofits Commits 2 + 3 work.
+3. **Real user behavior should inform the decision.** Validate via private-beta usage data before investing in the refactor — desktop traffic share, time-on-thread, and conversation-switching frequency all signal whether the pattern is worth the cost.
+4. **Stage 2.B private-beta end-state doesn't require it.** Single-column meets the trust-first messaging goals; split-pane is convenience.
+
+**Resolution scope (post-Stage-2.B, after Commits 5/6/7 are live):**
+- Choose between Next.js parallel routes vs client-side layout. Parallel routes preserve server-rendered semantics + deep linking; client-side state is simpler but loses the per-thread URL contract for the right pane.
+- At `lg+` breakpoint, the `/messages` route becomes a split layout: list on the left, thread on the right. Selecting a list row updates the right pane without a full page navigation (URL still updates to `/messages/[id]`).
+- At `<lg` breakpoint, current single-column behavior is preserved verbatim — no regressions.
+- Column proportions deferred to the agent's design judgment at implementation time (likely in the 30/70 to 40/60 range based on the comparable patterns).
+- Existing components (`ConversationList`, `ConversationRow`, `MessageThread`, `ThreadHeader`, `MessageComposer`) need minimal changes — the wrap is at the route/layout level.
+- Stickies need re-testing: thread header's `sticky top-16` may need adjustment in split-pane mode (no global header above the right column? or still under it?).
+
+**Severity:** medium. UX upgrade, not a private-beta blocker. Schedule after smoke data from Commits 5/6/7 shows desktop-user demand.
+
+**Related:** Commit 2 (conversation list), Commit 3 (thread view), K-040/K-041 (Commit 6 polish — these can ship in parallel; they don't depend on K-042's layout choice).
+
+Surfaced 2026-05-23 during Commit 4 banking pass (Frank's direction post-approval).
+
 ### K-041 — Read receipts on sent messages (low, Commit 6 polish)
 
 Stage 2.B Commit 3 ships the message thread UI without read-receipt indicators. WhatsApp-style receipts (single ✓ sent / double ✓✓ read) on the current user's own SENT messages are a high-value low-cost UX cue but were deferred to keep Commit 3's surface clean.
