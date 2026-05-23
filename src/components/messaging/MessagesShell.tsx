@@ -112,41 +112,70 @@ export function MessagesShell({
   // Single user-scoped realtime subscription. RLS in Supabase Realtime ensures
   // we only get rows the user can see; we filter further client-side based on
   // active state (reducer handles that).
+  //
+  // Commit 5.3 fix: explicit `supabase.realtime.setAuth(jwt)` BEFORE subscribe
+  // so RLS-filtered postgres_changes events deliver. Without this the realtime
+  // connection can authenticate as anon (cookie-session-load vs. subscribe
+  // race in @supabase/ssr's browser client) and no events arrive — see same
+  // fix in MessagesIconWithBadge for the badge counter symptom.
   useEffect(() => {
     if (!userId) return;
     const supabase = createClient();
-    const channel = supabase
-      .channel(`messages-realtime-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>;
-          if (!row) return;
-          dispatch({
-            type: "REALTIME_INSERT",
-            message: normalizeMessageRow(row),
-            currentUserId: userId,
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "messages" },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>;
-          if (!row) return;
-          dispatch({
-            type: "REALTIME_UPDATE",
-            message: normalizeMessageRow(row),
-          });
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+
+      channel = supabase
+        .channel(`messages-realtime-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages" },
+          (payload) => {
+            const row = payload.new as Record<string, unknown>;
+            if (!row) return;
+            dispatch({
+              type: "REALTIME_INSERT",
+              message: normalizeMessageRow(row),
+              currentUserId: userId,
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "messages" },
+          (payload) => {
+            const row = payload.new as Record<string, unknown>;
+            if (!row) return;
+            dispatch({
+              type: "REALTIME_UPDATE",
+              message: normalizeMessageRow(row),
+            });
+          },
+        )
+        .subscribe((status) => {
+          if (process.env.NODE_ENV !== "production") {
+            console.log(
+              "[MessagesShell] realtime subscription status:",
+              status,
+            );
+          }
+        });
+    })();
 
     return () => {
+      cancelled = true;
       // Clean up on unmount/sign-out — channel cleanup + websocket close.
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [userId]);
 

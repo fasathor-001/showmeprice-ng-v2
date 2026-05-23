@@ -51,42 +51,76 @@ export function MessagesIconWithBadge({
   useEffect(() => {
     if (!userId) return;
     const supabase = createClient();
-    const channel = supabase
-      .channel(`unread-badge-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const row = payload.new as MessageRowSubset | undefined;
-          if (!row || row.sender_id === userId) return;
-          // RLS already restricted to this user's conversations. The message
-          // is from someone else → bump unread.
-          setCount((c) => c + 1);
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "messages" },
-        (payload) => {
-          const oldRow = payload.old as MessageRowSubset | undefined;
-          const newRow = payload.new as MessageRowSubset | undefined;
-          if (!oldRow || !newRow) return;
-          if (newRow.sender_id === userId) return; // not our unread counter
-          const wasUnread = oldRow.read_at === null;
-          const nowRead =
-            newRow.read_at !== null && newRow.read_at !== undefined;
-          if (wasUnread && nowRead) {
-            setCount((c) => Math.max(0, c - 1));
-          } else if (!wasUnread && newRow.read_at === null) {
-            // Rare: server re-cleared read_at (e.g., admin). Defensive +1.
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    // Commit 5.3 fix: ensure the realtime client has the user's JWT BEFORE
+    // subscribing. @supabase/ssr's browser client sets realtime auth via an
+    // auth-state-change listener, but the listener may not have fired by the
+    // time this useEffect runs (cookie-session load vs. subscribe race).
+    // Without the JWT, realtime authenticates as anon and RLS-filtered
+    // postgres_changes events on `messages` never arrive — exactly the
+    // "unread counter didn't update until refresh" symptom Frank reported.
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+
+      channel = supabase
+        .channel(`unread-badge-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages" },
+          (payload) => {
+            const row = payload.new as MessageRowSubset | undefined;
+            if (!row || row.sender_id === userId) return;
+            // RLS already restricted to this user's conversations. The
+            // message is from someone else → bump unread.
             setCount((c) => c + 1);
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "messages" },
+          (payload) => {
+            const oldRow = payload.old as MessageRowSubset | undefined;
+            const newRow = payload.new as MessageRowSubset | undefined;
+            if (!oldRow || !newRow) return;
+            if (newRow.sender_id === userId) return; // not our unread counter
+            const wasUnread = oldRow.read_at === null;
+            const nowRead =
+              newRow.read_at !== null && newRow.read_at !== undefined;
+            if (wasUnread && nowRead) {
+              setCount((c) => Math.max(0, c - 1));
+            } else if (!wasUnread && newRow.read_at === null) {
+              // Rare: server re-cleared read_at (e.g., admin). Defensive +1.
+              setCount((c) => c + 1);
+            }
+          },
+        )
+        .subscribe((status) => {
+          if (process.env.NODE_ENV !== "production") {
+            // Dev-only diagnostic so subscription health is visible in
+            // browser DevTools. Should log "SUBSCRIBED" once on mount.
+            // Anything else (TIMED_OUT / CHANNEL_ERROR / CLOSED) signals
+            // a realtime infra problem worth investigating.
+            console.log(
+              "[MessagesIconWithBadge] realtime subscription status:",
+              status,
+            );
           }
-        },
-      )
-      .subscribe();
+        });
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [userId]);
 
