@@ -28,7 +28,9 @@ import { sendMessage } from "@/lib/messaging/actions";
 //   D. No template selector (D-108 templates ship in Commit 7 with
 //      MessageSellerButton, where first-message context applies).
 //   E. ContainsWarning → POST-send inline notice (matches D-119 "warning
-//      at every send"). Auto-dismisses after 10s or user-dismissed.
+//      at every send"). PERSISTENT until user-dismissed (Commit 4.2 strict
+//      D-119 read — earlier 10s auto-dismiss removed). Consecutive warn
+//      sends REPLACE the previous notice rather than stack.
 //   F. Phone-unverified → REPLACE composer with verify CTA card.
 //   G. Composer always enabled regardless of conversation status.
 //   H. Simple `router.refresh()` after send — no optimistic UI at Commit 4.
@@ -36,7 +38,6 @@ import { sendMessage } from "@/lib/messaging/actions";
 
 const MAX_LEN = 2000;
 const COUNTER_THRESHOLD = 1600; // show counter at 80%+ of limit
-const WARN_AUTO_DISMISS_MS = 10_000;
 // Max textarea pixel height — ~5 rows at ~24px line height plus padding.
 const MAX_TEXTAREA_HEIGHT = 5 * 24 + 16;
 
@@ -90,12 +91,12 @@ function Composer({ conversationId }: { conversationId: string }) {
     el.style.height = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT) + "px";
   }, [content]);
 
-  // Auto-dismiss warn notice.
-  useEffect(() => {
-    if (!warning) return;
-    const t = setTimeout(() => setWarning(null), WARN_AUTO_DISMISS_MS);
-    return () => clearTimeout(t);
-  }, [warning]);
+  // D-121 / D-119 strict read (Commit 4.2): warn notices are PERSISTENT until
+  // the user clicks Dismiss. D-119 says "AT EVERY SEND (not dismissed after
+  // first acceptance)" — an auto-dismiss after a few seconds contradicts
+  // that. Consecutive warn-tier sends REPLACE the previous notice (single-
+  // string state, setWarning() overwrites) rather than stack — keeps the
+  // composer free of accumulated chrome.
 
   const trimmedLen = content.trim().length;
   const isEmpty = trimmedLen === 0;
@@ -233,7 +234,7 @@ function Composer({ conversationId }: { conversationId: string }) {
         />
         <Button
           variant="primary"
-          size="sm"
+          size="md"
           onClick={handleSend}
           disabled={sendDisabled}
           aria-label="Send message"

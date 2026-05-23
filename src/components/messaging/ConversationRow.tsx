@@ -99,7 +99,7 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
   return (
     <Link
       href={`/messages/${id}`}
-      className={`group flex items-start gap-3 px-3 py-3 sm:px-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 ${
+      className={`group flex items-start gap-3 px-3 py-3 sm:px-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-inset ${
         isNonActiveListing ? "opacity-75" : ""
       }`}
     >
@@ -118,10 +118,12 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
 
       {/* Main column */}
       <div className="flex-1 min-w-0">
-        {/* Line 1: display name + verified badge */}
+        {/* Line 1: display name + verified badge.
+            D-121 (Commit 4.2): name bumped from text-sm to text-base (16px)
+            for mobile readability — matches WhatsApp Web / Telegram density. */}
         <div className="flex items-center gap-2 min-w-0">
           <span
-            className={`truncate text-sm ${
+            className={`truncate text-base ${
               hasUnread ? "font-semibold text-ink" : "font-medium text-ink"
             }`}
           >
@@ -134,13 +136,15 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
           )}
         </div>
 
-        {/* Line 2: role label (muted) + preview */}
+        {/* Line 2: role label (muted, stays text-xs) + preview.
+            D-121: preview bumped to text-sm (14px) — preview is the
+            content the user scans; role is meta-info, stays smaller. */}
         <div className="flex items-center gap-2 min-w-0 mt-0.5">
           <span className="text-xs text-ink-400 shrink-0">
             {role === "buyer" ? "Buying" : "Selling"}
           </span>
           <span
-            className={`truncate text-xs ${
+            className={`truncate text-sm ${
               hasUnread ? "text-ink font-medium" : "text-ink-600"
             }`}
           >
@@ -148,11 +152,15 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
           </span>
         </div>
 
-        {/* Line 3: optional last-active + listing title + status label */}
+        {/* Line 3: optional last-active + listing title + status label.
+            D-121 (Commit 4.2): if the listing was deleted entirely (the
+            FK joined to no row) we render "Listing removed" so the row
+            doesn't silently lose its context. Mirrors the ThreadHeader
+            null-listing fallback. */}
         <div className="flex items-center gap-2 min-w-0 mt-0.5 text-xs text-ink-400">
           {lastActive && <span className="shrink-0">{lastActive}</span>}
-          {lastActive && listing && <span aria-hidden>·</span>}
-          {listing && (
+          {lastActive && <span aria-hidden>·</span>}
+          {listing ? (
             <span className="truncate">
               {listing.title}
               {statusLabel && (
@@ -162,6 +170,8 @@ export function ConversationRow({ conversation, now }: ConversationRowProps) {
                 </>
               )}
             </span>
+          ) : (
+            <span className="truncate italic">Listing removed</span>
           )}
         </div>
       </div>

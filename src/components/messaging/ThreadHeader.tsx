@@ -112,15 +112,33 @@ export function ThreadHeader({
 
   return (
     <div className="bg-white border-b border-neutral-200 shrink-0">
-      <div className="px-3 sm:px-6 py-2 flex items-center gap-3 min-w-0">
+      <div className="px-2 sm:px-4 py-1 flex items-center gap-2 min-w-0">
+        {/* D-121 (Commit 4.2): chevron-left icon button with a 44×44 tap
+            target. Replaces the previous "← Back" text link, which was
+            ~24px tall (below WCAG mobile minimum). Negative margin keeps
+            the icon visually inset while the hit area extends beyond. */}
         <Link
           href="/messages"
-          className="text-sm text-ink-600 hover:text-ink shrink-0"
+          aria-label="Back to conversations"
+          className="inline-flex items-center justify-center w-11 h-11 -ml-1 sm:-ml-2 rounded-lg text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 shrink-0 transition-colors"
         >
-          ← Back
+          <svg
+            viewBox="0 0 24 24"
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path
+              d="M15 18l-6-6 6-6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </Link>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-medium text-ink truncate">
+          <span className="text-base font-medium text-ink truncate">
             {otherName}
           </span>
           {isPhoneVerified && (

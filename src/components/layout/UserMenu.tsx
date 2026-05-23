@@ -59,7 +59,7 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
           </div>
           <Link
             href="/dashboard"
-            className="block px-4 py-2 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+            className="block px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
             role="menuitem"
             onClick={() => setOpen(false)}
           >
@@ -70,7 +70,7 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
               Commit 6 polish. */}
           <Link
             href="/messages"
-            className="block px-4 py-2 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+            className="block px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
             role="menuitem"
             onClick={() => setOpen(false)}
           >
@@ -79,7 +79,7 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
           {isAdmin && (
             <Link
               href="/admin"
-              className="block px-4 py-2 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+              className="block px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
               role="menuitem"
               onClick={() => setOpen(false)}
             >
@@ -89,7 +89,7 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
           <form action={signOutAction}>
             <button
               type="submit"
-              className="w-full text-left px-4 py-2 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+              className="w-full text-left px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
               role="menuitem"
             >
               Sign out

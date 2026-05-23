@@ -131,7 +131,11 @@ export default async function ListingDetailPage({
             </>
           )}
           <span aria-hidden="true">›</span>
-          <span className="text-ink truncate max-w-[16ch] sm:max-w-none">
+          {/* D-121 (Commit 4.2): breadcrumb title wraps to its own row at all
+              viewports — `basis-full` in a flex-wrap parent forces the title
+              onto a new line so the full text reads cleanly. Replaces the
+              previous mobile truncation (`truncate max-w-[16ch]`). */}
+          <span className="text-ink basis-full">
             {listing.title}
           </span>
         </nav>

@@ -101,13 +101,16 @@ export function MessageThread({
   // just-sent message.
   const lastMsgId = messages[messages.length - 1]?.id ?? "empty";
 
+  // D-121 (Commit 4.2): the "Earlier messages not shown — coming soon"
+  // placeholder was dropped. 50-message initial page covers >95% of active
+  // conversations at private-beta scale; the placeholder read as developer-
+  // facing copy. Real "Load older" pagination lands in Commit 6 polish.
+  // `hasMore` is intentionally referenced here so the param stays in the
+  // public API; future Commit-6 work will wire a real button.
+  void hasMore;
+
   return (
     <div className="px-3 sm:px-6 py-4">
-      {hasMore && (
-        <div className="text-center text-xs text-ink-400 py-2 italic">
-          Earlier messages not shown — coming soon
-        </div>
-      )}
       {items}
       <ScrollToBottom key={lastMsgId} />
     </div>

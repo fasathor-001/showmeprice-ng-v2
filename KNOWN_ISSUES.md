@@ -370,6 +370,25 @@ Stage 2.B Commit 2 ships the header `/messages` link without any unread indicato
 
 Surfaced 2026-05-23 during Commit 2 surface findings (Question G2); scope expanded 2026-05-23 during Commit 3 surface findings (Question E).
 
+### K-043 — Loading skeletons via Suspense boundaries for messaging routes (medium, D-121 polish)
+
+Stage 2.B Commit 4.2 polish review (under D-121) surfaced the question of loading-state skeletons for `/messages` and `/messages/[conversationId]`. Server Components currently SSR content fully — users on slow connections see a brief blank screen before the page paints, then content snaps in. Mature competitors (WhatsApp Web, Telegram Web) show skeleton placeholders during route transitions for perceived performance.
+
+**Deferred reasoning (Commit 4.2 polish review):** Server Components on Cloudflare Pages Edge already render content via SSR with minimal first-paint latency. The polished competitors' skeletons matter more for route transitions in SPAs and for slow connections. ShowMePrice's traffic is Nigerian mobile, where the gap is real (3G/4G inconsistency), but the work is a future enhancement, not a blocker for D-121 alignment at private beta.
+
+**Resolution scope (dedicated polish commit when Stage 2.B functional set is complete — i.e., after Commits 5/6/7):**
+- Add Suspense boundaries around the data-fetching components in `/messages` and `/messages/[conversationId]`. Each Suspense boundary needs a `<Skeleton />` fallback (the project already has `src/components/ui/Skeleton.tsx`).
+- Estimated scope: ~50 LOC across `src/app/messages/page.tsx`, `src/app/messages/[conversationId]/page.tsx`, possibly extracting fetch logic into Suspense-friendly Server Components.
+- Skeleton variants needed: ConversationRow skeleton (thumbnail + 3-line text rows), MessageThread skeleton (3-4 bubble shapes alternating left/right), ThreadHeader skeleton (back button + name + listing strip).
+- Cross-check that Suspense doesn't break the existing `getMessages` mark-as-read side effect — that runs server-side on initial render; if Suspense delays render, mark-as-read might not fire on initial visit. Verify during implementation.
+- Bench against a throttled Slow 3G profile in Chrome devtools before and after to confirm perceived-performance improvement.
+
+**Severity:** medium. Pure UX polish under D-121; not blocking private beta. Address in the polish-focused commit that bundles K-040 + K-041 (already planned for Commit 6 polish under D-121 standard).
+
+**Related:** D-121 (quality standard — this is the kind of polish the standard prioritizes), Commit 4.2 (surface review that surfaced this), K-040 + K-041 (paired Commit 6 polish — same polish surface).
+
+Surfaced 2026-05-23 during Commit 4.2 polish review.
+
 ### K-042 — Split-pane (WhatsApp Web-style) desktop layout (medium, post-Stage-2.B)
 
 Stage 2.B Commits 2 + 3 ship `/messages` and `/messages/[conversationId]` as separate routes with single-column layouts at all viewports — mobile-first design. WhatsApp Web's two-column desktop pattern (conversation list on the left, currently-open thread on the right) is a meaningful UX upgrade for desktop users but was deferred because:

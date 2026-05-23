@@ -525,7 +525,12 @@ export async function listConversations(
       listing: listingRaw
         ? {
             id: listingRaw.id,
-            title: listingRaw.title ?? "—",
+            // D-121 (Commit 4.2): unify the "listing context is unavailable"
+            // copy across the messaging surface. ThreadHeader shows
+            // "Listing removed" when the listing embed is null; mirror that
+            // here when the listing exists but the title is null/empty so
+            // the row never reads as "—".
+            title: listingRaw.title ?? "Listing removed",
             priceKobo: listingRaw.price_kobo ?? null,
             status: listingRaw.status,
             primaryImageUrl: primaryImageByListing.get(listingRaw.id) ?? null,

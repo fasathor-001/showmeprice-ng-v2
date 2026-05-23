@@ -70,7 +70,9 @@ export function MessageBubble({
         className={`flex flex-col max-w-[75%] sm:max-w-[60%] ${colAlignClass}`}
       >
         <div
-          className={`rounded-2xl px-3.5 py-2 text-sm break-words whitespace-pre-wrap ${bubbleClass}`}
+          /* D-121 (Commit 4.2): bubble padding px-3.5 py-2 → px-4 py-2.5
+             — aligns with WhatsApp Web / iMessage breathing-room standard. */
+          className={`rounded-2xl px-4 py-2.5 text-sm break-words whitespace-pre-wrap ${bubbleClass}`}
         >
           {content || (
             <span className="text-ink-400 italic">[empty]</span>
