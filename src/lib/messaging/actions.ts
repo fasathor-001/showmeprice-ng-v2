@@ -106,6 +106,16 @@ export async function createConversation(
     return { error: "FilterUnavailable" };
   }
   if (filter.action === "block") {
+    // K-038: log block events so admin review + D-114 repeat-violation
+    // escalation can see them. messageId is null (no message was created);
+    // userProceeded is false (block prevented the send).
+    await logFilterAction({
+      userId: actor.user.id,
+      messageId: null,
+      result: filter,
+      content,
+      userProceeded: false,
+    });
     return { error: "ContentBlocked", reason: blockReason(filter.rule) };
   }
 
@@ -198,6 +208,14 @@ export async function sendMessage(
     return { error: "FilterUnavailable" };
   }
   if (filter.action === "block") {
+    // K-038: log block events (see createConversation for rationale).
+    await logFilterAction({
+      userId: actor.user.id,
+      messageId: null,
+      result: filter,
+      content: text,
+      userProceeded: false,
+    });
     return { error: "ContentBlocked", reason: blockReason(filter.rule) };
   }
 
