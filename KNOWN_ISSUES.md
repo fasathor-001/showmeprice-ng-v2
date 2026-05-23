@@ -315,6 +315,51 @@ What's missing is the **code wiring**: listing CREATE/EDIT server actions in `sr
 
 Surfaced 2026-05-23 during D-119 design; reframed after E.2.6.0 §0 paste-back revealed data is already partially populated.
 
+### K-038 — `filter_actions_log` doesn't capture BLOCK events (HIGH, pre-private-beta)
+
+Stage 2.B Commit 1.6 smoke testing (2026-05-23) confirmed: 7+ BLOCK events fired at `sendMessage`/`createConversation` level during production smoke. **Zero** rows landed in `filter_actions_log` for those blocks. Only WARN events log (4 entries from the same session match).
+
+**Root cause (verified by inspection):** the `logFilterAction(...)` call in `src/lib/messaging/actions.ts` sits AFTER the early `return { error: "ContentBlocked" }` in both `createConversation` and `sendMessage`. When a message is blocked, control returns before logging. The helper itself (`src/lib/messaging/filters.ts:logFilterAction`) handles block events fine — it only short-circuits on `action === "allow"`. The bug is in the call-site sequencing.
+
+**Impact:**
+1. Admin review can't see attempted policy violations (the most important signal for tuning D-119 rules).
+2. D-119 repeat-violation escalation thresholds (1st → 4th → 7th, per D-114) have no data to operate on.
+3. K-029 whitelist exemptions can't be audited (we can't tell which prices triggered the suppression).
+4. Fraud pattern analysis dataset is incomplete — blocks are exactly the events we most need to study.
+
+**Severity:** HIGH. Required before private beta — without this, the moderation feedback loop is blind to its own enforcement.
+
+**Resolution scope:** ~10 LOC change in `src/lib/messaging/actions.ts`:
+- In `createConversation`, BEFORE `return { error: "ContentBlocked", reason: blockReason(filter.rule) }`, add a best-effort `await logFilterAction({ userId: actor.user.id, messageId: null, result: filter, content, userProceeded: false })`.
+- Same change in `sendMessage` (before its `ContentBlocked` return).
+- Existing post-success `logFilterAction` calls (with `userProceeded: true`) stay.
+- Update vitest if any assertion depends on `logFilterAction` call sequencing (unlikely — current tests don't mock it).
+
+**Smoke verification after fix:** trigger one block via `/dev/messaging-smoke`, then `SELECT * FROM filter_actions_log WHERE rule_action='block' ORDER BY created_at DESC LIMIT 5` should show the row with `user_proceeded = false` and `context_id IS NULL`.
+
+**Related:** D-119 (smoke testing surfaced this), D-114 (repeat-violation escalation depends on this data).
+
+Surfaced 2026-05-23 during D-119 production smoke testing.
+
+### K-039 — Deposit-request / pre-payment-demand detection (D-119 Phase 2 candidate, medium)
+
+Pre-payment demand language like *"deposit before delivery"*, *"pay 50% upfront to secure"*, *"reservation fee to lock in"* doesn't contain a payment INSTRUMENT (no account number, no payment link) but explicitly signals one of the highest-frequency Nigerian marketplace fraud patterns: ask for partial payment before goods are seen, then disappear.
+
+Current D-119 patterns (regex on accounts, links, off-platform handoff, bank brand names) don't catch these because the linguistic surface is INTENT, not artifacts. A normalized phrase-match — even a simple keyword combo — would catch the obvious cases.
+
+**Pattern brainstorm (not final):** `(deposit|upfront|advance|reservation\s+fee|holding\s+fee|lock\s+in|secure)\b.*\b(pay|send|transfer|before|first|now)` and the mirror order. WARN-tier in messages — "Deposits before inspection are the most-reported scam pattern on ShowMePrice. If you proceed, only deposit through a method you can dispute (Paystack escrow when shipped — D-082)." BLOCK-tier in listings.
+
+**Severity:** medium. Required pre-public-beta. Conversational vocabulary (Frank's distinction: *vocabulary* vs *instrument*), so WARN at message level mirrors the bank_platform_ref policy — but at listing level, escalates to BLOCK because public listings shouldn't advertise deposit demands.
+
+**Resolution scope:**
+- Bundle with K-033 Phase 2 normalization work (number-as-words obfuscation, Unicode NFC, lookalike substitution). All three are "linguistic pre-processing" rather than artifact-regex extensions.
+- Add new rule_type `deposit_demand` (warn @ message, block @ listing) once K-036 listing-context enforcement code path is wired.
+- Vitest cases: legitimate "I need to deposit cash at GTBank tomorrow" (allow — banking-vocabulary precedent, no payment-verb proximity) vs scam pattern "pay 50% deposit before delivery" (warn).
+
+**Related:** D-119 (scope this expands), K-033 (normalization pipeline pairing), K-036 (listing-context wiring), D-114 (anti-abuse policy).
+
+Surfaced 2026-05-23 during D-119 production smoke testing.
+
 ### K-037 — K-029 NUBAN whitelist: tighten to adjacency-based price-context (low)
 
 Commit 1.6 (D-119) flips `nuban` from WARN to BLOCK in message context. The K-029 whitelist guard in `runMessageFilter` had to extend from warn-only to apply to both actions, otherwise legitimate ₦1B+ prices (10-digit naked amounts) would be hard-blocked.
