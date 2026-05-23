@@ -1941,6 +1941,39 @@ ShowMePrice competes directly with Jiji, Facebook Marketplace, and WhatsApp comm
 
 ---
 
+## D-121 Reaffirmation (Frank's directive, 2026-05-23)
+
+**Status:** Locked. Operational mandate, not principle-statement.
+
+> *"From now onward, I want ShowMePrice to be outstandingly world-class professional UX and UI. As you know, we have competitors in Nigeria. I do not want ShowMePrice to be a less-value product at launch. I want ShowMePrice to be a professional and world-class marketplace for Nigerians."*
+> — Frank, 2026-05-23
+
+This reaffirmation strengthens D-121 from "default to the more polished option" into a **launch-prerequisite quality bar**. The operational reading agents must carry into every surface findings + commit going forward:
+
+### What this means in agent practice
+- **No shortcut surfaces.** If a finding can be shipped cleanly OR can be shipped "quick and patched later," ship clean. Polish K-issues are for genuine future-work scope, not for things that should ship right.
+- **Default to "what would WhatsApp / Jumia / Konga / Jiji ship?"** — but only as a floor. Where ShowMePrice can be MORE polished than the competition (trust-positioning, copy precision, density, spacing rigor, micro-interactions), it should be.
+- **Quality is non-negotiable at launch.** Slower per-commit pace is the accepted trade. Larger commits, more agent hours per feature, more surface-findings rounds — all fine. Cutting quality is not fine.
+- **Compare against the strongest competitor for each surface, not the weakest.** Jiji is the volume comparison; Konga is the verified-seller comparison; Facebook Marketplace is the trust-feel comparison; WhatsApp is the messaging comparison. ShowMePrice's surfaces must read as peers of those, not as a smaller alternative.
+- **Trust signals (D-112) are the differentiator.** Where competitors are sloppy on trust (Jiji's scam reputation, WhatsApp's no-verification), ShowMePrice shows the gap visually — clear verification badges, prominent last-active, honest filter copy, no dark patterns.
+- **Nigerian context, world-class execution.** The market is Nigerian; the quality bar is global. NGN-only, WhatsApp-native, mobile-first — but rendered to the standard of products competing for paying customers in any market.
+
+### Operational impact (in addition to D-121's existing clauses)
+- Agents producing surface findings: lead with "what does world-class look like here?" before listing options. Default-toward-polished even when not explicitly asked.
+- Commits whose primary value is correctness (server actions, migrations, infra) still apply the bar to any user-facing surface they touch.
+- Frank reserves the right to push back on any surface that reads as less-than-world-class and require it to be redone — this is not scope-creep, this is the contract.
+- "Polish-later" K-issues remain valid ONLY for items that are (a) genuinely out of current commit's scope AND (b) won't be visible to users at launch in a less-than-polished state. If a polish item would be VISIBLE and SLOPPY at launch, it ships now.
+
+### What this does NOT change from D-121
+- Out-of-scope features stay deferred.
+- K-issues remain a valid tool for future-work tracking.
+- No indefinite polish loops on already-shipped clean code.
+- Build gate, surface-findings-then-approval discipline, and commit-by-commit cadence all unchanged.
+
+**Mental anchor for the agent:** Frank will be showing ShowMePrice to Nigerian buyers and sellers who already use Jumia, Konga, Jiji, Facebook Marketplace, and WhatsApp. The user's first 60 seconds on the site decides whether they take ShowMePrice seriously. Every surface must earn that 60 seconds.
+
+---
+
 ## D-122: Advertising Posture — Marketplace-native promotion only
 
 **Date:** 2026-05-23
