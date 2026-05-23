@@ -1,8 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMessages } from "@/lib/messaging/actions";
+import { isPhoneVerified } from "@/lib/auth";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { Container } from "@/components/layout";
+import { MessageComposer } from "@/components/messaging/MessageComposer";
 import { MessageThread } from "@/components/messaging/MessageThread";
 import { ThreadHeader } from "@/components/messaging/ThreadHeader";
 
@@ -71,8 +73,9 @@ export default async function MessageThreadPage({ params }: Props) {
     redirect(`/sign-in?next=/messages/${conversationId}`);
   }
 
-  // Parallel: header-context query + messages.
-  const [ctxResult, msgResult] = await Promise.all([
+  // Parallel: header-context query + messages + current user's verification
+  // (drives the composer's phone-verified gate per D-114).
+  const [ctxResult, msgResult, profileResult] = await Promise.all([
     supabase
       .from("conversations")
       .select(
@@ -89,7 +92,16 @@ export default async function MessageThreadPage({ params }: Props) {
       .eq("id", conversationId)
       .maybeSingle(),
     getMessages(conversationId, 50),
+    supabase
+      .from("profiles")
+      .select("verification_status")
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
+
+  const phoneVerified = isPhoneVerified(
+    profileResult.data?.verification_status,
+  );
 
   // getMessages errors first (it has the explicit participant check).
   if (msgResult.error === "Unauthorized") {
@@ -149,6 +161,10 @@ export default async function MessageThreadPage({ params }: Props) {
         messages={msgResult.messages ?? []}
         hasMore={msgResult.hasMore ?? false}
         currentUserId={user.id}
+      />
+      <MessageComposer
+        conversationId={conversationId}
+        isPhoneVerified={phoneVerified}
       />
     </>
   );

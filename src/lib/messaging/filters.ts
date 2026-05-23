@@ -102,10 +102,20 @@ export function blockReason(rule?: FilterRule): string {
     case "telegram_link":
     case "signal_link":
       return "Links to WhatsApp, Telegram, or Signal aren't allowed — keep the conversation on ShowMePrice so there's a record.";
+    case "telegram_ref":
+      // D-119: textual telegram references ("my telegram is X") block separately
+      // from telegram_link URLs; same user-facing intent.
+      return "Links and references to Telegram aren't allowed — keep the conversation on ShowMePrice so there's a record.";
     case "payment_url":
       return "Payment links aren't allowed in messages. ShowMePrice doesn't handle product payments — arrange payment safely after inspection.";
     case "shortened_url":
       return "Shortened links aren't allowed in messages. Please share the full context here instead.";
+    case "phone_ng":
+      // D-119 phone block: explain the controlled path (contact reveal).
+      return "For safety, phone numbers can't be shared in chat. Use contact reveal so access is logged and both sides stay protected.";
+    case "nuban":
+      // D-119 NUBAN block: explain the controlled path (D-120 payment-details share).
+      return "For safety, bank account numbers can't be shared in chat. The seller can share verified payment details when you've agreed on the deal.";
     default:
       return "This message contains content that isn't allowed. Please reword and try again.";
   }
