@@ -1900,3 +1900,43 @@ Most ShowMePrice sellers at MVP do not have business records (D-116 Level 1 Phon
 - Supersession warning on re-share (Commit 3).
 
 ---
+
+## D-121: Product Quality Standard — World-Class UX/UI
+
+**Date:** 2026-05-23
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-112 (trust-first marketplace positioning), D-117 (privacy placeholder), K-040 (unread-presence dot), K-041 (read receipts), K-042 (split-pane layout)
+
+### Decision
+ShowMePrice ships at world-class UX/UI standard from launch. No commits ship UX/UI shortcuts that would create rework. "Polish later" is not an acceptable framing when the standard is clear.
+
+### Context
+ShowMePrice competes directly with Jiji, Facebook Marketplace, and WhatsApp commerce in Nigeria. Users compare ShowMePrice against established platforms that have spent years polishing their UX. Any amateur-feeling surface — truncated breadcrumbs, non-sticky composers, missing standard chat patterns, inconsistent spacing — directly signals "this is a smaller, less serious platform" to users who have alternatives.
+
+### Implementation discipline
+- Surface findings for every commit must include UX/UI quality as a first-class consideration, not deferred to polish commits.
+- Default to "standard professional pattern from mature competitor" unless there's specific reason to deviate.
+- Agent surface findings should evaluate each design decision against: would this look right at WhatsApp Web / Jiji / Facebook Marketplace?
+- When in doubt, ship the more polished option even if it costs more LOC or time.
+- Polish passes (when needed) happen during the same commit that builds the feature, not in a separate later commit.
+
+### Trade-off explicitly accepted
+- Slower per-commit shipping pace.
+- Larger commits.
+- More agent hours per feature.
+- Worth it because: quality compounds in user trust, sloppy UX compounds in user churn.
+
+### What this does NOT mean
+- Over-engineering features that aren't shipped yet.
+- Adding scope unrelated to the commit's intent.
+- Refactoring stable shipped code just for aesthetics.
+- Indefinite polish loops.
+
+### Operational impact
+- All future agent surface findings must include explicit UX quality evaluation.
+- All future commit messages should reference D-121 where polish was prioritized.
+- K-issues that represent UX shortcuts should be prioritized over functional-only K-issues at equal stage.
+- Stage planning should budget for UX time as first-class scope, not optional.
+
+---
