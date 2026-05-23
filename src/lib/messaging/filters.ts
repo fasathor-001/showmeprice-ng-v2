@@ -17,10 +17,14 @@ import type { FilterRule, FilterResult } from "./types";
 
 /**
  * K-029: the `nuban` rule (`\b\d{10}\b`) matches any 10-digit run, so prices,
- * order IDs, etc. trigger false positives. Suppress the nuban WARN when the
+ * order IDs, etc. trigger false positives. Suppress the nuban match when the
  * content reads as price/negotiation context. Heuristic — tuned in private beta.
- * Only ever suppresses a WARN (nuban is warn-only in messages per Interp. C),
- * so over-suppression is low-harm.
+ *
+ * D-119 (Stage 2.B Commit 1.6) flips nuban from WARN to BLOCK in messages. The
+ * guard below now applies to BOTH actions — without this, legitimate ₦1B+
+ * prices (10-digit naked numbers) get hard-blocked. Trade-off: a determined
+ * scammer can inject "last price" / "negotiable" near a NUBAN to evade. K-037
+ * tracks tightening this to adjacency-based matching.
  */
 export function isLikelyPriceContext(content: string): boolean {
   const c = content.toLowerCase();
@@ -59,12 +63,9 @@ export function matchFilterRules(
       continue; // malformed pattern — skip, don't crash
     }
     if (!re.test(content)) continue;
-    // K-029: suppress nuban warn in price context.
-    if (
-      rule.rule_type === "nuban" &&
-      rule.action === "warn" &&
-      isLikelyPriceContext(content)
-    ) {
+    // K-029: suppress nuban match (warn OR block per D-119 flip) when content
+    // reads as price/negotiation context. See isLikelyPriceContext docstring.
+    if (rule.rule_type === "nuban" && isLikelyPriceContext(content)) {
       continue;
     }
     if (rule.action === "block") return { action: "block", rule };

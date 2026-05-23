@@ -182,6 +182,8 @@ Phase 1 verification (2026-05-22) confirmed **29 public tables have RLS policies
 
 **Resolution scope:** a doc-completeness pass that queries `pg_policies` for each table and transcribes the bodies into ACTUAL_SCHEMA with paste-back verification. Not blocking Stage 2.B.
 
+**Scope note:** this issue is the *narrow, completable* task — transcribe the N missing policy bodies. The *broad* audit (re-verify every documented enum/column/policy against live `information_schema`/`pg_catalog`) is tracked separately as **K-032**.
+
 Surfaced 2026-05-22 during Phase 1 verification.
 
 ### K-029 — NUBAN filter pattern `\b\d{10}\b` false-positives on any 10-digit number (low)
@@ -213,6 +215,122 @@ Stage 2.B Commit 1.5 added `src/app/dev/messaging-smoke/` — a dev-only harness
 **Resolution before public beta:** delete the route, OR replace the `NODE_ENV` guard with a `requireAdmin` gate if a persistent internal tool is wanted. Tracked so it isn't forgotten when the app goes to wider access.
 
 Surfaced 2026-05-22 (Stage 2.B Commit 1.5).
+
+### K-032 — Phase 3: full ACTUAL_SCHEMA reconciliation pass against live DB (medium)
+
+ACTUAL_SCHEMA.md has drifted from deployed reality in several places, discovered during Stage 2.B prep. A systematic audit is needed before relying on the doc for any new schema-dependent work.
+
+**Confirmed drift found so far (real, not false alarms):**
+- `filter_rules.applies_to_context` / `applies_to_tier` documented as `jsonb` but actually **`text[]`** (caught by the E.2.3.0 §0 information_schema pre-flight; reverted in commit `07137b2`).
+- `conversations` / `messages` columns, constraints, indexes, and the 8 RLS policies were materially under-/mis-documented vs the deployed schema (corrected in the Stage 2.B Commit A doc reconciliation).
+- The blanket "Phase E.1.x RLS pending E.1.4" claim was stale — RLS is deployed across E.1.x (corrected; see K-028).
+- `supabase_realtime` publication + `REPLICA IDENTITY FULL` on conversations/messages were already present with unknown provenance (K-030).
+- **(appended 2026-05-23, Stage 2.B Commit 1.6 prep)** `profiles.verification_status` documented as scalar in places; actually **`text[]`** (multi-value array — `phone_verified`, future `email_verified`, etc.). Drizzle mirror is correct; doc copies elsewhere need audit.
+- **(appended 2026-05-23)** `profiles.email` doesn't exist — email lives in `auth.users.email`. Several doc snippets and spec drafts referenced `profiles.email` as if it were a column.
+- **(appended 2026-05-23)** `products` published-state model: there is NO `is_published` boolean column. The published state is the combination of `status='active'` (enum) + `published_at` timestamp. Doc references to `is_published` are stale and need scrubbing.
+- **(appended 2026-05-23)** `conversations.listing_id` (not `product_id`) despite the FK pointing at `products(id)`. Stage 2.B spec drafts that said `product_id` are wrong; deployed schema and FK constraint name `conversations_listing_id_fkey` are canonical.
+- **(appended 2026-05-23)** `filter_actions_log` column names: `rule_action` (not `action`), plus `user_proceeded` boolean and `context` columns the doc didn't transcribe.
+
+**Note — `product_status` was a FALSE alarm:** ACTUAL_SCHEMA already documents it correctly (`draft / active / sold / archived`); the Stage 2.B Commit 1 "NotFound" was test-data/RLS, not doc drift.
+
+**Severity:** medium. The doc has cost real debugging time; it's trusted by every future schema-dependent task, so its accuracy is load-bearing.
+
+**Resolution scope (Phase 3):** systematically re-verify every documented item against the live database — table list + count, each column's `data_type`/`is_nullable`/`column_default` (`information_schema.columns`), every enum's values (`pg_enum`), CHECK/FK/unique constraints (`pg_constraint`), indexes (`pg_indexes`), RLS enable state + policy bodies (`pg_policies` — overlaps **K-028**), functions (`pg_proc`: `prosecdef`/`proconfig`), triggers, and publication/replica-identity state. Update ACTUAL_SCHEMA from the paste-backs. Pairs with the banked MEMORY lesson "rendered output is never authoritative — only information_schema is."
+
+**Related:** K-028 (narrow policy-transcription subset), K-030 (publication provenance).
+
+Surfaced 2026-05-23 during Stage 2.B Commit 1 smoke testing.
+
+### K-033 — D-110 filter system: Phase 2/3/4 future work (medium)
+
+Phase 1 ships in D-119 / Stage 2.B Commit 1.6: data-driven `filter_rules` additions for Nigerian-specific patterns (phone numbers, payment links, shortened URLs, telegram/signal, WhatsApp typos, off-platform handoff WARN, bank-platform references WARN). Phase 2/3/4 are deferred:
+
+- **Phase 2 (required before public beta)** — normalization pipeline: Unicode NFC; number-as-words obfuscation ("zero eight zero two…" → digits); lookalike substitution (Cyrillic / Greek lookalike characters); whitespace/case normalization. Without this, the regex rules ship in D-119 can be trivially evaded.
+- **Phase 3 (post-private-beta)** — heuristic risk scoring for ambiguous cases (e.g. a message with 3+ WARN flags should escalate even if no single rule blocks).
+- **Phase 4 (Year 2+)** — ML classification trained on the real message corpus accumulated during private/public beta.
+
+**Severity:** medium. Phase 1 (D-119) raises the filter bar significantly but does not close determined-adversary bypass paths. Public beta cannot ship without Phase 2.
+
+**Resolution scope (Phase 2):** new `src/lib/messaging/normalize.ts` module invoked from `runMessageFilter` BEFORE regex matching. Unit-test coverage for the obfuscation patterns the regex rules don't catch. Re-run vitest with normalization on the existing ~40 D-119 cases to confirm no regressions.
+
+**Related:** D-119 (Phase 1 — the data-driven rules this complements), D-110 (architecture).
+
+Surfaced 2026-05-23 during D-119 design (adversarial smoke testing of Stage 2.B Commit 1).
+
+### K-034 — Verified Payment Details upgrade (post-beta) (medium)
+
+D-120 ships **"Payment Details Registered"** at MVP — a label indicating the seller has set up a payout account. The upgrade to **"Payment Details Verified"** (L4 in the D-120 verification hierarchy) requires:
+
+- **Paystack Account Name Inquiry API integration** — query Paystack's `/bank/resolve` endpoint with the registered account number + bank code to retrieve the account holder name as Paystack sees it.
+- **Name-match check** — compare the Paystack-returned name against the seller's registered `account_name` (and optionally against `profiles.full_name` collected during identity verification). Match strategy: case-insensitive token-set similarity (Levenshtein or token-set ratio), threshold TBD.
+- **Admin review queue for mismatches** — flagged accounts surface in `/admin/payment-details-review` with the Paystack-returned name vs registered name + side-by-side; admin approves with override or rejects.
+- **"Payment Details Verified" badge** — visually distinct from "Payment Details Registered"; surfaces in conversation thread + seller profile.
+- **L4 verification level activation** — D-116 verification level computation reads from `seller_payout_accounts.verified_at` (column added in this upgrade).
+
+**Severity:** medium. Adds before public beta to differentiate trust signals — "Registered" alone is a weaker signal than buyers may infer.
+
+**Resolution scope (post-beta):** Paystack API client (server-only, service-role), admin review UI, migration adding `verified_at` + `verification_method` + `verified_by_admin_id` columns to `seller_payout_accounts`, RLS policy updates, vitest coverage for the name-match function.
+
+**Related:** D-120 (registered payment details), D-116 (verification level hierarchy), K-035 (change cooldown — pairs with verified-state invalidation on change).
+
+Surfaced 2026-05-23 during D-120 design.
+
+### K-035 — Payment Details change cooldown (post-beta) (medium)
+
+D-120 allows re-share with buyer warnings on supersession, but there is **no system-enforced cooldown** on seller account changes. A seller can update their payout account immediately, re-share, and prior buyers see only a single warning. This leaves a "trusted account replaced later" fraud pattern open: gain trust with account A, share with high-value buyer, swap to account B mid-deal.
+
+**Resolution scope (post-beta):**
+- Add `seller_payout_accounts.previous_account_snapshot JSONB` to capture the prior values on each UPDATE (encrypted, snapshot identical shape to `payment_detail_shares.account_snapshot`).
+- Add `seller_payout_accounts.cooldown_until TIMESTAMPTZ` — set to `NOW() + INTERVAL '14 days'` on UPDATE.
+- New shares during a cooldown window are explicitly flagged in the buyer view: "⚠️ Seller updated payment details X days ago. The previous account was: [bank] / [last-4-digits] / [account-name]."
+- Previous buyers (with non-superseded shares) get a one-time push/email notification on change (Phase E.notification work).
+- Admin review queue for shares created during cooldown.
+
+**Severity:** medium. Required before public beta to prevent fraud pattern. Not blocking private beta.
+
+**Related:** D-120 (registered payment details — base mechanism), K-034 (verified payment details — verification state invalidation on change), D-114 (anti-abuse).
+
+Surfaced 2026-05-23 during D-120 design.
+
+### K-036 — Listing-level filter enforcement: wire CREATE/EDIT actions (medium)
+
+**Reframed 2026-05-23 after E.2.6.0 §0 paste-back.** Production data already carries listing-context filter rules for the major rule types (phone, signal_link, social_handle, telegram_link, whatsapp_link, payment_url, shortened_url, email, nuban — all have `applies_to_context = ARRAY['listing_description']` rows in production). The data side is **already partially populated** from the E.1.5 seed and E.2.3.0 reconciliation.
+
+What's missing is the **code wiring**: listing CREATE/EDIT server actions in `src/lib/listings/actions.ts` (and any listing-edit Server Actions) do NOT currently invoke `runMessageFilter(content, tier, 'listing_description')`. The listing-context filter rules in production are unenforced data right now.
+
+**Severity:** medium. Required before public beta. A determined seller can move bypass content from chat to the listing description (which buyers see without any filter mediation).
+
+**Resolution scope:**
+1. **Code path verification (first step):** grep `runMessageFilter` callers — confirm zero callers in listing actions (Commit 1 wired only messaging actions).
+2. Add a listing-context entry to `runMessageFilter` signature (default `'message'` for backward compat) OR a new `runListingFilter(content, tier)` helper.
+3. Invoke from listing CREATE action + listing EDIT action; reject on block, set `metadata.contains_warning` on warn (similar to messages but at the listing row level — needs schema decision: where does the warning flag live on listings? A new column on `products`?).
+4. Add ~10 vitest cases for listing-context filtering.
+5. Manual smoke: create/edit listing with each blocked pattern (NUBAN, payment URL, etc.) — verify rejection.
+
+**Estimated effort:** 2-3 hours.
+
+**Open question (resolve during this commit):** D-119 also wants email/social handles/off-platform language UPGRADED from message-WARN to listing-BLOCK. The data may already reflect this (production has `social_handle | block | listing_description` per §0), so verify and align rather than presume new rows are needed.
+
+**Related:** D-119 (filter expansion — message context shipped in Commit 1.6, listing context deferred here), D-110 (architecture).
+
+Surfaced 2026-05-23 during D-119 design; reframed after E.2.6.0 §0 paste-back revealed data is already partially populated.
+
+### K-037 — K-029 NUBAN whitelist: tighten to adjacency-based price-context (low)
+
+Commit 1.6 (D-119) flips `nuban` from WARN to BLOCK in message context. The K-029 whitelist guard in `runMessageFilter` had to extend from warn-only to apply to both actions, otherwise legitimate ₦1B+ prices (10-digit naked amounts) would be hard-blocked.
+
+The current `isLikelyPriceContext` heuristic is **message-wide** — any "last price" / "negotiable" / "₦"-prefix anywhere in the message suppresses the NUBAN match. This was acceptable at warn-tier (over-suppression of a warn is low-harm) but is exploitable at block-tier: a determined scammer can craft *"send to 1234567890 — last price"* and the NUBAN-block fires its suppression on the unrelated "last price" tail.
+
+**Resolution scope (post-private-beta):**
+- Tighten `isLikelyPriceContext` to check **adjacency**: the price marker (₦ / N / "naira" / comma-format) must be within N characters of the matching digit-run, not anywhere in the message.
+- Possible implementation: regex with capture-group, or a two-pass match locator that confirms the digit-run's neighborhood.
+- Re-run vitest with the tighter logic and add false-negative cases for cleverly-worded scam attempts.
+
+**Severity:** low. The current K-029 implementation extends safely to block-tier; the exploit requires deliberate crafting and most legitimate ₦1B+ price messages will still pass. Tightening is a refinement, not a blocker for private beta.
+
+**Related:** K-029 (NUBAN price-context whitelist — original warn-only spec), D-119 (Commit 1.6 — the trigger for extending K-029 to block-tier).
+
+Surfaced 2026-05-23 during D-119 / Commit 1.6 design.
 
 ## Resolved or superseded
 

@@ -1753,3 +1753,150 @@ Private-beta invitations are themselves a form of structured referral: Frank inv
 
 ### Status
 Acknowledged as a critical growth lever. Detailed policy drafted + banked before public beta. Must align with D-112 (trust-first), D-114 (anti-abuse), and D-117 (privacy).
+
+---
+
+## D-113 Clarification: free-reveal mechanics (lifetime grant at phone verification, app_settings configurable)
+
+**Date:** 2026-05-23
+**Status:** Locked — refinement of D-113, not a new decision
+**Supersedes:** None (clarifies D-113)
+**Related:** D-113 (monetization phasing), D-114 (anti-abuse + configurable thresholds), D-119 (filter blocks NUBAN/phone in chat — which makes the reveal credit the controlled path)
+
+### Clarification
+D-113 banked the **per-stage default counts (3 / 2 / 2)** without explicitly stating the grant mechanics. This clarification fills the gap:
+
+1. **Free reveals are LIFETIME, not renewable.** Once consumed, a buyer must purchase a paid credit pack (D-113: 1 / 5 / 15 packs at ₦300 / ₦1,200 / ₦3,000). No daily/monthly refill of the free allotment.
+2. **Granted at phone verification completion**, not at signup. An unverified buyer has zero reveals. The grant is one-shot at the moment `verification_status` gains `phone_verified` — the same hook that runs the D-114 international-vs-`+234` policy split for non-`+234` buyers.
+3. **Stage-configurable via `app_settings` table** (or equivalent runtime config store). The 3/2/2 defaults are not hardcoded in code or migrations — they're read from config at grant time so the count can be tuned (D-113 spec line: "tunable to 1 if abuse warrants") without a deploy.
+
+### Why now
+Surfaced during Stage 2.B Commit 1 smoke testing of the D-110 messaging filter (adversarial review). The filter blocks NUBAN + Nigerian phone numbers in chat (D-119), which forces buyers to use the contact-reveal credit system to obtain seller contact — making the reveal-credit mechanics load-bearing for the D-112 trust hierarchy. The lifetime-grant clarification was implicit in D-113's anti-harvesting framing but not written down; tonight closes that gap before any reveal-credit code lands.
+
+### Implications (future engineering, NOT this commit)
+- `app_settings` table (or chosen runtime config equivalent) must exist before the reveal-credit action ships. Tracked as Phase E follow-up.
+- The grant trigger fires inside the phone-verification completion path (`mark_phone_verified` function or its caller — TBD per implementation).
+- D-114's "international (non-`+234`) free reveals require admin approval during beta" still applies — the grant trigger short-circuits for non-`+234` buyers and queues admin approval instead.
+
+---
+
+## D-119: D-110 Filter System Expansion — Nigerian-specific pattern coverage
+
+**Date:** 2026-05-23
+**Status:** Locked
+**Supersedes:** None (extends D-110)
+**Related:** D-110 (filter rules), D-112 (trust positioning), D-113 (contact reveal as the controlled phone-access path), D-114 (anti-abuse), D-120 (registered payment details — the controlled path that NUBAN chat-block forces users into), K-029 (NUBAN price-context whitelist), K-033 / K-036 (deferred filter work)
+
+### Context
+Adversarial smoke testing of Stage 2.B Commit 1 surfaced trivial bypass patterns of the existing D-110 filter: raw Nigerian phone number formats (`080…`, `+234…`, `234…`, spaced/dashed/dotted), WhatsApp domain typo variants (`we.me`, `w-a.me`, `whatsap.me`), telegram references without explicit links, bank platform name references, payment platform links (Paystack/Flutterwave/Monnify/Opay), shortened URLs (bit.ly / tinyurl / t.co / etc.). These bypasses directly contradict D-112's trust positioning. UI commits cannot ship trust signals on top of a weak filter foundation.
+
+### Decision (policy)
+- **Nigerian phone numbers (any format)** — BLOCK strictly. Buyers must use the contact-reveal credit system for seller phone access (D-113 monetization + accountability).
+- **NUBAN bank accounts (10 digits)** — BLOCK in chat. K-029 price-context whitelist preserved. Sellers share payment details via the D-120 controlled flow, not free-text chat.
+- **Off-platform handoff language** — WARN in messages (BLOCK at listing level when listing-context enforcement ships per K-036).
+- **Email addresses** — WARN in messages (BLOCK at listing level per K-036).
+- **Social handles** — WARN in messages (BLOCK at listing level per K-036).
+- **WhatsApp typo variants** — BLOCK (extends existing rule).
+- **Telegram + Signal references** — BLOCK (not WARN — too risky for MVP).
+- **Payment links** (Paystack, Flutterwave, Monnify, Opay, crypto, unknown payment URLs) — BLOCK.
+- **Shortened URLs** (bit.ly, tinyurl, t.co, cutt.ly, rebrand.ly, shorturl.at, is.gd, ow.ly) — BLOCK (anti-phishing).
+- **General payment language** (cash, transfer, delivery) — ALLOW.
+- **Price-looking numbers with price context** — ALLOW (K-029 whitelist preserved).
+
+### Listing-level vs message-level
+Listings are public, permanent, scalable bypass vectors. Stricter enforcement at the listing level (BLOCK email/social/handoff language that are WARN in messages). **Deferred to K-036** because the current listing CREATE/EDIT actions do not invoke `runMessageFilter` — listing-context rules would land as data with no enforcement path. K-036 captures the code-and-data work to wire listing actions through the filter.
+
+### Warning behavior
+WARN actions surface a user-facing warning **at every send** (not dismissed after first acceptance), mark `messages.metadata.contains_warning` permanently, log to `filter_actions_log`, and increment the user's repeat-violation counter for escalation tracking (D-114).
+
+### Implementation phases
+- **Phase 1 (this commit, 1.6):** data-driven `filter_rules` additions + vitest expansion. No code changes to `runMessageFilter` — existing architecture supports unlimited rule additions. Message context only (listing context deferred to K-036).
+- **Phase 2 (pre-public-beta, K-033):** normalization pipeline — Unicode NFC, number-to-digit conversion ("zero eight zero two…" obfuscation), lookalike substitution, whitespace/case normalization.
+- **Phase 3 (post-private-beta, K-033):** heuristic risk scoring for ambiguous cases.
+- **Phase 4 (Year 2+, K-033):** ML classification trained on real message corpus.
+
+### User-facing copy (block)
+- Phone numbers: *"For safety, phone numbers can't be shared in chat. Use contact reveal so access is logged and both sides stay protected."*
+- Bank accounts: *"For safety, bank account numbers can't be shared in chat. The seller can share verified payment details when you've agreed on the deal."*
+- Payment links: *"Payment links aren't allowed in ShowMePrice messages. ShowMePrice doesn't process product payments at MVP."*
+- Shortened URLs: *"Shortened links aren't allowed. Please share the full URL."*
+- Telegram/Signal: *"Links to Telegram or Signal aren't allowed — keep the conversation on ShowMePrice so there's a record."*
+
+### User-facing copy (warn — shown at every send)
+- Email: *"Email addresses may move the conversation outside ShowMePrice. Continue only if necessary."*
+- Social handles: *"Social handles can move the conversation outside ShowMePrice. For safety, keep key details in chat."*
+- Off-platform language: *"Moving off-platform reduces your protection. Keep important details in ShowMePrice chat where possible."*
+
+### Out of scope (this commit)
+- Number-as-words and lookalike normalization (K-033 Phase 2 — placeholder `it.skip()` vitest cases).
+- Listing-context enforcement (K-036).
+- Risk scoring / ML classification (K-033 Phase 3/4).
+
+---
+
+## D-120: Registered Payment Details — seller-initiated, per-conversation sharing
+
+**Date:** 2026-05-23
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-110 (filter rules — NUBAN block creates demand for this controlled path), D-112 (trust positioning), D-113 (contact reveal — prerequisite for payment-details share), D-114 (anti-abuse), D-116 (verification levels), D-119 (filter expansion — same commit), K-009 (legacy seller_verifications banking placeholders — superseded by this), K-034 (Verified Payment Details upgrade, post-beta), K-035 (change cooldown, post-beta)
+
+### Context
+D-119 blocks NUBAN account numbers in chat. Sellers still need a way to share payment information with serious buyers. The controlled path: a seller-initiated, per-conversation share mechanism that gates payment details behind the D-112 trust hierarchy and is auditable, encrypted at rest, and per-buyer scoped.
+
+### Architecture
+- **Sellers register ONE payment account** in their profile (bank name, account number, account name).
+- Account number stored **encrypted at rest** (AES-256-GCM via Web Crypto API, key in Cloudflare Pages env var `PAYMENT_DETAILS_ENCRYPTION_KEY`). **Web Crypto API, not Node `crypto`** — Cloudflare Edge runtime (D-019) does not provide Node built-ins.
+- Sellers wear a visible label **"Payment Details Registered"** (NOT "Verified" — verification upgrade is post-beta per K-034).
+- Payment details are **NEVER visible to anyone by default** — including buyers in active conversations with the seller.
+- Seller clicks **"Share payment details"** in a specific conversation to grant access to that one buyer in that one conversation.
+- **Prerequisite:** buyer must have revealed the seller's contact (via D-113 reveal credit) BEFORE the seller can share payment details. Maintains trust hierarchy: browse → message → reveal contact → share payment details.
+- Sharing is **FREE** for sellers at MVP (no credit cost). Post-traction monetization: pay-per-share credit OR included in Seller Pro/Premium plan.
+- Each share creates a `payment_detail_shares` row with a **snapshot of the account at share time** (ciphertext copied verbatim — no decrypt/re-encrypt cycle; snapshots stay encrypted at rest).
+- Buyer sees a mandatory **warning modal** before viewing the account: *"ShowMePrice doesn't hold funds or guarantee delivery. Pay only after inspection or when comfortable."*
+- Buyer view UI in conversation BEFORE share: placeholder text *"Payment details will appear here when seller shares them"*.
+- **Re-share allowed:** if the seller updates their registered account, the next share supersedes the previous (sets `superseded_at` on the old row); buyer sees a warning on next view: *"⚠️ Seller has updated payment details — verify before paying."*
+
+### Storage
+- **`seller_payout_accounts`** table (NEW). One active row per seller (UNIQUE on `seller_id`). Closes K-009 (the legacy `seller_verifications.bank_*` placeholders) by separating payout from identity verification. Columns: `id`, `seller_id` (PK FK profiles), `business_id` (NULLABLE FK businesses — informational only at MVP), `bank_name`, `account_number_encrypted`, `account_name`, `registered_at`, `last_changed_at`.
+- **`payment_detail_shares`** table (NEW). One row per share event. Columns: `id`, `conversation_id`, `seller_id`, `buyer_id`, `account_snapshot` (JSONB containing `{bank_name, account_name, account_number_encrypted}` — ciphertext verbatim), `shared_at`, `buyer_viewed_at`, `buyer_warning_accepted_at`, `superseded_at`.
+
+### Keying rationale (`seller_payout_accounts` is profile-keyed)
+Most ShowMePrice sellers at MVP do not have business records (D-116 Level 1 Phone Verified and Level 2 Identity Reviewed sellers are profile-only — only Level 3 Business Verified sellers have a `businesses` row). Keying on `seller_id` with an optional `business_id` link supports all seller levels at MVP and provides a clean upgrade path when a Level 1/2 seller later becomes Level 3 (the existing row gets its `business_id` populated; no data migration). Polymorphic owner (`owner_type` + `owner_id`) was rejected as overkill for a single seller-level upgrade path.
+
+### Verification level hierarchy
+- **L1: Phone Verified** (basic trust) — D-116.
+- **L2: Seller Verified** (identity/business reviewed) — D-116.
+- **L3: Payment Details Registered** (seller has set up account) — this decision.
+- **L4: Payment Details Verified** (name-matched via Paystack Account Name Inquiry + admin review) — **POST-BETA via K-034.**
+
+### Anti-abuse
+- Per-conversation share scope prevents mass-harvesting (each share is scoped to one buyer in one conversation).
+- Encryption at rest protects against DB breach exposure.
+- Reveal logs in `payment_detail_shares` accumulate for admin review of abuse patterns.
+- **K-035** (post-beta): 14-day cooldown after account changes; explicit warnings to prior buyers on the next view.
+
+### Server actions (`src/lib/payment-details/actions.ts`)
+- `setSellerPaymentDetails(bankName, accountNumber, accountName)` — UPSERT into `seller_payout_accounts` for the calling seller. Encrypts `accountNumber` before write. Sets `registered_at` on first insert; `last_changed_at` on update.
+- `sharePaymentDetailsWithBuyer(conversationId)` — seller-only; must be the seller in the conversation. Verifies seller has registered payment details (else `PaymentDetailsNotRegistered`). Verifies buyer has revealed seller's contact via `contact_reveals` (else `ContactRevealRequired`). Marks any existing non-superseded share for this conversation as superseded, then inserts a new share row with the current encrypted snapshot.
+- `getPaymentDetailsForConversation(conversationId)` — buyer-only; must be the buyer in the conversation. Returns the active (non-superseded) share decrypted, or `{ hasShare: false }`.
+- `markPaymentDetailsViewed(shareId)` — buyer-only; sets `buyer_viewed_at`.
+- `acceptPaymentDetailsWarning(shareId)` — buyer-only; sets `buyer_warning_accepted_at`.
+
+### Future monetization (post-traction, not this commit)
+- Free for sellers at MVP to maximize adoption.
+- Post-traction: pay-per-share credit OR Seller Pro/Premium subscription includes unlimited shares.
+
+### Out of scope (this commit)
+- Verified Payment Details (L4) — Paystack Account Name Inquiry + admin review (K-034).
+- Change cooldown (K-035).
+- All UI work — Commits 2-7 will surface registration form, share button, buyer view, warning modal, supersession warning.
+
+### UI work (deferred to Commits 2-7)
+- Seller profile section for entering/updating payment details (Commit 2 or later).
+- Conversation thread integration for seller's "Share payment details" button (Commit 3 or 4).
+- Buyer view of placeholder text BEFORE share (Commit 3).
+- Buyer view of revealed account AFTER share + mandatory warning modal (Commit 3).
+- Supersession warning on re-share (Commit 3).
+
+---

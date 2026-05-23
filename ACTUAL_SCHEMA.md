@@ -342,6 +342,7 @@ Admin-editable PII filter rules. Seeded with initial Nigerian-tuned ruleset in E
 **Notes:**
 - `applies_to_context` / `applies_to_tier` are **`text[]`** (NOT jsonb). A 2026-05-22 doc edit briefly mis-recorded these as `jsonb` (inferred from Supabase's JSON-like CSV rendering of `text[]`-of-strings); reverted here — the original `text[]` was correct, and `information_schema` (`data_type='ARRAY'`, `udt_name='_text'`) is authoritative. Query containment with `'message' = ANY(applies_to_context)`, not `@>`.
 - **E.2.3.0 reconciliation (D-110 Interpretation C, 2026-05-22):** `email` + `nuban` were split per-context — `block` for `listing_description` (tier `{free,pro}`), `warn` for `message` (tier `{free}`, Pro-exempt). Off-platform-handoff patterns (whatsapp/signal/telegram/payment_url/shortened_url) remain hard `block` in messages; listings unchanged.
+- **E.2.6.0 expansion (D-119, 2026-05-23):** NUBAN flipped from `warn` to `block` in message context (tier `{free}` preserved — Pro relaxation). K-029 price-context whitelist in `src/lib/messaging/filters.ts` extended to apply to block-tier so legitimate ₦1B+ prices don't get hard-blocked. **9 new rows inserted**, all message-context only (listing-context deferred to K-036): `phone_ng` block (Nigerian sep-tolerant phone, tier `{free,pro}`); `whatsapp_link` typo variants block (`we.me`, `w-a.me`, `whatsap.me`, `whatsap.com`, tier `{free,pro}`); `payment_url` extension block (paystack/flutterwave/flw/monnify/opay/paypal, tier `{free,pro}`); `shortened_url` extension block (bit.ly/cutt.ly/rebrand.ly/etc., tier `{free,pro}`); `telegram_link` block for `telegram.org/?` (tier `{free,pro}` — pre-existing `t.me\|telegram.me` rule preserved); new `telegram_ref` rule_type block for textual references (tier `{free,pro}`); new `off_platform_handoff` rule_type warn — 2 patterns (handoff language + "lets talk privately/outside", tier `{free}`); new `bank_platform_ref` rule_type warn (Nigerian bank brand names, tier `{free}`). `signal_link` extension was rejected during §0 paste-back — production already covers `signal.me` + `signal.org`.
 
 ### `institution_accounts`
 
@@ -538,6 +539,39 @@ Provider-agnostic payment record. Phase E populates via Paystack only (D-074). P
 **Notes:**
 - `pack_type` enum (E.2.0.4): closed set of 4 values matching D-085 locked credit pack structure (Trial ₦500/1 reveal, Small ₦1,500/3, Medium ₦3,500/9, Large ₦7,000/20). Enum (not text) because the value set is fixed — unlike `payment_type`/`status`/`tier`/`plan_code` which are text for extensibility.
 - Credit balance accumulation happens on `credit_balances` (running balance only); `payments.pack_type` records which pack was purchased for analytics + reconciliation.
+
+### `payment_detail_shares`
+
+Phase E Stage 2.B Commit 1.6 / D-120 (migration **E.2.7.0**, verified live 2026-05-23). Per-conversation, per-buyer payment-details share events. Created when the seller clicks "Share payment details" in a conversation; the active share for a conversation has `superseded_at IS NULL`. Re-share (after seller updates `seller_payout_accounts`) creates a new row + sets `superseded_at` on the old one.
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| id | uuid | NO | gen_random_uuid() |
+| conversation_id | uuid → conversations(id) CASCADE | NO | — |
+| seller_id | uuid → profiles(id) CASCADE | NO | — |
+| buyer_id | uuid → profiles(id) CASCADE | NO | — |
+| account_snapshot | jsonb | NO | — (`{bank_name, account_name, account_number_encrypted}` — ciphertext copied verbatim from `seller_payout_accounts` at share time; no decrypt/re-encrypt cycle, snapshots stay encrypted at rest) |
+| shared_at | timestamptz | NO | now() |
+| buyer_viewed_at | timestamptz | YES | — (set by `markPaymentDetailsViewed`) |
+| buyer_warning_accepted_at | timestamptz | YES | — (set by `acceptPaymentDetailsWarning`) |
+| superseded_at | timestamptz | YES | — (set on the OLD row when seller re-shares; NULL on the active row) |
+| created_at | timestamptz | NO | now() |
+
+**Constraints:**
+- `payment_detail_shares_snapshot_shape` CHECK — `account_snapshot` is a jsonb object with the three required keys.
+- FKs: `payment_detail_shares_conversation_id_fkey` (CASCADE), `_seller_id_fkey` (CASCADE), `_buyer_id_fkey` (CASCADE).
+
+**Indexes:**
+- `payment_detail_shares_active_per_conversation_idx` btree on `(conversation_id) WHERE superseded_at IS NULL` — drives `getPaymentDetailsForConversation`.
+- `payment_detail_shares_buyer_idx` btree on `(buyer_id)`.
+- `payment_detail_shares_seller_idx` btree on `(seller_id)`.
+
+**RLS (5 policies — verified 2026-05-23):**
+- `payment_detail_shares_seller_select` (SELECT): `seller_id = auth.uid()`
+- `payment_detail_shares_buyer_select` (SELECT): `buyer_id = auth.uid()`
+- `payment_detail_shares_seller_insert` (INSERT): WITH CHECK `seller_id = auth.uid()`
+- `payment_detail_shares_buyer_update` (UPDATE): USING + CHECK `buyer_id = auth.uid()` (for viewed_at / warning_accepted_at)
+- `payment_detail_shares_seller_update` (UPDATE): USING + CHECK `seller_id = auth.uid()` (for re-share supersession)
 
 ### `phone_verifications`
 
@@ -788,9 +822,43 @@ Empty in Phase E; Phase F+ ships as Pro seller feature.
 | message_template | text | YES | — |
 | created_at | timestamptz | NO | now() |
 
+### `seller_payout_accounts`
+
+Phase E Stage 2.B Commit 1.6 / D-120 (migration **E.2.7.0**, verified live 2026-05-23). Seller's registered payout account. One row per seller (UNIQUE on `seller_id`). Profile-keyed because most ShowMePrice sellers at MVP don't have a business record (D-116 Levels 1-2); `business_id` is optional and informational only at MVP.
+
+**Supersedes K-009's `seller_verifications.bank_*` placeholders.** Those columns remain in production until a future cleanup migration drops them; D-120 stops using them.
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| id | uuid | NO | gen_random_uuid() |
+| seller_id | uuid → profiles(id) CASCADE | NO | — (UNIQUE) |
+| business_id | uuid → businesses(id) SET NULL | YES | — (informational only at MVP; labels which business this payout is associated with for L3 Business Verified sellers) |
+| bank_name | text | NO | — (CHECK length 1-200) |
+| account_number_encrypted | text | NO | — (Base64(IV ‖ ciphertext ‖ tag) — AES-256-GCM via Web Crypto; key in Cloudflare env `PAYMENT_DETAILS_ENCRYPTION_KEY`. DB cannot decrypt. CHECK length 1-2048) |
+| account_name | text | NO | — (CHECK length 1-200) |
+| registered_at | timestamptz | NO | now() |
+| last_changed_at | timestamptz | YES | — (set on each UPDATE; NULL until first change after registration) |
+| created_at | timestamptz | NO | now() |
+| updated_at | timestamptz | NO | now() |
+
+**Constraints:**
+- `seller_payout_accounts_seller_id_key` UNIQUE (`seller_id`) — one payout account per seller.
+- `seller_payout_accounts_bank_name_check`, `_account_number_encrypted_check`, `_account_name_check` — length bounds.
+- FKs: `_seller_id_fkey` (CASCADE), `_business_id_fkey` (SET NULL).
+
+**Indexes:**
+- PK + UNIQUE on `seller_id` + `seller_payout_accounts_business_idx` btree partial on `(business_id) WHERE business_id IS NOT NULL`.
+
+**RLS (3 policies — verified 2026-05-23):**
+- `seller_payout_accounts_self_select` (SELECT): `seller_id = auth.uid()`
+- `seller_payout_accounts_self_insert` (INSERT): WITH CHECK `seller_id = auth.uid()`
+- `seller_payout_accounts_self_update` (UPDATE): USING + CHECK `seller_id = auth.uid()`
+
+No DELETE policy — re-share supersedes via `payment_detail_shares`; the payout row itself is updated in place.
+
 ### `seller_verifications`
 
-Originally a banking-focused table from Phase A. Phase C.5 P.1 ALTERed it to add identity-verification columns. Banking columns remain NOT NULL and are populated with the placeholder string `"PENDING"` until Phase G builds the payout flow (K-009).
+Originally a banking-focused table from Phase A. Phase C.5 P.1 ALTERed it to add identity-verification columns. Banking columns remain NOT NULL and are populated with the placeholder string `"PENDING"` until Phase G builds the payout flow (K-009 — **effectively closed by D-120 / `seller_payout_accounts`; the `bank_*` columns here are dead-code-in-data pending a future cleanup migration**).
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
@@ -1323,6 +1391,8 @@ All Phase E.1.x SQL blocks shipped with pre-flight diagnostics, BEGIN/COMMIT-wra
 | E.1.2 | 9 tables (admins, reports, blocks, admin_action_log, admin_emails, filter_actions_log, search_query_log, saved_listings, price_history) + products price-change trigger + orphan index cleanup | V1–V6 |
 | E.1.3 | 14 empty-schema tables (Phase F+/G+/H+ deferred features) | V1–V4 |
 | E.1.3.1 | DROP TABLE admin_audit_log (D-081) | V1–V4 |
+| E.2.6.0 | D-119 filter rules expansion: nuban warn→block (message context), 9 new D-119 rows (`phone_ng`, whatsapp typo, payment_url extra, shortened_url extra, telegram.org, `telegram_ref`, `off_platform_handoff` x2, `bank_platform_ref`). Listing-context rules deferred to K-036. K-029 whitelist guard extended to block-tier in `filters.ts` so legitimate ₦1B+ prices don't get hard-blocked. | §0 + §1 DO-block assertions + §2 paste-back (2026-05-23) |
+| E.2.7.0 | D-120 registered payment details: `seller_payout_accounts` table (one row per seller, encrypted account number via Web Crypto AES-256-GCM, key in `PAYMENT_DETAILS_ENCRYPTION_KEY`) + `payment_detail_shares` table (per-conversation share events with jsonb snapshot + supersession). 5 RLS policies on shares (seller/buyer SELECT, seller INSERT, buyer/seller UPDATE) + 3 on payout accounts. Closes K-009 (the legacy `seller_verifications.bank_*` placeholders are now dead-code-in-data). | §0 + §1 DO-block assertions + §2 paste-back (2026-05-23) |
 
 ---
 

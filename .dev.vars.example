@@ -15,3 +15,9 @@ PAYSTACK_SECRET_KEY=
 
 # Admin bootstrap (D-105). Email that auto-grants admin on signup/signin.
 ADMIN_BOOTSTRAP_EMAIL=
+
+# D-120 registered payment details. Base64-encoded 32-byte (AES-256) key.
+# Generate with: openssl rand -base64 32
+# Used by src/lib/crypto/payment-details.ts (Web Crypto AES-256-GCM) to
+# encrypt seller bank account numbers at rest. NEVER commit a real key.
+PAYMENT_DETAILS_ENCRYPTION_KEY=

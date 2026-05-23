@@ -77,3 +77,21 @@ For DDL: no automatic rollback. Migrations are forward-only. Write a new migrati
 
 1. Check Supabase Auth → URL Configuration → redirect URLs include all deploy URLs
 2. Check the `@supabase/ssr` middleware is wired correctly
+
+## Generating the payment-details encryption key (D-120)
+
+`PAYMENT_DETAILS_ENCRYPTION_KEY` must be a Base64-encoded 32-byte value (AES-256). It encrypts seller bank-account numbers at rest via Web Crypto in `src/lib/crypto/payment-details.ts`.
+
+Generate one (do this once per environment — local dev / staging / production):
+
+```bash
+openssl rand -base64 32
+```
+
+Where to put it:
+
+- **Local dev:** add to `.dev.vars` (gitignored). The value never leaves the dev machine.
+- **Production:** add to Cloudflare Pages → Project → Settings → Environment variables → Production. Mark as encrypted secret.
+- **Staging:** same as production but in the Preview environment scope.
+
+**Rotation:** rotating the key invalidates all stored ciphertext (existing rows become un-decryptable). At MVP scale this is acceptable — schedule rotation only with a planned re-share flow that re-encrypts under the new key. Track as a future K-issue if compromise is suspected.
