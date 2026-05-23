@@ -341,13 +341,19 @@ Stage 2.B Commit 1.6 smoke testing (2026-05-23) confirmed: 7+ BLOCK events fired
 
 Surfaced 2026-05-23 during D-119 production smoke testing.
 
-### K-040 — Header Messages icon — unread-presence dot (low, Commit 6 polish)
+### K-040 — Header Messages icon — unread-presence dot — RESOLVED by Commit 5.1 (2026-05-23)
 
-Stage 2.B Commit 2 shipped the header `/messages` link without any unread indicator (G1 from Commit 2 surface findings). Adding a small boolean **"has unread?"** presence dot next to the entry point is materially cheaper than counting all unreads (a per-row `unread_count`-sum traversal), and the dot is the standard UX cue ("you have something to see") without committing to a number.
+**Status:** Closed. Frank's D-121 reaffirmation directive ("outstandingly world-class professional UX") raised the bar from presence-dot to full count. Commit 5.1 shipped:
 
-**Scope (post-Commit 5 update, 2026-05-23):** Commit 5 dropped the desktop inline text link and replaced it with a header icon button visible at all viewports. UserMenu retains a textual "Messages" backup. Net: TWO entry points need the dot when shipped:
-1. **Header Messages icon button** (primary at all viewports — Commit 5).
-2. **UserMenu "Messages" dropdown row** (textual backup — Commit 3).
+- **Header Messages icon:** red count badge (bg-red-500 + white number, 99+ cap, ring-2 ring-white for crispness). **Realtime-updating** via client subscription to messages INSERT/UPDATE — count adjusts instantly as new messages arrive and as the user reads them, on every page across the app.
+- **UserMenu "Messages" dropdown row:** inline red count badge (right-aligned in the row). Server-rendered count; refreshes on navigation. Slight stale-window vs the header icon is bounded and acceptable (UserMenu is a tap-to-open surface; users see the live icon badge first).
+- **Conversation row unread badges:** changed from teal-600 to red-500 for semantic consistency. Time-color reverted from teal-700-when-unread to ink-400 (the badge + bold name carry the unread signal cleanly without competing chrome).
+
+Mature-competitor pattern adopted: iMessage / Messenger-style red badges everywhere unread is signalled. WhatsApp uses green (its brand), but ShowMePrice's teal-as-brand-color stays for affordances (CTAs, links, focus rings) while red owns the "you have unread" semantic.
+
+Shipped as Commit 5.1 (`hash TBD on push`) — see commit body for the helper module (`src/lib/messaging/unread.ts`) and the realtime badge component (`src/components/layout/MessagesIconWithBadge.tsx`).
+
+**Resolution scope original framing (now closed):** boolean has-unread dot at header + UserMenu. Superseded by full-count + realtime per D-121 reaffirmation.
 
 **Resolution scope (Commit 6 polish):**
 - Add a small server-side helper `hasUnreadMessages(userId)` that does a single `EXISTS` query on `messages` joined to `conversations`:

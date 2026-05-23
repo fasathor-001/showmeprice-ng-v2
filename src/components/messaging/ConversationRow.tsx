@@ -205,14 +205,20 @@ export function ConversationRow({
         </div>
       </div>
 
-      {/* Right column: time + unread pill */}
+      {/* Right column: time + unread pill.
+          D-121 reaffirmation (Commit 5.1): unread badge is red, matching the
+          header icon badge + UserMenu badge. Red = "you have unread" across
+          the whole messaging surface — consistent semantics.
+          Time color stays ink-400 always (the red badge + bold name + bold
+          preview are sufficient unread signal; the previous teal-700 time
+          tint competed visually with the red badge). */}
       <div className="flex flex-col items-end gap-1 shrink-0">
-        <span className={`text-xs ${hasUnread ? "text-teal-700 font-medium" : "text-ink-400"}`}>
+        <span className="text-xs text-ink-400">
           {formatConversationTime(lastMessageAt, now)}
         </span>
         {hasUnread && (
           <span
-            className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-teal-600 text-white text-[11px] font-medium leading-none"
+            className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold leading-none"
             aria-label={`${unreadCount} unread`}
           >
             {unreadCount > 99 ? "99+" : unreadCount}

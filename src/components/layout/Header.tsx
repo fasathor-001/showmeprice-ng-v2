@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getUnreadMessagesCount } from "@/lib/messaging/unread";
 import { Button } from "@/components/ui";
 import { Container } from "./Container";
 import { HeaderSearch } from "./HeaderSearch";
+import { MessagesIconWithBadge } from "./MessagesIconWithBadge";
 import { UserMenu } from "./UserMenu";
 
 export async function Header() {
@@ -13,14 +15,24 @@ export async function Header() {
 
   let displayName: string | null = null;
   let isAdmin = false;
+  let unreadMessagesCount = 0;
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, role")
-      .eq("id", user.id)
-      .single();
+    // Parallel: profile (for display name + admin role) + unread count for
+    // the messages badge. The unread query is cheap (count over partial
+    // index); runs on every signed-in page render. Realtime updates layer
+    // on top via MessagesIconWithBadge / UserMenu.
+    const [profileRes, unreadRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("display_name, role")
+        .eq("id", user.id)
+        .single(),
+      getUnreadMessagesCount(user.id),
+    ]);
+    const profile = profileRes.data;
     displayName = profile?.display_name ?? user.email?.split("@")[0] ?? "Account";
     isAdmin = profile?.role === "admin";
+    unreadMessagesCount = unreadRes;
   }
 
   return (
@@ -58,30 +70,23 @@ export async function Header() {
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {user && (
-              // Stage 2.B Commit 5 — Messages icon button. 44×44 tap target,
-              // visible at all viewports (mobile + desktop). K-040 (unread
-              // presence dot) wires in here in Commit 6 polish.
-              <Link
-                href="/messages"
-                aria-label="Messages"
-                className="inline-flex items-center justify-center w-11 h-11 rounded-full text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 transition-colors"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
-              </Link>
+              // Stage 2.B Commit 5.1 — Messages icon with realtime red count
+              // badge (D-121 reaffirmation: world-class unread visibility).
+              // Server-rendered initial count; client subscription updates
+              // it live across all pages. K-040 closed by this commit
+              // (shipped as full count + realtime, better than original dot).
+              <MessagesIconWithBadge
+                userId={user.id}
+                initialCount={unreadMessagesCount}
+              />
             )}
             {user ? (
-              <UserMenu displayName={displayName ?? "Account"} email={user.email ?? ""} isAdmin={isAdmin} />
+              <UserMenu
+                displayName={displayName ?? "Account"}
+                email={user.email ?? ""}
+                isAdmin={isAdmin}
+                unreadMessagesCount={unreadMessagesCount}
+              />
             ) : (
               <>
                 <Link

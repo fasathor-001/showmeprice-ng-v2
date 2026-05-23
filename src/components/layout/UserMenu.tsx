@@ -9,9 +9,16 @@ interface UserMenuProps {
   displayName: string;
   email: string;
   isAdmin?: boolean;
+  /** Total unread messages — drives the inline red badge on the Messages row. */
+  unreadMessagesCount?: number;
 }
 
-export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps) {
+export function UserMenu({
+  displayName,
+  email,
+  isAdmin = false,
+  unreadMessagesCount = 0,
+}: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +41,9 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
       .slice(0, 2)
       .join("")
       .toUpperCase() || "U";
+
+  const unreadDisplay =
+    unreadMessagesCount > 99 ? "99+" : String(unreadMessagesCount);
 
   return (
     <div className="relative" ref={menuRef}>
@@ -65,16 +75,25 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
           >
             Dashboard
           </Link>
-          {/* Commit 3 — mobile-reachable entry to /messages. K-040 tracks
-              adding an unread-presence dot here + on the lg+ inline link in
-              Commit 6 polish. */}
+          {/* Stage 2.B Commit 5.1 — inline red unread badge next to "Messages"
+              when count > 0. Server-rendered count (refreshes on navigation);
+              the realtime-live indicator is the header Messages icon badge
+              above. UserMenu re-syncs on next route change. */}
           <Link
             href="/messages"
-            className="block px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+            className="flex items-center justify-between px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
             role="menuitem"
             onClick={() => setOpen(false)}
           >
-            Messages
+            <span>Messages</span>
+            {unreadMessagesCount > 0 && (
+              <span
+                className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+                aria-label={`${unreadMessagesCount} unread`}
+              >
+                {unreadDisplay}
+              </span>
+            )}
           </Link>
           {isAdmin && (
             <Link
