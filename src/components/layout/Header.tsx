@@ -49,6 +49,14 @@ export async function Header() {
             <Link href="/sell" className="hover:text-ink transition-colors">
               Sell
             </Link>
+            {user && (
+              // Stage 2.B Commit 2 — minimal entry to the conversation list.
+              // No unread-count badge here; K-040 tracks the polish item to
+              // surface a presence dot in Commit 6.
+              <Link href="/messages" className="hover:text-ink transition-colors">
+                Messages
+              </Link>
+            )}
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">

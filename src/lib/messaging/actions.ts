@@ -11,6 +11,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isPhoneVerified } from "@/lib/auth";
+import { getProductImagePublicUrl } from "@/lib/storage";
 import { runMessageFilter, blockReason, logFilterAction } from "./filters";
 import type {
   CreateConversationResult,
@@ -475,6 +476,32 @@ export async function listConversations(
     }
   }
 
+  // Primary listing thumbnail per row (Commit 2 — B1 placeholder for missing).
+  // Single batched product_images query, ORDER BY position then earliest, then
+  // take the first row per listing. Avoids N+1.
+  const listingIds: string[] = [];
+  for (const r of page) {
+    const lid = r.listing_id as string | null;
+    if (lid && !listingIds.includes(lid)) listingIds.push(lid);
+  }
+  const primaryImageByListing = new Map<string, string>();
+  if (listingIds.length > 0) {
+    const { data: imgs } = await supabase
+      .from("product_images")
+      .select("product_id, storage_path, position")
+      .in("product_id", listingIds)
+      .order("position", { ascending: true });
+    for (const img of imgs ?? []) {
+      const pid = img.product_id as string;
+      if (!primaryImageByListing.has(pid)) {
+        primaryImageByListing.set(
+          pid,
+          getProductImagePublicUrl(img.storage_path as string),
+        );
+      }
+    }
+  }
+
   const pickOne = <T>(v: T | T[] | null | undefined): T | null =>
     Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
 
@@ -501,6 +528,7 @@ export async function listConversations(
             title: listingRaw.title ?? "—",
             priceKobo: listingRaw.price_kobo ?? null,
             status: listingRaw.status,
+            primaryImageUrl: primaryImageByListing.get(listingRaw.id) ?? null,
           }
         : null,
       lastMessage: previewById.get(r.id as string) ?? null,

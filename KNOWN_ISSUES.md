@@ -341,6 +341,30 @@ Stage 2.B Commit 1.6 smoke testing (2026-05-23) confirmed: 7+ BLOCK events fired
 
 Surfaced 2026-05-23 during D-119 production smoke testing.
 
+### K-040 — Header "Messages" link — unread-presence dot (low, Commit 6 polish)
+
+Stage 2.B Commit 2 ships the header `/messages` link without any unread indicator (G1 from Commit 2 surface findings). Adding a small boolean **"has unread?"** presence dot next to the link is materially cheaper than counting all unreads (a per-row `unread_count`-sum traversal), and the dot is the standard UX cue ("you have something to see") without committing to a number.
+
+**Resolution scope (Commit 6 polish):**
+- Add a small server-side helper `hasUnreadMessages(userId)` that does a single `EXISTS` query on `messages` joined to `conversations`:
+  ```sql
+  SELECT EXISTS (
+    SELECT 1 FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.read_at IS NULL
+      AND m.sender_id <> $userId
+      AND (c.buyer_id = $userId OR c.seller_id = $userId)
+  );
+  ```
+- Wire into `Header.tsx`'s server-side data prep. Conditional render: small teal dot (4-5px) absolutely positioned at the top-right of the "Messages" label when result is true.
+- No badge number, no animation — just presence vs absence.
+
+**Severity:** low. Pure UX polish. Users can already navigate via the link and see unread counts on each row.
+
+**Related:** Commit 2 (Stage 2.B conversation list — this link ships without the indicator), D-109 (last-seen / read tracking model — same `messages_unread_idx` partial index that supports unread-counting on rows).
+
+Surfaced 2026-05-23 during Commit 2 surface findings (Question G2).
+
 ### K-039 — Deposit-request / pre-payment-demand detection (D-119 Phase 2 candidate, medium)
 
 Pre-payment demand language like *"deposit before delivery"*, *"pay 50% upfront to secure"*, *"reservation fee to lock in"* doesn't contain a payment INSTRUMENT (no account number, no payment link) but explicitly signals one of the highest-frequency Nigerian marketplace fraud patterns: ask for partial payment before goods are seen, then disappear.

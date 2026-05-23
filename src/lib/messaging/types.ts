@@ -80,6 +80,11 @@ export interface ConversationSummary {
     title: string;
     priceKobo: number | null;
     status: string;
+    // Public URL for the listing's primary image (lowest `position`), or NULL
+    // when the listing has no images / has been deleted (status='deleted'
+    // — listing row is gone) / or no image rows exist. UI renders a generic
+    // placeholder when null.
+    primaryImageUrl: string | null;
   } | null;
   lastMessage: {
     content: string | null;
