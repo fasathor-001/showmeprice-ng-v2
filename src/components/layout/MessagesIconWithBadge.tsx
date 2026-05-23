@@ -102,6 +102,11 @@ export function MessagesIconWithBadge({
       aria-label={ariaLabel}
       className="relative inline-flex items-center justify-center w-11 h-11 rounded-full text-ink-600 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 transition-colors"
     >
+      {/* D-121 reaffirmation (Commit 5.2): square chat icon (rounded rect
+          with a corner notch) per Frank's directive. Standard "message-square"
+          glyph — same shape used in Lucide / Feather icon sets. Replaces the
+          previous elliptical chat-bubble. Matched in EmptyThreadPane so the
+          messaging surface uses one icon family. */}
       <svg
         viewBox="0 0 24 24"
         className="w-5 h-5"
@@ -112,7 +117,7 @@ export function MessagesIconWithBadge({
         strokeLinejoin="round"
         aria-hidden="true"
       >
-        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
       {count > 0 && (
         <span
