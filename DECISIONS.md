@@ -1940,3 +1940,98 @@ ShowMePrice competes directly with Jiji, Facebook Marketplace, and WhatsApp comm
 - Stage planning should budget for UX time as first-class scope, not optional.
 
 ---
+
+## D-122: Advertising Posture — Marketplace-native promotion only
+
+**Date:** 2026-05-23
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-112 (trust-first positioning), D-113 (contact reveal credits — primary revenue), D-123 (promotion architecture), D-123b (activation triggers)
+
+### Decision
+ShowMePrice does NOT show third-party display ads (AdSense, Meta Audience Network, banner ad networks). Revenue from advertising-style surfaces comes only from marketplace-native promotion.
+
+### Allowed monetization surfaces
+- **Promoted Listings** — sellers pay to boost their own verified listings.
+- **Sponsored merchant placements** — verified businesses in relevant categories (post-traction).
+- **Cross-promotion** of ShowMePrice features and subscriptions.
+- **Category sponsorship** — verified merchants funding category-wide visibility (post-traction).
+
+### Reasoning
+D-112 trust-first positioning is undermined by third-party display ads. Marketplace-native promotion aligns platform incentives with user trust — the platform earns when sellers transact, not when buyers see ads. Mature marketplaces (eBay, Amazon, Facebook Marketplace) monetize through promoted listings, not banner inventory.
+
+### Forbidden in any commit or feature
+- AdSense, Meta Audience Network, or similar third-party ad network integration.
+- Affiliate link injection in user content.
+- Popup, interstitial, or autoplay ad surfaces.
+- Cross-platform ad tracking from third-party networks (Facebook Pixel, Google Ads remarketing, etc.) — exception: ShowMePrice's own marketing campaigns using these networks for outbound acquisition is fine; the prohibition is on EMBEDDING third-party tracking into the product surface.
+
+---
+
+## D-123: Marketplace Promotion Architecture
+
+**Date:** 2026-05-23
+**Status:** Locked
+**Supersedes:** None
+**Related:** D-122 (advertising posture), D-123b (activation triggers), D-112 (trust-first positioning), D-113 (contact reveal credits — primary revenue)
+
+### Decision
+ShowMePrice's promotion model is trust-weighted, not pay-to-win.
+
+### Core principles
+- **ADDITIVE boost weight within trust tier, never multiplicative across tiers** — paying sellers move up among their peers, never above substantially more trusted sellers.
+- **VERIFIED-ONLY boost eligibility** — verification is a prerequisite to boost, not an outcome of paying.
+- **DENSITY-CAPPED** — maximum 20% of any category/search results page is promoted; organic results dominate.
+- **VISIBLY LABELED** — all boosted listings show a "Featured" or "Promoted" indicator (transparency to buyers).
+- **FIXED PRICING** — no auctions or dynamic pricing at MVP; seller predictability matters.
+
+### MVP scope (infrastructure only, NOT monetization activation)
+- Listings table boost columns (`boost_until`, `boost_tier`).
+- Marketplace search/sort respects boost priority WITHIN trust tier.
+- Category pages render "Featured" section distinct from organic.
+- Boost transactions flow through the standard Paystack merchant flow.
+- Operational infrastructure: refund policy for suspended boosts, admin disable-on-violation flow, listing-edit-revokes-boost rule, boost-end cron.
+
+### Post-MVP roadmap (in order)
+1. **Featured Listings** (single tier, ₦TBD per 3 days).
+2. **Search Boosts** (boost visibility for a specific category for X days).
+3. **Seller Spotlight** ("Trusted Sellers in Lagos" featured carousels).
+4. **Category Sponsorship** ("Verified Laptop Week").
+5. **Response-rate-as-boost-eligibility** (sellers with low reply rate lose boost privilege).
+6. **Boost-effectiveness analytics dashboard** for sellers (ROI visibility).
+
+### Cautions (banked for future awareness)
+- "Featured" labels reduce boost effectiveness for label-aware buyers; price boosts accordingly.
+- Verified sellers may not be the highest-paying boost cohort; revenue may concentrate in less-trust-conscious-but-verified sellers.
+- Do NOT publicly position as "trust-ranked marketplace" until ranking data validates the claim.
+
+### Out of scope at any stage
+- Pay-to-win ranking (boost overriding trust).
+- Hidden promotions (all boosts visibly labeled).
+- Boost auctions or dynamic pricing.
+
+---
+
+## D-123b: Promotion Activation Trigger
+
+**Date:** 2026-05-23
+**Status:** Locked — clarifies D-123 activation conditions
+**Supersedes:** None
+**Related:** D-122 (advertising posture), D-123 (promotion architecture)
+
+### Decision
+Activate boost monetization (begin selling Featured Listings) when ALL conditions are met:
+
+1. Active listings >100 per major category (phones, laptops, generators).
+2. ≥50 verified sellers across the platform.
+3. Buyer messaging traffic averages >10 conversations/day.
+4. At least one fraud incident successfully prevented by trust filters (validates trust signals work).
+
+### Operational
+- **Before all four conditions met:** build infrastructure quietly. Do NOT sell boosts.
+- **After all four conditions met:** ship Featured Listings, market to verified sellers, measure click/transaction lift over 30 days before expanding to other boost tiers.
+
+### Calibration note
+Thresholds are placeholder targets; revise quarterly based on actual marketplace behavior. Track-back: if any threshold turns out to be wrong, document why and append a new clarification (preserves the audit trail rather than editing in place).
+
+---
