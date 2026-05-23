@@ -345,6 +345,10 @@ Surfaced 2026-05-23 during D-119 production smoke testing.
 
 Stage 2.B Commit 2 ships the header `/messages` link without any unread indicator (G1 from Commit 2 surface findings). Adding a small boolean **"has unread?"** presence dot next to the link is materially cheaper than counting all unreads (a per-row `unread_count`-sum traversal), and the dot is the standard UX cue ("you have something to see") without committing to a number.
 
+**Scope expanded (Commit 3, 2026-05-23):** Commit 3 adds a second entry point — "Messages" in the **UserMenu** dropdown (mobile-reachable per Frank's bundled scope). The presence dot must surface in BOTH places when shipped:
+1. Inline `lg+` header nav link (current Commit 2 entry point).
+2. UserMenu dropdown "Messages" row (new Commit 3 entry point — primary path on mobile).
+
 **Resolution scope (Commit 6 polish):**
 - Add a small server-side helper `hasUnreadMessages(userId)` that does a single `EXISTS` query on `messages` joined to `conversations`:
   ```sql
@@ -356,14 +360,34 @@ Stage 2.B Commit 2 ships the header `/messages` link without any unread indicato
       AND (c.buyer_id = $userId OR c.seller_id = $userId)
   );
   ```
-- Wire into `Header.tsx`'s server-side data prep. Conditional render: small teal dot (4-5px) absolutely positioned at the top-right of the "Messages" label when result is true.
+- Wire into `Header.tsx`'s server-side data prep. Pass `hasUnread: boolean` prop into UserMenu (currently `displayName` + `email` + `isAdmin`).
+- Conditional render: small teal dot (4-5px) on the inline header label AND on the UserMenu "Messages" row when result is true.
 - No badge number, no animation — just presence vs absence.
 
-**Severity:** low. Pure UX polish. Users can already navigate via the link and see unread counts on each row.
+**Severity:** low. Pure UX polish. Users can already navigate via either entry point and see unread counts on each row in the list.
 
-**Related:** Commit 2 (Stage 2.B conversation list — this link ships without the indicator), D-109 (last-seen / read tracking model — same `messages_unread_idx` partial index that supports unread-counting on rows).
+**Related:** Commit 2 + Commit 3 (Stage 2.B — both entry points ship without the indicator), D-109 (last-seen / read tracking model — same `messages_unread_idx` partial index that supports unread-counting on rows), K-041 (read-receipts polish — same Commit 6 surface).
 
-Surfaced 2026-05-23 during Commit 2 surface findings (Question G2).
+Surfaced 2026-05-23 during Commit 2 surface findings (Question G2); scope expanded 2026-05-23 during Commit 3 surface findings (Question E).
+
+### K-041 — Read receipts on sent messages (low, Commit 6 polish)
+
+Stage 2.B Commit 3 ships the message thread UI without read-receipt indicators. WhatsApp-style receipts (single ✓ sent / double ✓✓ read) on the current user's own SENT messages are a high-value low-cost UX cue but were deferred to keep Commit 3's surface clean.
+
+**Symmetric data, not a D-109 asymmetry concern.** The `messages.read_at` column is set when the non-sender opens the thread (via `getMessages` → `markRead`). The sender of a message can read `read_at` on their own row — they can already see whether their message has been read. Both buyer and seller get receipts on their own sent messages; this is not a privacy-asymmetry concern (distinct from D-109's last-seen display rule, which IS asymmetric). Pairs with K-040 unread-presence dot in the same Commit 6 polish pass.
+
+**Resolution scope (Commit 6 polish):**
+- In `src/components/messaging/MessageBubble.tsx`, when `isCurrentUser === true`, render after the timestamp:
+  - `read_at !== null` → small `✓✓` in teal-700 with `aria-label="Read"`.
+  - `read_at === null` → small `✓` in ink-400 with `aria-label="Sent"`.
+- System messages and non-text types (image / voice_note / offer) get the same treatment.
+- No animations, no "seen at" timestamp surface; just the binary indicator.
+
+**Severity:** low. Pure UX polish. Users can verify message delivery indirectly via responses.
+
+**Related:** Commit 3 (this commit defers the surface), K-040 (paired Commit 6 polish), D-109 (last-seen model — read receipts are a related but symmetric concern).
+
+Surfaced 2026-05-23 during Commit 3 surface findings (Question L).
 
 ### K-039 — Deposit-request / pre-payment-demand detection (D-119 Phase 2 candidate, medium)
 

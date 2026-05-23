@@ -46,6 +46,52 @@ export function formatConversationTime(
 }
 
 /**
+ * Date divider label between adjacent thread messages of different days.
+ *
+ *   Today        → "Today"
+ *   Yesterday    → "Yesterday"
+ *   2-6 days ago → "<Weekday>, <short date>"   (e.g. "Mon, May 19")
+ *   Older        → "<short date>"              (e.g. "May 15" / "May 15, 2025")
+ *
+ * Uses browser-local timezone (JS Date default), same as the rest of this
+ * module.
+ */
+export function formatThreadDateDivider(
+  iso: string | null | undefined,
+  now: Date = new Date(),
+): string {
+  if (!iso) return "";
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const today = startOfDay(now);
+  const that = startOfDay(t);
+  const daysAgo = Math.round((today.getTime() - that.getTime()) / 86_400_000);
+
+  if (daysAgo === 0) return "Today";
+  if (daysAgo === 1) return "Yesterday";
+  if (daysAgo > 1 && daysAgo < 7) {
+    const weekday = t.toLocaleDateString(undefined, { weekday: "short" });
+    const date = t.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    return `${weekday}, ${date}`;
+  }
+  // Older — include year only if it's not the current year.
+  if (t.getFullYear() === now.getFullYear()) {
+    return t.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  return t.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
  * D-109 last-active indicator. Renders only when the timestamp is non-null —
  * the caller decides whether to display it (asymmetric: seller-shown-to-buyer
  * yes, buyer-shown-to-seller no, per D-109).

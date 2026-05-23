@@ -65,6 +65,17 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
           >
             Dashboard
           </Link>
+          {/* Commit 3 — mobile-reachable entry to /messages. K-040 tracks
+              adding an unread-presence dot here + on the lg+ inline link in
+              Commit 6 polish. */}
+          <Link
+            href="/messages"
+            className="block px-4 py-2 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            Messages
+          </Link>
           {isAdmin && (
             <Link
               href="/admin"

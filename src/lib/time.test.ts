@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { formatConversationTime, formatLastActive } from "./time";
+import {
+  formatConversationTime,
+  formatLastActive,
+  formatThreadDateDivider,
+} from "./time";
 
 // Frozen "now" for deterministic assertions. 2026-05-23 (Saturday) 14:00 local.
 const NOW = new Date(2026, 4, 23, 14, 0, 0); // months are 0-indexed: 4 = May
@@ -85,5 +89,45 @@ describe("formatLastActive", () => {
   it("handles clock skew (future timestamp) gracefully", () => {
     const t = new Date(2026, 4, 23, 14, 30).toISOString(); // 30 min in future
     expect(formatLastActive(t, NOW)).toBe("Active now");
+  });
+});
+
+describe("formatThreadDateDivider", () => {
+  it("returns 'Today' for same-day timestamps", () => {
+    const t = new Date(2026, 4, 23, 9, 0).toISOString();
+    expect(formatThreadDateDivider(t, NOW)).toBe("Today");
+  });
+
+  it("returns 'Yesterday' for previous-day timestamps", () => {
+    const t = new Date(2026, 4, 22, 18, 0).toISOString();
+    expect(formatThreadDateDivider(t, NOW)).toBe("Yesterday");
+  });
+
+  it("returns '<Weekday>, <Date>' for 2–6 days ago", () => {
+    const t = new Date(2026, 4, 20, 10, 0).toISOString(); // Wed 3d back
+    const out = formatThreadDateDivider(t, NOW);
+    // Locale-tolerant: must contain a 3-letter weekday + a comma + a month token.
+    expect(out).toMatch(/^[A-Z][a-z]{2}, /);
+    expect(out).toMatch(/May/);
+  });
+
+  it("returns '<short date>' for older this-year timestamps", () => {
+    const t = new Date(2026, 0, 15, 10, 0).toISOString(); // Jan 15
+    const out = formatThreadDateDivider(t, NOW);
+    expect(out).not.toMatch(/^[A-Z][a-z]{2}, /); // no weekday prefix
+    expect(out).toMatch(/Jan/);
+    expect(out).not.toMatch(/2026/); // current year omitted
+  });
+
+  it("includes year for cross-year timestamps", () => {
+    const t = new Date(2025, 2, 10).toISOString(); // Mar 10, 2025
+    const out = formatThreadDateDivider(t, NOW);
+    expect(out).toMatch(/2025/);
+  });
+
+  it("returns empty string for null / invalid input", () => {
+    expect(formatThreadDateDivider(null, NOW)).toBe("");
+    expect(formatThreadDateDivider(undefined, NOW)).toBe("");
+    expect(formatThreadDateDivider("not-an-iso", NOW)).toBe("");
   });
 });
