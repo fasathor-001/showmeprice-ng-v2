@@ -2068,3 +2068,203 @@ Activate boost monetization (begin selling Featured Listings) when ALL condition
 Thresholds are placeholder targets; revise quarterly based on actual marketplace behavior. Track-back: if any threshold turns out to be wrong, document why and append a new clarification (preserves the audit trail rather than editing in place).
 
 ---
+
+## D-124: Product Quality Operational Doctrine — Permanent World-Class Mandate
+
+**Date:** 2026-05-23
+**Status:** Locked — operational doctrine, supersedes nothing but **extends and strengthens D-121** + the D-121 Reaffirmation
+**Supersedes:** None
+**Related:** D-121 (world-class UX/UI standard — the foundation), D-121 Reaffirmation (launch-prerequisite quality bar), D-112 (trust-first marketplace positioning), D-120 (registered payment details — the ₦1m transaction reference), D-119 (filter quality), D-122/D-123/D-123b (advertising/promotion architecture — quality of monetization surfaces), D-117 (data protection — trust posture)
+
+### Decision
+From this point onward, ShowMePrice operates under a permanent world-class product mandate. **This is not cosmetic polish. UX/UI quality is part of the trust system itself.**
+
+ShowMePrice competes in a Nigerian commerce environment where users already experience high-quality interaction standards daily (WhatsApp, Telegram, Opay, PalmPay, Uber, TikTok, Temu, Instagram, modern fintech apps). **"Good enough for Nigeria" is rejected as a product standard.**
+
+All future implementation work must optimize for:
+- trust perception,
+- transaction confidence,
+- emotional stability,
+- interaction quality,
+- mobile-first usability,
+- and premium marketplace coherence.
+
+### Core Principle
+Every trust-critical surface must answer:
+
+> **"Would a Nigerian user feel comfortable entering a ₦1m transaction here?"**
+
+If the answer is "not fully," the surface is not complete.
+
+### Trust-Critical Surface Doctrine
+Not all surfaces require equal polish priority. The doctrine codifies which surfaces get premium treatment vs which can remain operationally simpler at MVP.
+
+#### Tier 1 — Premium treatment required
+These directly affect marketplace trust perception and must receive world-class UX/UI treatment:
+- Messaging
+- Listings
+- Seller profiles
+- Search/discovery
+- Contact reveal flow
+- Payment-detail reveal flow (D-120)
+- Onboarding
+- Verification states
+- Moderation/reporting flows
+- Loading states
+- Empty states
+- Mobile responsiveness
+- Image loading/performance
+- Transaction-related warnings and confirmations
+
+These surfaces should be benchmarked against the strongest product users already know for that interaction category:
+- Messaging → WhatsApp / Telegram quality
+- Transaction flows → modern fintech quality (Opay / PalmPay / Stripe)
+- Discovery/search → premium marketplace quality (Airbnb / Stripe-product-style)
+- Mobile interactions → best-in-class mobile app quality
+
+#### Tier 2 — Simpler acceptable initially
+The following may remain operationally simpler during MVP as long as functionality is correct:
+- Internal admin tooling
+- Analytics dashboards
+- Backoffice operational views
+- Advanced seller metrics
+- Low-frequency settings pages
+
+Do not waste launch energy over-polishing non-trust-critical surfaces.
+
+### Calm UI Principle
+World-class for ShowMePrice means:
+- calm,
+- restrained,
+- structured,
+- premium,
+- trustworthy,
+- intentional.
+
+**Reject:**
+- visual clutter,
+- trendy startup aesthetics,
+- excessive animation,
+- noisy interactions,
+- gimmicky UI,
+- hyper-social-feed styling,
+- crypto-dashboard aesthetics.
+
+**Preferred reference feeling:**
+- Stripe
+- Linear
+- Airbnb
+- Apple
+- Telegram
+- premium fintech products
+
+### Performance Is Part of Trust
+Performance is not an optimization task later. **It is part of the trust architecture.**
+
+Prioritize:
+- optimistic UI,
+- instant interaction feedback,
+- fast image loading,
+- smooth scrolling,
+- responsive mobile interactions,
+- skeleton states over blank waiting,
+- low-bandwidth resilience,
+- **Android-first realities** (lower-end devices are the modal Nigerian user).
+
+Laggy or inconsistent behavior weakens marketplace trust perception.
+
+### No Dead-End States
+No user flow should feel abandoned or uncertain. Every state must feel **intentional, guided, and emotionally stable.**
+
+This explicitly includes:
+- empty inbox
+- no listings
+- no search results
+- pending verification
+- failed uploads
+- seller no-response
+- moderation states
+- blocked actions
+
+### Nigerian Marketplace Realism
+Every major feature must be evaluated against **real Nigerian marketplace behavior, not ideal-user behavior**.
+
+Assume:
+- negotiation-heavy commerce,
+- low baseline trust,
+- WhatsApp habits,
+- remote buying anxiety,
+- scam awareness,
+- intermittent connectivity,
+- lower-end Android devices,
+- aggressive bargaining,
+- seller response delays,
+- and emotional sensitivity around money.
+
+The product should **reduce transaction anxiety without becoming restrictive or bureaucratic.**
+
+### Seller Quality > Feature Quantity
+Do not optimize for raw listing volume.
+
+Prioritize:
+- seller trust quality,
+- listing quality,
+- transaction quality,
+- response quality,
+- moderation quality,
+- buyer confidence.
+
+**A smaller trusted marketplace is strategically stronger than a larger chaotic marketplace.**
+
+### Simplicity Is Premium
+World-class does NOT mean feature-heavy.
+
+Prefer:
+- clarity over complexity,
+- consistency over novelty,
+- restraint over over-engineering,
+- confidence over visual noise.
+
+Do not introduce UI complexity unless it materially improves transaction trust or marketplace quality.
+
+### Manual Before Automation
+If trust/safety operations are not fully understood operationally:
+- prefer manual workflows first,
+- observe behavior,
+- gather marketplace data,
+- then automate later.
+
+Do not prematurely automate moderation, fraud handling, or trust systems before operational patterns are understood.
+
+### Product Review Standard
+Future surface findings (agent or owner) must begin with:
+
+1. **What does world-class look like here?**
+2. **What do the strongest competitors do for this interaction?**
+3. **How do we achieve premium trust perception while preserving simplicity?**
+4. **What is the calmest and clearest UX that still feels powerful?**
+
+**Not:**
+- ~~"What is the quickest implementation?"~~
+- ~~"What can technically ship?"~~
+- ~~"What is good enough for MVP?"~~
+
+### Launch Objective (reframed)
+The launch objective is **NOT** "minimum viable product."
+
+The launch objective is:
+
+> **"minimum trust-compromising product."**
+
+Quality is now a core operational requirement, not optional polish.
+
+### Operational impact (in addition to D-121 + D-121 Reaffirmation clauses)
+- **Tier classification in surface findings:** every commit's surface findings should explicitly identify which Tier the affected surfaces are. Tier 1 gets the full Product Review Standard; Tier 2 gets correctness + clarity without polish-rounds.
+- **The ₦1m question is the acceptance test.** Before any Tier 1 surface ships, the agent + owner ask: "Would a Nigerian user feel comfortable entering a ₦1m transaction here?" If not fully, the surface is not done.
+- **Reference benchmarks attached to surface findings.** For each Tier 1 surface, the agent's findings must name the specific competitor product(s) it's being measured against (e.g., "messaging against WhatsApp", "search against Airbnb").
+- **Calm UI reject-list applied to every commit.** No trendy startup aesthetics, no crypto-dashboard styling, no hyper-social-feed patterns slip in regardless of how "modern" they might look in isolation.
+- **Performance reviewed in surface findings**, not as a follow-up. Skeleton states, optimistic UI, image loading strategy, bandwidth resilience — these are first-class concerns in scoping.
+- **Dead-end audit is a banked review step.** Empty / loading / error / pending / blocked states get explicit treatment in surface findings, not deferred to "polish later."
+- **Stage 2.B Commits 4.2 / 5.x / 6 already operated under this discipline in practice** (D-121 + Reaffirmation drove sticky composer, hydration fixes, red counts, read receipts, skeletons, pagination). D-124 codifies the pattern formally so it can't drift in future stages.
+
+---
