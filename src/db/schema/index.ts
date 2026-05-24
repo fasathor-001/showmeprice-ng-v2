@@ -13,7 +13,6 @@ export * from "./nigerian_states";
 export * from "./categories";
 export * from "./products";
 export * from "./product_images";
-export * from "./message_images";
 export * from "./seller_verifications";
 export * from "./escrow_orders";
 

@@ -41,20 +41,6 @@ export interface SendMessageResult {
   reason?: string;
 }
 
-/** Result of sendImageMessage — same shape as text-message send. */
-export interface SendImageMessageResult {
-  messageId?: string;
-  containsWarning?: boolean;
-  error?: MessagingError;
-  reason?: string;
-}
-
-/** Result of reportMessage. */
-export interface ReportMessageResult {
-  ok?: boolean;
-  error?: MessagingError;
-}
-
 export interface MarkReadResult {
   ok?: boolean;
   error?: MessagingError;

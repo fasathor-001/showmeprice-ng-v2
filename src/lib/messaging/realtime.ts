@@ -21,49 +21,6 @@ import type { ConversationSummary, MessageRow } from "./types";
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Per-image state inside an image-typed message bubble. Sender's optimistic
- * bubble carries blobUrl for local preview while uploading; signedUrl is
- * fetched lazily on first render and on cache miss for recipients + reloads.
- */
-export interface ThreadImage {
-  /** Position within the message: 0, 1, or 2. */
-  position: number;
-  /** Final width after compression. Used for placeholder sizing to avoid layout jumps. */
-  width: number;
-  /** Final height after compression. */
-  height: number;
-  /** Client-only blob URL while bubble is in pending/uploading state. */
-  blobUrl?: string;
-  /** Storage path once upload completes. Set on confirmed + own pending bubbles. */
-  storagePath?: string;
-  /** Resolved signed URL (5-min TTL) — populated by ImageBubble on demand. */
-  signedUrl?: string;
-  /** message_images.id once the row is persisted. */
-  imageId?: string;
-  /** 0-100 during upload; undefined before upload begins. */
-  progress?: number;
-  /** True if this single image's upload failed. */
-  failed?: boolean;
-  /** Cancellation: per-image AbortController, only present client-side. */
-  abortController?: AbortController;
-}
-
-/**
- * Image-message lifecycle phases:
- *   scheduled   — within the 3s send-undo grace window; uploads not started
- *   uploading   — uploads in flight (per-image progress + failure)
- *   confirming  — all uploads complete, awaiting sendImageMessage server action
- *   sent        — server confirmed (this is the normal/non-pending state)
- *   failed      — caption blocked OR server insert failed; bubble shows retry
- */
-export type ImageMessagePhase =
-  | "scheduled"
-  | "uploading"
-  | "confirming"
-  | "sent"
-  | "failed";
-
 /** Message in the active thread. `id` may be a tempId for pending sends. */
 export interface ThreadMessage extends MessageRow {
   /** True while server insert is in flight. */
@@ -80,16 +37,6 @@ export interface ThreadMessage extends MessageRow {
    * approval; realistic users abandon a sender rather than refresh-to-retry.
    */
   retryCount?: number;
-  /**
-   * Commit 9 (TC-001) — image-message state. Present only when
-   * messageType === 'image'. Drives the optimistic bubble's render through
-   * the scheduled → uploading → confirming → sent lifecycle.
-   */
-  images?: ThreadImage[];
-  /** Image-message phase. Undefined for text messages. */
-  imagePhase?: ImageMessagePhase;
-  /** When in 'scheduled' phase: timestamp (ms) the 3s grace expires. */
-  scheduledUntil?: number;
 }
 
 export interface RealtimeState {
@@ -155,56 +102,6 @@ export type RealtimeAction =
       conversationId: string;
       messages: ThreadMessage[];
       hasMore: boolean;
-    }
-  // ---- Commit 9 image-message actions ----
-  | {
-      /** Optimistic image message — created on user Send tap. Starts in
-       * 'scheduled' phase for the 3s send-undo grace window. */
-      type: "OPTIMISTIC_IMAGE_ADD";
-      conversationId: string;
-      message: ThreadMessage;
-    }
-  | {
-      /** 3s grace expired with no Undo — transition to 'uploading' phase. */
-      type: "IMAGE_PHASE_UPLOADING";
-      conversationId: string;
-      tempId: string;
-    }
-  | {
-      /** All uploads complete — transition to 'confirming' phase (awaiting server). */
-      type: "IMAGE_PHASE_CONFIRMING";
-      conversationId: string;
-      tempId: string;
-    }
-  | {
-      /** Per-image progress update during 'uploading'. */
-      type: "IMAGE_UPLOAD_PROGRESS";
-      conversationId: string;
-      tempId: string;
-      position: number;
-      progress: number;
-    }
-  | {
-      /** Per-image upload completed — storage_path known, progress 100. */
-      type: "IMAGE_UPLOAD_COMPLETED";
-      conversationId: string;
-      tempId: string;
-      position: number;
-      storagePath: string;
-    }
-  | {
-      /** Per-image upload failed — bubble keeps the rest, this slot shows retry. */
-      type: "IMAGE_UPLOAD_FAILED";
-      conversationId: string;
-      tempId: string;
-      position: number;
-    }
-  | {
-      /** User × cancelled a single image — remove from the bubble. */
-      type: "IMAGE_REMOVE_SLOT";
-      conversationId: string;
-      tempId: string;
-      position: number;
     };
 
 // ---------------------------------------------------------------------------
@@ -313,29 +210,12 @@ export function realtimeReducer(
       const idx = state.activeMessages.findIndex(
         (m) => m.tempId === action.tempId || m.id === action.tempId,
       );
-      const existing = idx === -1 ? null : state.activeMessages[idx]!;
-      // Commit 9.1 fix: when the existing optimistic message is an image
-      // message, PRESERVE its `images` array + advance imagePhase to 'sent'.
-      // action.real is a plain MessageRow (server contract) — it doesn't
-      // carry image rows back. Without this preservation the merged message
-      // would have `images: undefined`, and ImageBubble's render would crash
-      // on the undefined slot when sortedImages falls through both the
-      // 1-image and 2-image branches into the 3-image else.
-      const imagePreservation: Partial<ThreadMessage> =
-        existing?.messageType === "image" && existing.images
-          ? { images: existing.images, imagePhase: "sent" }
-          : {};
       const nextMessages =
         idx === -1
           ? state.activeMessages
           : [
               ...state.activeMessages.slice(0, idx),
-              {
-                ...action.real,
-                pending: false,
-                failed: false,
-                ...imagePreservation,
-              },
+              { ...action.real, pending: false, failed: false },
               ...state.activeMessages.slice(idx + 1),
             ];
       return {
@@ -557,104 +437,6 @@ export function realtimeReducer(
         ...state,
         activeMessages: [...action.messages, ...state.activeMessages],
         activeMessagesHasMore: action.hasMore,
-      };
-    }
-
-    // ---- Commit 9 image-message reducer cases ----
-
-    case "OPTIMISTIC_IMAGE_ADD": {
-      if (action.conversationId !== state.activeConversationId) return state;
-      return {
-        ...state,
-        activeMessages: [...state.activeMessages, action.message],
-      };
-    }
-
-    case "IMAGE_PHASE_UPLOADING":
-    case "IMAGE_PHASE_CONFIRMING": {
-      if (action.conversationId !== state.activeConversationId) return state;
-      const idx = state.activeMessages.findIndex(
-        (m) => m.id === action.tempId,
-      );
-      if (idx === -1) return state;
-      const existing = state.activeMessages[idx]!;
-      const phase: ImageMessagePhase =
-        action.type === "IMAGE_PHASE_UPLOADING" ? "uploading" : "confirming";
-      return {
-        ...state,
-        activeMessages: [
-          ...state.activeMessages.slice(0, idx),
-          { ...existing, imagePhase: phase, scheduledUntil: undefined },
-          ...state.activeMessages.slice(idx + 1),
-        ],
-      };
-    }
-
-    case "IMAGE_UPLOAD_PROGRESS":
-    case "IMAGE_UPLOAD_COMPLETED":
-    case "IMAGE_UPLOAD_FAILED": {
-      if (action.conversationId !== state.activeConversationId) return state;
-      const idx = state.activeMessages.findIndex(
-        (m) => m.id === action.tempId,
-      );
-      if (idx === -1) return state;
-      const existing = state.activeMessages[idx]!;
-      if (!existing.images) return state;
-      const nextImages = existing.images.map((img) => {
-        if (img.position !== action.position) return img;
-        if (action.type === "IMAGE_UPLOAD_PROGRESS") {
-          return { ...img, progress: action.progress, failed: false };
-        }
-        if (action.type === "IMAGE_UPLOAD_COMPLETED") {
-          return {
-            ...img,
-            progress: 100,
-            storagePath: action.storagePath,
-            failed: false,
-          };
-        }
-        // IMAGE_UPLOAD_FAILED
-        return { ...img, failed: true, progress: undefined };
-      });
-      return {
-        ...state,
-        activeMessages: [
-          ...state.activeMessages.slice(0, idx),
-          { ...existing, images: nextImages },
-          ...state.activeMessages.slice(idx + 1),
-        ],
-      };
-    }
-
-    case "IMAGE_REMOVE_SLOT": {
-      if (action.conversationId !== state.activeConversationId) return state;
-      const idx = state.activeMessages.findIndex(
-        (m) => m.id === action.tempId,
-      );
-      if (idx === -1) return state;
-      const existing = state.activeMessages[idx]!;
-      if (!existing.images) return state;
-      const nextImages = existing.images.filter(
-        (img) => img.position !== action.position,
-      );
-      // If the user removed the last image in the bubble, drop the bubble
-      // entirely (mirrors DISMISS_FAILED behavior — the message has no
-      // attachments left to send).
-      if (nextImages.length === 0) {
-        return {
-          ...state,
-          activeMessages: state.activeMessages.filter(
-            (m) => m.id !== action.tempId,
-          ),
-        };
-      }
-      return {
-        ...state,
-        activeMessages: [
-          ...state.activeMessages.slice(0, idx),
-          { ...existing, images: nextImages },
-          ...state.activeMessages.slice(idx + 1),
-        ],
       };
     }
 

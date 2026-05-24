@@ -22,7 +22,6 @@ import {
   makeTempId,
   normalizeMessageRow,
   realtimeReducer,
-  type RealtimeAction,
   type RealtimeState,
   type ThreadMessage,
 } from "@/lib/messaging/realtime";
@@ -94,13 +93,6 @@ export interface MessagesShellContextValue {
     conversationId: string,
     oldestMessageId: string,
   ) => Promise<number>;
-  /**
-   * Commit 9 escape hatch — direct dispatch for image-message reducer actions
-   * (OPTIMISTIC_IMAGE_ADD, IMAGE_UPLOAD_PROGRESS, IMAGE_PHASE_*, IMAGE_REMOVE_SLOT).
-   * Composer orchestrates the multi-phase image lifecycle and needs to dispatch
-   * these directly rather than going through 6 separate context methods.
-   */
-  dispatch: (action: RealtimeAction) => void;
 }
 
 const Ctx = createContext<MessagesShellContextValue | null>(null);
@@ -432,7 +424,6 @@ export function MessagesShell({
       retryFailed,
       loadMoreConversations,
       loadEarlierMessages,
-      dispatch,
     }),
     [
       state,

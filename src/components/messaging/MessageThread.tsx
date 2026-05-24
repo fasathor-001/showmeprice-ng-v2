@@ -28,12 +28,6 @@ interface MessageThreadProps {
   initialMessages: MessageRow[];
   hasMore: boolean;
   currentUserId: string;
-  /** Commit 9 (TC-001) — listing context for ImageViewer's listing-chip top-bar. */
-  listing?: {
-    id: string;
-    title: string;
-    primaryImageUrl: string | null;
-  } | null;
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -63,7 +57,6 @@ export function MessageThread({
   initialMessages,
   hasMore,
   currentUserId,
-  listing,
 }: MessageThreadProps) {
   const { state, seedActive, dismissFailed, retryFailed, loadEarlierMessages } =
     useMessagesShell();
@@ -197,7 +190,6 @@ export function MessageThread({
         onRetryFailed={
           msg.failed ? () => retryFailed(conversationId, msg.id) : undefined
         }
-        listing={listing}
       />,
     );
 
