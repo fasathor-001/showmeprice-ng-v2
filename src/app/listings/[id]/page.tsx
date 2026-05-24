@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isPhoneVerified } from "@/lib/auth";
 import { Container } from "@/components/layout";
 import { Badge, Card, Avatar } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { ListingImageGallery } from "@/components/listings/ListingImageGallery";
+import { MessageSellerButton } from "@/components/listings/MessageSellerButton";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
 import {
   getSpecsForCategory,
@@ -97,9 +99,58 @@ export default async function ListingDetailPage({
     { year: "numeric", month: "long" }
   );
 
+  // Stage 2.B Commit 7 — auth + verification + existing-conversation state
+  // for the MessageSellerButton. Three pieces drive the five button states:
+  //   - user            → "Sign in to message" vs. signed-in states
+  //   - phoneVerified   → "Verify phone to message" vs. ready state (D-114)
+  //   - existingConvId  → "Continue conversation" vs. "Message seller"
+  // isOwnListing hides the button entirely (computed from business.owner_id).
+  //
+  // All three queries run in parallel with each other (the listing query
+  // above is the gate — without a verified listing we 404 before reaching
+  // here, so the parallelism only kicks in for valid listings).
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser();
+
+  let currentUserPhoneVerified = false;
+  let existingConversationId: string | null = null;
+  if (currentUser) {
+    const [profileRes, convRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("verification_status")
+        .eq("id", currentUser.id)
+        .maybeSingle(),
+      // Existing-conversation detection drives the "Continue conversation"
+      // CTA. RLS allows the buyer to read their own conversations.
+      supabase
+        .from("conversations")
+        .select("id")
+        .eq("buyer_id", currentUser.id)
+        .eq("seller_id", business.owner_id)
+        .eq("listing_id", listing.id)
+        .eq("conversation_type", "buyer_seller")
+        .maybeSingle(),
+    ]);
+    currentUserPhoneVerified = isPhoneVerified(
+      profileRes.data?.verification_status,
+    );
+    existingConversationId = (convRes.data?.id as string | undefined) ?? null;
+  }
+
+  const isOwnListing =
+    currentUser !== null && currentUser.id === business.owner_id;
+
+  const primaryListingImageUrl = images[0]?.public_url ?? null;
+
   return (
     <Container>
-      <div className="py-6 sm:py-10">
+      {/* Commit 7 (A refinement): pb-24 lg:pb-10 leaves ~96px of bottom
+          space on mobile so content isn't hidden behind the sticky-bottom
+          MessageSellerButton action bar. Desktop drops back to the normal
+          10-unit bottom padding. */}
+      <div className="pt-6 sm:pt-10 pb-24 lg:pb-10">
         {/* Breadcrumb */}
         <nav
           aria-label="Breadcrumb"
@@ -213,29 +264,26 @@ export default async function ListingDetailPage({
               </p>
             </div>
 
-            {/* Placeholder contact button — Phase E wires WhatsApp reveal */}
-            <div>
-              <button
-                type="button"
-                disabled
-                className="w-full bg-teal-600 text-white font-medium text-base px-5 py-3.5 rounded-lg inline-flex items-center justify-center gap-2 opacity-60 cursor-not-allowed"
-                aria-label="WhatsApp contact coming soon"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M17.6 6.31999C16.8 5.51999 15.8 4.91999 14.8 4.51999C13.7 4.11999 12.6 3.91999 11.5 3.91999C10.4 3.91999 9.3 4.11999 8.3 4.51999C7.3 4.91999 6.3 5.51999 5.5 6.31999C4.7 7.11999 4.1 8.11999 3.7 9.21999C3.3 10.3 3.1 11.4 3.1 12.5C3.1 13.6 3.3 14.7 3.7 15.7L3 21L8.5 19.5C9.5 19.9 10.5 20.1 11.6 20.1C12.7 20.1 13.8 19.9 14.8 19.5C15.8 19.1 16.8 18.5 17.6 17.7C18.4 16.9 19 15.9 19.4 14.9C19.8 13.9 20 12.8 20 11.7C20 10.6 19.8 9.49999 19.4 8.39999C19 7.49999 18.4 6.59999 17.6 6.31999Z" />
-                </svg>
-                <span>Chat seller on WhatsApp</span>
-              </button>
-              <p className="text-xs text-ink-400 text-center mt-2">
-                Contact reveal coming soon
-              </p>
-            </div>
+            {/* Stage 2.B Commit 7 — MessageSellerButton. Replaces the
+                previous disabled WhatsApp placeholder. Renders both the
+                inline desktop button (here) AND a sticky-bottom mobile
+                action bar (mounted into a fixed position; visible only
+                on <lg). Component owns the 5 visibility states + modal. */}
+            <MessageSellerButton
+              listingId={listing.id}
+              listingTitle={listing.title}
+              listingPriceKobo={listing.price_kobo}
+              listingPrimaryImageUrl={primaryListingImageUrl}
+              sellerBusinessName={business.business_name}
+              userId={currentUser?.id ?? null}
+              isPhoneVerified={currentUserPhoneVerified}
+              isOwnListing={isOwnListing}
+              existingConversationId={existingConversationId}
+            />
+
+            {/* Future Phase E: D-113 contact-reveal CTA lands separately —
+                a paid path to reveal the seller's WhatsApp/phone. In-platform
+                messaging (above) stays as the trust-first primary affordance. */}
 
             {/* Seller info card */}
             <Card>
