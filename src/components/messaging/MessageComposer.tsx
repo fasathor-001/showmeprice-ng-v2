@@ -341,6 +341,21 @@ function Composer({
     await performSend(lastFailedContent);
   };
 
+  // Commit 8.2: mirror the bubble's "↻ Retry · Dismiss" pair on the banner.
+  // §1.B originally relied on "Dismiss is implicit — typing clears the banner,"
+  // but that fell apart in the offline-attempt case: the banner appears, no
+  // optimistic bubble is created (the offline guard returns before
+  // optimisticSend), so the user has no bubble-level Dismiss either. Result:
+  // they're stuck looking at a danger banner with only Retry, and the only
+  // way to clear it is to lose their textarea draft. Dismiss clears the
+  // banner state but preserves the draft — they can come back to it later.
+  const handleBannerDismiss = () => {
+    setError(null);
+    setLastFailedContent(null);
+    setLastFailureRetries(0);
+    setShowOfflineHint(false);
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -405,22 +420,42 @@ function Composer({
                 error
               )}
             </span>
-            {/* TC-002 banner Retry — only shows when there's a recent failure
-                cached and budget remains. Suppressed when budget exhausted
-                (copy escalates above) or when offline (the offline hint
-                below takes over). */}
-            {lastFailedContent !== null &&
-              lastFailureRetries < BANNER_RETRY_BUDGET &&
-              !isSending && (
-                <button
-                  type="button"
-                  onClick={handleBannerRetry}
-                  className="font-medium underline hover:no-underline focus:outline-none focus-visible:no-underline text-danger-text"
-                  aria-label="Retry sending"
-                >
-                  Retry
-                </button>
-              )}
+            {/* TC-002 + Commit 8.2: banner mirrors the bubble's "↻ Retry ·
+                Dismiss" pair. Retry hidden when budget exhausted (escalated
+                copy takes over the left span) or while a send is in flight.
+                Dismiss is always available when the banner is visible — gives
+                users an explicit way to clear the danger state without losing
+                their textarea draft. */}
+            <div className="flex items-baseline gap-2 shrink-0">
+              {lastFailedContent !== null &&
+                lastFailureRetries < BANNER_RETRY_BUDGET &&
+                !isSending && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleBannerRetry}
+                      className="font-medium underline hover:no-underline focus:outline-none focus-visible:no-underline text-danger-text"
+                      aria-label="Retry sending"
+                    >
+                      Retry
+                    </button>
+                    <span
+                      className="text-danger-text/60"
+                      aria-hidden="true"
+                    >
+                      ·
+                    </span>
+                  </>
+                )}
+              <button
+                type="button"
+                onClick={handleBannerDismiss}
+                className="font-medium underline hover:no-underline focus:outline-none focus-visible:no-underline text-danger-text"
+                aria-label="Dismiss this notice"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
           {showOfflineHint && !isOnline && (
             <div className="mt-1 text-ink-600">
