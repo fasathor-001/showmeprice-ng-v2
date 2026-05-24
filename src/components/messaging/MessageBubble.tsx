@@ -3,6 +3,7 @@
 import { useClientTime } from "@/lib/use-client-time";
 import type { MessageRow } from "@/lib/messaging/types";
 import type { ThreadMessage } from "@/lib/messaging/realtime";
+import { ImageBubble } from "./ImageBubble";
 
 // Stage 2.B Commit 3 — single message bubble. Pending / failed visual states
 // added in Commit 5 for optimistic-UI feedback (surface findings E).
@@ -46,6 +47,15 @@ interface MessageBubbleProps {
    * the budget is exhausted to render the Retry link as visually disabled.
    */
   onRetryFailed?: () => void;
+  /**
+   * Commit 9-b — listing context passed through to ImageBubble's viewer
+   * top-bar chip. Optional; absent for text-type messages.
+   */
+  listing?: {
+    id: string;
+    title: string;
+    primaryImageUrl: string | null;
+  } | null;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -60,6 +70,7 @@ export function MessageBubble({
   groupedWithPrevious,
   onDismissFailed,
   onRetryFailed,
+  listing,
 }: MessageBubbleProps) {
   // Client-only HH:mm in the user's local timezone (Commit 5.5 hydration fix).
   // Hooks must run unconditionally before any early return — system-message
@@ -73,6 +84,23 @@ export function MessageBubble({
       <div className="text-center text-xs text-ink-400 my-3 px-4">
         {message.content ?? ""}
       </div>
+    );
+  }
+
+  // Commit 9-b — image-type messages delegate to ImageBubble. The image
+  // lifecycle (placeholder / sent / failed phases + multi-image layouts +
+  // viewer integration) is too distinct from text-message rendering to
+  // share a body; the timestamp + receipts pattern is mirrored inside
+  // ImageBubble. TYPE_LABEL fallback path below stays as ultimate
+  // safety net but ImageBubble itself has a worst-case "📷 Photo"
+  // placeholder so it never falls through here.
+  if (message.messageType === "image") {
+    return (
+      <ImageBubble
+        message={message as ThreadMessage}
+        isCurrentUser={isCurrentUser}
+        listing={listing}
+      />
     );
   }
 

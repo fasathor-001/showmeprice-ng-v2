@@ -21,6 +21,51 @@ import type { ConversationSummary, MessageRow } from "./types";
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Stage 2.C Commit 9-b — per-image state inside an image-typed message
+ * bubble. Read-only step: this type is the contract ImageBubble reads
+ * from. Sender-side population (blobUrl during upload, progress, etc.)
+ * happens in 9-c; recipient-side population (storagePath, imageId, dims)
+ * happens via the lazy-fetch logic in 9-d. In 9-b the field exists on
+ * ThreadMessage but no code populates it; the bubble gracefully renders
+ * a placeholder pulse when message.images is empty/undefined.
+ */
+export interface ThreadImage {
+  /** Position within the message: 0, 1, or 2. */
+  position: number;
+  /** Final width after compression. Used for placeholder sizing to avoid layout jumps. */
+  width: number;
+  /** Final height after compression. */
+  height: number;
+  /** Client-only blob URL while bubble is in pending/uploading state (9-c). */
+  blobUrl?: string;
+  /** Storage path once upload completes / lazy-fetch returns. */
+  storagePath?: string;
+  /** Resolved signed URL (5-min TTL) — populated by ImageBubble on demand. */
+  signedUrl?: string;
+  /** message_images.id once the row is persisted (populated by 9-d lazy-fetch). */
+  imageId?: string;
+  /** 0-100 during upload; undefined before upload begins (9-c). */
+  progress?: number;
+  /** True if this single image's upload failed (9-c). */
+  failed?: boolean;
+}
+
+/**
+ * Image-message lifecycle phases.
+ *   scheduled   — within the 3s send-undo grace window; uploads not started (9-c)
+ *   uploading   — uploads in flight (9-c)
+ *   confirming  — all uploads complete, awaiting server action (9-c)
+ *   sent        — server confirmed / loaded from server (the normal/non-pending state)
+ *   failed      — caption blocked OR server insert failed (9-c)
+ */
+export type ImageMessagePhase =
+  | "scheduled"
+  | "uploading"
+  | "confirming"
+  | "sent"
+  | "failed";
+
 /** Message in the active thread. `id` may be a tempId for pending sends. */
 export interface ThreadMessage extends MessageRow {
   /** True while server insert is in flight. */
@@ -37,6 +82,15 @@ export interface ThreadMessage extends MessageRow {
    * approval; realistic users abandon a sender rather than refresh-to-retry.
    */
   retryCount?: number;
+  /**
+   * Commit 9-b — image-message data. Present only when messageType ===
+   * 'image'. In 9-b, NO code populates this field — it exists for
+   * ImageBubble's render contract. Population logic ships in 9-c (sender
+   * side) and 9-d (recipient lazy-fetch + cold-load JOIN).
+   */
+  images?: ThreadImage[];
+  /** Image-message phase. Undefined for text messages. */
+  imagePhase?: ImageMessagePhase;
 }
 
 export interface RealtimeState {
