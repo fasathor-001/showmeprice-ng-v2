@@ -140,17 +140,32 @@ export function ImageBubble({
   // Build the layout JSX. Each slot is a fixed aspect-ratio square / hero
   // to keep dimensions stable through compression/upload/confirm — no
   // layout jumps per Frank's non-negotiable.
+  //
+  // Commit 9.1 fix: every branch explicitly checks the required length and
+  // bails on empty/malformed state. Previously the 3-image case was an
+  // unguarded `else` that crashed when sortedImages was empty (which can
+  // happen if a message-typed-image lands in render state without its
+  // `images` field — the SERVER_CONFIRMED reducer bug that 9.1 also fixes
+  // upstream, but defense-in-depth here so no future regression crashes).
   const renderGrid = () => {
+    if (sortedImages.length === 0) {
+      // Empty bubble — nothing to render. Returning null causes the
+      // parent bubble shell to collapse to just timestamp + receipts;
+      // visually equivalent to a deleted-image placeholder.
+      return null;
+    }
     if (sortedImages.length === 1) {
+      const only = sortedImages[0];
+      if (!only) return null;
       return (
         <div className="w-full rounded-xl overflow-hidden">
           <ImageSlot
-            img={sortedImages[0]!}
-            src={resolveImageSrc(sortedImages[0]!)}
+            img={only}
+            src={resolveImageSrc(only)}
             phase={phase}
             onTap={() => openViewer(0)}
-            onRemove={onRemoveSlot ? () => onRemoveSlot(sortedImages[0]!.position) : undefined}
-            onRetry={onRetrySlot ? () => onRetrySlot(sortedImages[0]!.position) : undefined}
+            onRemove={onRemoveSlot ? () => onRemoveSlot(only.position) : undefined}
+            onRetry={onRetrySlot ? () => onRetrySlot(only.position) : undefined}
             aspectClass="aspect-[4/3] max-h-80"
             fetchError={signedFetchError}
           />
@@ -177,43 +192,52 @@ export function ImageBubble({
       );
     }
     // §14.D ShowMePrice signature — 2 small thumbs ABOVE + 1 large HERO below.
-    const [first, second, third] = sortedImages;
-    return (
-      <div className="flex flex-col gap-1 rounded-xl overflow-hidden">
-        <div className="grid grid-cols-2 gap-1">
+    // EXPLICIT length === 3 check (no unguarded else) so any future state
+    // with >3 images doesn't silently crash.
+    if (sortedImages.length === 3) {
+      const [first, second, third] = sortedImages;
+      if (!first || !second || !third) return null;
+      return (
+        <div className="flex flex-col gap-1 rounded-xl overflow-hidden">
+          <div className="grid grid-cols-2 gap-1">
+            <ImageSlot
+              img={first}
+              src={resolveImageSrc(first)}
+              phase={phase}
+              onTap={() => openViewer(0)}
+              onRemove={onRemoveSlot ? () => onRemoveSlot(first.position) : undefined}
+              onRetry={onRetrySlot ? () => onRetrySlot(first.position) : undefined}
+              aspectClass="aspect-square"
+              fetchError={signedFetchError}
+            />
+            <ImageSlot
+              img={second}
+              src={resolveImageSrc(second)}
+              phase={phase}
+              onTap={() => openViewer(1)}
+              onRemove={onRemoveSlot ? () => onRemoveSlot(second.position) : undefined}
+              onRetry={onRetrySlot ? () => onRetrySlot(second.position) : undefined}
+              aspectClass="aspect-square"
+              fetchError={signedFetchError}
+            />
+          </div>
           <ImageSlot
-            img={first!}
-            src={resolveImageSrc(first!)}
+            img={third}
+            src={resolveImageSrc(third)}
             phase={phase}
-            onTap={() => openViewer(0)}
-            onRemove={onRemoveSlot ? () => onRemoveSlot(first!.position) : undefined}
-            onRetry={onRetrySlot ? () => onRetrySlot(first!.position) : undefined}
-            aspectClass="aspect-square"
-            fetchError={signedFetchError}
-          />
-          <ImageSlot
-            img={second!}
-            src={resolveImageSrc(second!)}
-            phase={phase}
-            onTap={() => openViewer(1)}
-            onRemove={onRemoveSlot ? () => onRemoveSlot(second!.position) : undefined}
-            onRetry={onRetrySlot ? () => onRetrySlot(second!.position) : undefined}
-            aspectClass="aspect-square"
+            onTap={() => openViewer(2)}
+            onRemove={onRemoveSlot ? () => onRemoveSlot(third.position) : undefined}
+            onRetry={onRetrySlot ? () => onRetrySlot(third.position) : undefined}
+            aspectClass="aspect-[16/9]"
             fetchError={signedFetchError}
           />
         </div>
-        <ImageSlot
-          img={third!}
-          src={resolveImageSrc(third!)}
-          phase={phase}
-          onTap={() => openViewer(2)}
-          onRemove={onRemoveSlot ? () => onRemoveSlot(third!.position) : undefined}
-          onRetry={onRetrySlot ? () => onRetrySlot(third!.position) : undefined}
-          aspectClass="aspect-[16/9]"
-          fetchError={signedFetchError}
-        />
-      </div>
-    );
+      );
+    }
+    // Out-of-bounds (>3): render the first 3 in the 3-image layout.
+    // Shouldn't happen — CHECK constraint on message_images.position blocks
+    // anything outside [0,2] — but defense-in-depth for future schema drift.
+    return null;
   };
 
   return (

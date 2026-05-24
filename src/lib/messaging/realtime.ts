@@ -313,12 +313,29 @@ export function realtimeReducer(
       const idx = state.activeMessages.findIndex(
         (m) => m.tempId === action.tempId || m.id === action.tempId,
       );
+      const existing = idx === -1 ? null : state.activeMessages[idx]!;
+      // Commit 9.1 fix: when the existing optimistic message is an image
+      // message, PRESERVE its `images` array + advance imagePhase to 'sent'.
+      // action.real is a plain MessageRow (server contract) — it doesn't
+      // carry image rows back. Without this preservation the merged message
+      // would have `images: undefined`, and ImageBubble's render would crash
+      // on the undefined slot when sortedImages falls through both the
+      // 1-image and 2-image branches into the 3-image else.
+      const imagePreservation: Partial<ThreadMessage> =
+        existing?.messageType === "image" && existing.images
+          ? { images: existing.images, imagePhase: "sent" }
+          : {};
       const nextMessages =
         idx === -1
           ? state.activeMessages
           : [
               ...state.activeMessages.slice(0, idx),
-              { ...action.real, pending: false, failed: false },
+              {
+                ...action.real,
+                pending: false,
+                failed: false,
+                ...imagePreservation,
+              },
               ...state.activeMessages.slice(idx + 1),
             ];
       return {
