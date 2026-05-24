@@ -398,6 +398,21 @@ export function realtimeReducer(
       // If this conversation is also the active one, merge into activeMessages.
       if (updated.conversationId === state.activeConversationId) {
         const idx = state.activeMessages.findIndex((m) => m.id === updated.id);
+        // 8.4-diag: log whether we matched. If idx === -1 the event arrived
+        // but no bubble in activeMessages had a matching id — points at an
+        // ID mismatch (tempId vs realId race) or a stale activeMessages
+        // snapshot. If idx !== -1 the merge runs but if read_at doesn't
+        // advance, the issue is downstream (re-render didn't pick up the
+        // updated readAt).
+        console.log("[realtime] REALTIME_UPDATE merge", {
+          conversationId: updated.conversationId,
+          activeConversationId: state.activeConversationId,
+          updatedId: updated.id,
+          updatedReadAt: updated.readAt,
+          idxFound: idx,
+          existingReadAt:
+            idx !== -1 ? state.activeMessages[idx]!.readAt : null,
+        });
         if (idx !== -1) {
           return {
             ...state,
@@ -409,6 +424,13 @@ export function realtimeReducer(
             ],
           };
         }
+      } else {
+        console.log("[realtime] REALTIME_UPDATE non-active conv", {
+          conversationId: updated.conversationId,
+          activeConversationId: state.activeConversationId,
+          updatedId: updated.id,
+          updatedReadAt: updated.readAt,
+        });
       }
 
       return { ...state, conversations: nextConversations };

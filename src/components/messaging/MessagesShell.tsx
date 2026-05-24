@@ -205,12 +205,16 @@ export function MessagesShell({
           { event: "UPDATE", schema: "public", table: "messages" },
           (payload) => {
             const row = payload.new as Record<string, unknown>;
-            if (process.env.NODE_ENV !== "production") {
-              console.log("[MessagesShell] UPDATE received:", {
-                old: payload.old,
-                new: row,
-              });
-            }
+            // 8.4-diag: production logging until read-receipt regression
+            // is root-caused. Frank's two-browser smoke shows ✓ stays at
+            // single tick even after recipient reads; need to verify
+            // whether UPDATE events are actually arriving on the sender's
+            // browser, with what id/read_at, and whether the reducer
+            // matches them.
+            console.log("[MessagesShell] UPDATE received:", {
+              old: payload.old,
+              new: row,
+            });
             if (!row) return;
             dispatch({
               type: "REALTIME_UPDATE",
