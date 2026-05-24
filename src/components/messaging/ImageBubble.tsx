@@ -469,8 +469,22 @@ function ImageSlot({
           <span>Tap to retry</span>
         </button>
       ) : (
-        // Calm placeholder while waiting for src.
-        <div className="w-full h-full" aria-hidden="true" />
+        // 9-c.1 fix — signed-URL mint in progress on cold load. The
+        // image-row metadata arrived (from getMessages JOIN or 9-d
+        // lazy-fetch) but mintMessageImageUrls hasn't returned yet
+        // (~1-3 second fetch latency). Previously this rendered as a
+        // blank white box; now it renders a calm shimmer gradient so
+        // the slot reads as "loading" instead of "broken."
+        //
+        // Distinct from §13.C "Tap to retry" branch above: that's the
+        // FAILED state (fetchError === true). This is the IN-PROGRESS
+        // state — transient, will resolve when the signed URL arrives.
+        // No retry affordance here; no text; no icon — just the bg
+        // gradient + pulse animation.
+        <div
+          className="w-full h-full bg-gradient-to-r from-ink-100 via-ink-50 to-ink-100 animate-pulse"
+          aria-label="Loading photo"
+        />
       )}
 
       {/* Scheduled pulse — subtle, calm; signals "not sent yet". (9-c) */}
