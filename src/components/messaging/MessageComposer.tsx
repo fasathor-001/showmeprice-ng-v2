@@ -150,23 +150,35 @@ function Composer({
     if (isOnline && showOfflineHint) setShowOfflineHint(false);
   }, [isOnline, showOfflineHint]);
 
-  // TC-010: explicit sessionStorage helpers. NOT a useEffect mirror — that
-  // would race with the "clear textarea on send" → "discover auth-expiry"
-  // sequence and lose the draft before we got to redirect. Instead:
-  //   - handleChange writes on every keystroke (drafts survive page reload)
-  //   - handleSend on SUCCESS calls dropDraft()
-  //   - handleSend on auth-expiry does NOT clear (the typed content was
-  //     already in sessionStorage from handleChange writes; survives the
-  //     /sign-in round-trip)
-  //   - handleSend on filter/other inline error also doesn't clear (we
-  //     restore content into the textarea via setContent(text), and the
-  //     stash still matches).
+  // TC-010 (Commit 8.3 — single-responsibility refactor): each helper does
+  // exactly one thing.
+  //   - writeDraft PERSISTS a non-empty draft. Never removes — calling it
+  //     with an empty string is a no-op, NOT a stealth delete. This is the
+  //     key bug from the original 8.0 implementation: writeDraft("") removing
+  //     the key created a hidden invariant where ANY browser quirk that
+  //     synthesised an onChange with empty value (extensions, autofill,
+  //     accessibility tools after setContent("")) would silently wipe the
+  //     draft, defeating the auth-expiry restore path.
+  //   - dropDraft REMOVES. Only called from explicit cleanup paths.
+  // Callsite contract:
+  //   - handleChange writes on every non-empty keystroke; calls dropDraft
+  //     when the textarea transitions to empty by USER ACTION (Backspace
+  //     to empty). The empty-by-user path is the only legitimate clear
+  //     during typing.
+  //   - handleSend writes BEFORE setContent("") so the draft is in storage
+  //     before any re-render can fire stray onChange events.
+  //   - performSend's auth-expiry / phone-verify / not-found paths
+  //     DEFENSIVELY re-write the draft immediately before router.push as
+  //     belt-and-suspenders. The cost is one extra ~1ms sync setItem; the
+  //     benefit is the draft survives regardless of any quirk in between.
+  //   - performSend on confirmed success calls dropDraft.
+  //   - performSend on filter/other inline error does nothing — content is
+  //     restored to the textarea via setContent(text); stash still matches.
   const writeDraft = (value: string) => {
     if (typeof window === "undefined") return;
+    if (value.length === 0) return; // no-op; explicit removal goes through dropDraft
     try {
-      const key = `${DRAFT_KEY_PREFIX}${conversationId}`;
-      if (value.length === 0) sessionStorage.removeItem(key);
-      else sessionStorage.setItem(key, value);
+      sessionStorage.setItem(`${DRAFT_KEY_PREFIX}${conversationId}`, value);
     } catch {
       // sessionStorage may throw in private-mode Safari; non-fatal.
     }
@@ -207,20 +219,29 @@ function Composer({
       const result = await sendMessage(conversationId, text);
 
       // Auth / participation errors → redirect (rare; backstop).
-      // Draft sessionStorage was already written by handleChange + persists
-      // through the redirect, so the user lands back here with their content
-      // intact (TC-010).
+      // 8.3 fix: defensively re-write the draft to sessionStorage IMMEDIATELY
+      // before router.push. handleSend already wrote it once, but anything
+      // between then and now could theoretically have cleared it (browser
+      // extensions, autofill, etc.). One extra sync setItem is cheap; missing
+      // the draft after auth-expiry is the entire point of TC-010 — the
+      // worst possible UX regression.
       if (result.error === "Unauthorized") {
         failSend(conversationId, tempId);
+        writeDraft(text);
         router.push(`/sign-in?next=/messages/${conversationId}`);
         return;
       }
       if (result.error === "PhoneVerificationRequired") {
         failSend(conversationId, tempId);
+        writeDraft(text);
         router.push(`/verify-phone?next=/messages/${conversationId}`);
         return;
       }
       if (result.error === "NotFound" || result.error === "Forbidden") {
+        // NotFound/Forbidden go to /messages list, not /messages/[id] — the
+        // conversation may no longer exist OR the user isn't a participant.
+        // Either way, restoring the draft on next visit isn't meaningful
+        // (no thread to restore into), so we don't writeDraft here.
         failSend(conversationId, tempId);
         router.push("/messages");
         return;
@@ -321,11 +342,12 @@ function Composer({
       return;
     }
 
-    // Capture text + clear textarea immediately for snappy UX.
+    // Capture text + persist BEFORE clearing the textarea. Ordering matters:
+    // writeDraft must complete before setContent("") schedules the re-render
+    // (8.3 fix — see helper comment above for the rationale).
     const text = content;
-    setContent("");
-    // Ensure the draft is captured before any redirect path runs.
     writeDraft(text);
+    setContent("");
     await performSend(text);
   };
 
@@ -366,9 +388,24 @@ function Composer({
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const next = e.target.value;
     setContent(next);
-    // TC-010: keep sessionStorage in sync with the user's typing so a
-    // redirect-after-send (auth-expiry) preserves the latest content.
-    writeDraft(next);
+    // TC-010 (8.3): keep sessionStorage in sync with the user's typing.
+    // Branching explicit: writeDraft persists only, dropDraft removes only.
+    // The empty-by-user-action path (Backspace to empty, Ctrl+A → Delete) is
+    // the ONLY legitimate keystroke-driven clear; any other observation of
+    // next === "" (e.g., a synthetic onChange from a browser extension after
+    // a programmatic setContent("")) would be a misfire we must not honour.
+    // This handler can't distinguish "user cleared" from "extension misfire"
+    // perfectly, but in the user-cleared case the textarea is already empty
+    // and dropping the draft matches user intent; in the misfire case the
+    // textarea STILL renders "" but the user typed something real, and the
+    // defensive write in handleSend's redirect paths (performSend §) restores
+    // the draft anyway right before navigation. Net: either path preserves
+    // the user's content where it matters.
+    if (next.length === 0) {
+      dropDraft();
+    } else {
+      writeDraft(next);
+    }
     if (error) setError(null);
     // User started typing a new message — they've moved past the previous
     // failure. Clear the banner Retry context so the stale failed-send isn't
