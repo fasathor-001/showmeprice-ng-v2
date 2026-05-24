@@ -469,20 +469,25 @@ function ImageSlot({
           <span>Tap to retry</span>
         </button>
       ) : (
-        // 9-c.1 fix — signed-URL mint in progress on cold load. The
-        // image-row metadata arrived (from getMessages JOIN or 9-d
-        // lazy-fetch) but mintMessageImageUrls hasn't returned yet
-        // (~1-3 second fetch latency). Previously this rendered as a
-        // blank white box; now it renders a calm shimmer gradient so
-        // the slot reads as "loading" instead of "broken."
+        // 9-c.2 fix — signed-URL mint in progress on cold load.
+        // (9-c.1 attempted this with a gradient using ink-50/ink-100
+        // classes that don't exist in this project's Tailwind config,
+        // so the shimmer was invisible. Tracked separately as K-058.)
+        //
+        // Flat neutral-300 + animate-pulse is the canonical Tailwind
+        // skeleton pattern. Slot wrapper has bg-neutral-200; this
+        // inner div is one shade darker (neutral-300). animate-pulse
+        // fades opacity 1.0 → 0.5 → 1.0, making it appear to "breathe"
+        // between visible (neutral-300) and apparently lighter
+        // (50% opacity over neutral-200 parent). Calm shimmer effect
+        // using only guaranteed-defined Tailwind default classes.
         //
         // Distinct from §13.C "Tap to retry" branch above: that's the
         // FAILED state (fetchError === true). This is the IN-PROGRESS
         // state — transient, will resolve when the signed URL arrives.
-        // No retry affordance here; no text; no icon — just the bg
-        // gradient + pulse animation.
+        // No retry affordance here; no text; no icon.
         <div
-          className="w-full h-full bg-gradient-to-r from-ink-100 via-ink-50 to-ink-100 animate-pulse"
+          className="w-full h-full bg-neutral-300 animate-pulse"
           aria-label="Loading photo"
         />
       )}
