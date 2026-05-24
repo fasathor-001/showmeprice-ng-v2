@@ -165,6 +165,15 @@ async function ThreadContent({ conversationId }: { conversationId: string }) {
         initialMessages={msgResult.messages ?? []}
         hasMore={msgResult.hasMore ?? false}
         currentUserId={user.id}
+        listing={
+          listing
+            ? {
+                id: listing.id,
+                title: listing.title ?? "Listing",
+                primaryImageUrl,
+              }
+            : null
+        }
       />
       <MessageComposer
         conversationId={conversationId}
