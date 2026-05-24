@@ -487,7 +487,7 @@ function ImageSlot({
         // state — transient, will resolve when the signed URL arrives.
         // No retry affordance here; no text; no icon.
         <div
-          className="w-full h-full bg-neutral-300 animate-pulse"
+          className="w-full h-full bg-neutral-100 animate-pulse"
           aria-label="Loading photo"
         />
       )}
