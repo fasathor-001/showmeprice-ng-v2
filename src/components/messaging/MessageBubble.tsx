@@ -1,8 +1,17 @@
+"use client";
+
+import { useClientTime } from "@/lib/use-client-time";
 import type { MessageRow } from "@/lib/messaging/types";
 import type { ThreadMessage } from "@/lib/messaging/realtime";
 
 // Stage 2.B Commit 3 — single message bubble. Pending / failed visual states
 // added in Commit 5 for optimistic-UI feedback (surface findings E).
+// Commit 5.5: "use client" + useClientTime for the timestamp — previous
+// `t.getHours()/getMinutes()` on a Date during server render used UTC, then
+// the client rendered local time, producing a text-content hydration
+// mismatch on every bubble. The mismatch cascaded to React #423 (root
+// fallback to client-only rendering), which silently broke optimistic UI
+// dispatches and realtime subscription init. See useClientTime docstring.
 //
 // Visual states for current-user bubbles:
 //   - normal: full opacity, no indicator
@@ -37,6 +46,12 @@ export function MessageBubble({
   groupedWithPrevious,
   onDismissFailed,
 }: MessageBubbleProps) {
+  // Client-only HH:mm in the user's local timezone (Commit 5.5 hydration fix).
+  // Hooks must run unconditionally before any early return — system-message
+  // branch below would otherwise skip this hook and violate rules-of-hooks
+  // if a message ever transitions message_type.
+  const timeText = useClientTime(message.createdAt, "hhmm");
+
   // System messages render centered, no bubble.
   if (message.messageType === "system") {
     return (
@@ -48,11 +63,6 @@ export function MessageBubble({
 
   const typeLabel = TYPE_LABEL[message.messageType];
   const content = typeLabel ?? (message.content?.trim() || "");
-
-  const t = new Date(message.createdAt);
-  const hh = String(t.getHours()).padStart(2, "0");
-  const mm = String(t.getMinutes()).padStart(2, "0");
-  const timeText = `${hh}:${mm}`;
 
   const threadMsg = message as Partial<ThreadMessage>;
   const isPending = Boolean(threadMsg.pending);

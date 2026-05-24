@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui";
-import { formatConversationTime, formatLastActive } from "@/lib/time";
+import { useClientTime } from "@/lib/use-client-time";
 import type { ConversationSummary } from "@/lib/messaging/types";
 
 // Commit 2 — single row in the conversation list (client component as of
@@ -30,8 +30,6 @@ interface ConversationRowProps {
   conversation: ConversationSummary;
   /** True when the URL segment matches this row's id (desktop split-pane highlight). */
   isActive?: boolean;
-  /** Frozen `now` for deterministic SSR — uses Date.now() if omitted. */
-  now?: Date;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -86,10 +84,14 @@ function ListingPlaceholder() {
 export function ConversationRow({
   conversation,
   isActive = false,
-  now,
 }: ConversationRowProps) {
   const { id, role, otherParty, listing, lastMessage, unreadCount, lastMessageAt } =
     conversation;
+
+  // Client-only time formatting (Commit 5.5 hydration fix). Server renders
+  // empty; useEffect populates after hydration in the user's local timezone.
+  const timeText = useClientTime(lastMessageAt, "conversation");
+  const lastActiveText = useClientTime(otherParty.lastSeenAt, "lastActive");
 
   // Flash on new-message arrival — detect lastMessageAt changes and pulse the
   // background for ~700ms. Skipped on first mount (no flash on initial render).
@@ -105,11 +107,11 @@ export function ConversationRow({
 
   const hasUnread = unreadCount > 0;
   // D-109 asymmetric: seller's last-active is shown TO the buyer; the buyer's
-  // last-active is hidden from the seller.
-  const showLastActive = role === "buyer" && Boolean(otherParty.lastSeenAt);
-  const lastActive = showLastActive
-    ? formatLastActive(otherParty.lastSeenAt, now)
-    : "";
+  // last-active is hidden from the seller. Last-active text only when allowed
+  // by the asymmetry rule AND the hook has populated (non-empty after mount).
+  const showLastActive =
+    role === "buyer" && Boolean(otherParty.lastSeenAt) && lastActiveText !== "";
+  const lastActive = showLastActive ? lastActiveText : "";
 
   const isPhoneVerified =
     Array.isArray(otherParty.verificationStatus) &&
@@ -214,7 +216,7 @@ export function ConversationRow({
           tint competed visually with the red badge). */}
       <div className="flex flex-col items-end gap-1 shrink-0">
         <span className="text-xs text-ink-400">
-          {formatConversationTime(lastMessageAt, now)}
+          {timeText}
         </span>
         {hasUnread && (
           <span

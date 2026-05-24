@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { formatThreadDateDivider } from "@/lib/time";
+import { useClientTime } from "@/lib/use-client-time";
 import type { MessageRow } from "@/lib/messaging/types";
 import type { ThreadMessage } from "@/lib/messaging/realtime";
 import { useMessagesShell } from "./MessagesShell";
@@ -25,8 +25,6 @@ interface MessageThreadProps {
   initialMessages: MessageRow[];
   hasMore: boolean;
   currentUserId: string;
-  /** Frozen `now` for deterministic SSR — uses Date.now() if omitted. */
-  now?: Date;
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -37,13 +35,15 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-function DateDivider({ date, now }: { date: Date; now: Date }) {
+function DateDivider({ iso }: { iso: string }) {
+  // Client-only formatting (Commit 5.5 hydration fix). Initial render is
+  // empty on server + first client paint; useEffect populates the label
+  // (Today / Yesterday / Mon, May 19 / etc.) using the user's local clock.
+  const label = useClientTime(iso, "threadDivider");
   return (
     <div className="flex items-center gap-3 my-4">
       <div className="flex-1 h-px bg-neutral-200" />
-      <span className="text-xs text-ink-400 whitespace-nowrap">
-        {formatThreadDateDivider(date.toISOString(), now)}
-      </span>
+      <span className="text-xs text-ink-400 whitespace-nowrap">{label}</span>
       <div className="flex-1 h-px bg-neutral-200" />
     </div>
   );
@@ -54,7 +54,6 @@ export function MessageThread({
   initialMessages,
   hasMore,
   currentUserId,
-  now = new Date(),
 }: MessageThreadProps) {
   const { state, seedActive, dismissFailed } = useMessagesShell();
 
@@ -95,7 +94,7 @@ export function MessageThread({
 
     if (dayChanged) {
       items.push(
-        <DateDivider key={`d-${msg.id}`} date={msgDate} now={now} />,
+        <DateDivider key={`d-${msg.id}`} iso={msg.createdAt} />,
       );
     }
 
