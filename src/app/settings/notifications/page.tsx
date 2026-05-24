@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+// Required by @cloudflare/next-on-pages: every non-static route must declare
+// the edge runtime explicitly. This page is server-rendered (uses Metadata
+// export) so it's a non-static route. Match the project-wide convention used
+// by every other page.tsx (sign-in, dashboard, messages, etc.).
+export const runtime = "edge";
+
 // Stage 2.C Commit 8 — TC-023 §6.G stub page.
 //
 // Target of the "Manage notification preferences" link in transactional
