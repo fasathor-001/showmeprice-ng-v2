@@ -285,41 +285,18 @@ export async function sendMessage(
 
 // --- Action 5: markConversationAsRead ---------------------------------------
 
-/** Shared: mark all messages NOT sent by `userId` as read in this conversation.
- *
- * Stage 2.C 8.4-diag: SELECT after UPDATE so we can verify how many rows
- * were actually flipped. Previously the UPDATE return was discarded and any
- * RLS denial or filter-condition mismatch silently no-op'd. The read-receipt
- * regression Frank surfaced is consistent with markRead silently succeeding
- * without affecting any rows (e.g., the .neq/.is filter combination not
- * matching any rows, or RLS USING + WITH CHECK rejecting the UPDATE).
- *
- * Diagnostic logs unconditional (NOT NODE_ENV-gated) so production has
- * visibility until the regression is root-caused.
- */
+/** Shared: mark all messages NOT sent by `userId` as read in this conversation. */
 async function markRead(
   supabase: ReturnType<typeof createClient>,
   conversationId: string,
   userId: string,
 ): Promise<void> {
-  const { data, error } = await supabase
+  await supabase
     .from("messages")
     .update({ read_at: new Date().toISOString() })
     .eq("conversation_id", conversationId)
     .neq("sender_id", userId)
-    .is("read_at", null)
-    .select("id"); // forces a row-count return so we can see what was updated
-  if (error) {
-    console.error(
-      "[markRead] UPDATE failed",
-      { conversationId, userId, error: error.message },
-    );
-    return;
-  }
-  console.log(
-    "[markRead] UPDATE complete",
-    { conversationId, userId, rowsAffected: data?.length ?? 0 },
-  );
+    .is("read_at", null);
 }
 
 export async function markConversationAsRead(
