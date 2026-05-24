@@ -15,6 +15,7 @@ import { useSelectedLayoutSegment } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   getMessages,
+  getMessageImages,
   listConversations,
   sendMessage,
 } from "@/lib/messaging/actions";
@@ -93,6 +94,17 @@ export interface MessagesShellContextValue {
     conversationId: string,
     oldestMessageId: string,
   ) => Promise<number>;
+  /**
+   * 9-d — refetch image data for a message, then dispatch
+   * IMAGE_DATA_RECEIVED on success. Best-effort; failure is logged.
+   * Called by ImageBubble's "Tap to retry" button when the initial
+   * lazy-fetch + JOIN didn't populate images (or signed URL minting
+   * failed and the user wants to retry the underlying data path).
+   */
+  refetchMessageImages: (
+    conversationId: string,
+    messageId: string,
+  ) => void;
 }
 
 const Ctx = createContext<MessagesShellContextValue | null>(null);
@@ -198,6 +210,45 @@ export function MessagesShell({
               message: normalizeMessageRow(row),
               currentUserId: userId,
             });
+
+            // 9-d.N1 — lazy-fetch message_images for image-type messages.
+            // Postgres logical replication delivers per-row, per-table
+            // events; this INSERT payload has nothing from the related
+            // message_images table. Fire an async fetch and dispatch the
+            // result via IMAGE_DATA_RECEIVED. Reducer is idempotent: if
+            // the user navigates to the thread first (getMessages JOIN
+            // already populated images), the dispatch no-ops.
+            //
+            // Best-effort (9-d.N5): failures are logged; ImageBubble's
+            // "Tap to retry" fallback path covers the user-facing recovery.
+            if (row.message_type === "image") {
+              const messageId = row.id as string;
+              const conversationId = row.conversation_id as string;
+              void (async () => {
+                try {
+                  const result = await getMessageImages(messageId);
+                  if (cancelled) return;
+                  if (result.error || !result.images) {
+                    console.error(
+                      "[MessagesShell] lazy-fetch images failed",
+                      result.error,
+                    );
+                    return;
+                  }
+                  dispatch({
+                    type: "IMAGE_DATA_RECEIVED",
+                    conversationId,
+                    messageId,
+                    images: result.images,
+                  });
+                } catch (err) {
+                  console.error(
+                    "[MessagesShell] lazy-fetch images threw",
+                    err,
+                  );
+                }
+              })();
+            }
           },
         )
         .on(
@@ -291,6 +342,37 @@ export function MessagesShell({
         hasMore: result.hasMore ?? false,
       });
       return result.messages.length;
+    },
+    [],
+  );
+
+  // 9-d — explicit context method for ImageBubble's "Tap to retry" path.
+  // Replaces the raw-dispatch escape hatch architecture of original Commit 9
+  // per the locked-in architectural improvement (no raw dispatch via
+  // context; each new reducer action gets an explicit method). Fires the
+  // same lazy-fetch path the REALTIME_INSERT handler uses on first arrival.
+  const refetchMessageImages = useCallback(
+    (conversationId: string, messageId: string) => {
+      void (async () => {
+        try {
+          const result = await getMessageImages(messageId);
+          if (result.error || !result.images) {
+            console.error(
+              "[MessagesShell] refetchMessageImages failed",
+              result.error,
+            );
+            return;
+          }
+          dispatch({
+            type: "IMAGE_DATA_RECEIVED",
+            conversationId,
+            messageId,
+            images: result.images,
+          });
+        } catch (err) {
+          console.error("[MessagesShell] refetchMessageImages threw", err);
+        }
+      })();
     },
     [],
   );
@@ -424,6 +506,7 @@ export function MessagesShell({
       retryFailed,
       loadMoreConversations,
       loadEarlierMessages,
+      refetchMessageImages,
     }),
     [
       state,
@@ -435,6 +518,7 @@ export function MessagesShell({
       retryFailed,
       loadMoreConversations,
       loadEarlierMessages,
+      refetchMessageImages,
     ],
   );
 

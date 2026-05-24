@@ -15,56 +15,22 @@
 // - Failed optimistic messages STAY visible until user retries or dismisses
 //   (WhatsApp pattern).
 
-import type { ConversationSummary, MessageRow } from "./types";
+import type {
+  ConversationSummary,
+  ImageMessagePhase,
+  ImageRowRef,
+  MessageRow,
+} from "./types";
+
+// Re-export image types so callers that already import from realtime
+// don't need to switch over to types.ts. Single source of truth lives in
+// types.ts (so MessageRow can reference ThreadImage without circular
+// import); this re-export preserves the existing import surface.
+export type { ImageMessagePhase, ThreadImage } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/**
- * Stage 2.C Commit 9-b — per-image state inside an image-typed message
- * bubble. Read-only step: this type is the contract ImageBubble reads
- * from. Sender-side population (blobUrl during upload, progress, etc.)
- * happens in 9-c; recipient-side population (storagePath, imageId, dims)
- * happens via the lazy-fetch logic in 9-d. In 9-b the field exists on
- * ThreadMessage but no code populates it; the bubble gracefully renders
- * a placeholder pulse when message.images is empty/undefined.
- */
-export interface ThreadImage {
-  /** Position within the message: 0, 1, or 2. */
-  position: number;
-  /** Final width after compression. Used for placeholder sizing to avoid layout jumps. */
-  width: number;
-  /** Final height after compression. */
-  height: number;
-  /** Client-only blob URL while bubble is in pending/uploading state (9-c). */
-  blobUrl?: string;
-  /** Storage path once upload completes / lazy-fetch returns. */
-  storagePath?: string;
-  /** Resolved signed URL (5-min TTL) — populated by ImageBubble on demand. */
-  signedUrl?: string;
-  /** message_images.id once the row is persisted (populated by 9-d lazy-fetch). */
-  imageId?: string;
-  /** 0-100 during upload; undefined before upload begins (9-c). */
-  progress?: number;
-  /** True if this single image's upload failed (9-c). */
-  failed?: boolean;
-}
-
-/**
- * Image-message lifecycle phases.
- *   scheduled   — within the 3s send-undo grace window; uploads not started (9-c)
- *   uploading   — uploads in flight (9-c)
- *   confirming  — all uploads complete, awaiting server action (9-c)
- *   sent        — server confirmed / loaded from server (the normal/non-pending state)
- *   failed      — caption blocked OR server insert failed (9-c)
- */
-export type ImageMessagePhase =
-  | "scheduled"
-  | "uploading"
-  | "confirming"
-  | "sent"
-  | "failed";
 
 /** Message in the active thread. `id` may be a tempId for pending sends. */
 export interface ThreadMessage extends MessageRow {
@@ -82,13 +48,10 @@ export interface ThreadMessage extends MessageRow {
    * approval; realistic users abandon a sender rather than refresh-to-retry.
    */
   retryCount?: number;
-  /**
-   * Commit 9-b — image-message data. Present only when messageType ===
-   * 'image'. In 9-b, NO code populates this field — it exists for
-   * ImageBubble's render contract. Population logic ships in 9-c (sender
-   * side) and 9-d (recipient lazy-fetch + cold-load JOIN).
-   */
-  images?: ThreadImage[];
+  // images?: ThreadImage[] inherited from MessageRow (lives in types.ts
+  // to avoid circular imports). Populated by getMessages JOIN extension
+  // (9-d) and the lazy-fetch path; the wider client-only fields on
+  // ThreadImage (blobUrl, progress, failed) are populated by 9-c.
   /** Image-message phase. Undefined for text messages. */
   imagePhase?: ImageMessagePhase;
 }
@@ -156,6 +119,23 @@ export type RealtimeAction =
       conversationId: string;
       messages: ThreadMessage[];
       hasMore: boolean;
+    }
+  // ---- Commit 9-d image-message data action ----
+  | {
+      /**
+       * 9-d.N3 — image-message data arrived from the async lazy-fetch
+       * (getMessageImages) triggered by REALTIME_INSERT for an image-type
+       * message, OR from the explicit refetchMessageImages context method
+       * driven by ImageBubble's retry button.
+       *
+       * Idempotent (per 9-d.N4): if the existing message already has
+       * images populated (e.g. from getMessages's JOIN extension on
+       * initial thread load), the reducer no-ops — first writer wins.
+       */
+      type: "IMAGE_DATA_RECEIVED";
+      conversationId: string;
+      messageId: string;
+      images: ImageRowRef[];
     };
 
 // ---------------------------------------------------------------------------
@@ -491,6 +471,37 @@ export function realtimeReducer(
         ...state,
         activeMessages: [...action.messages, ...state.activeMessages],
         activeMessagesHasMore: action.hasMore,
+      };
+    }
+
+    case "IMAGE_DATA_RECEIVED": {
+      // 9-d.N3 + 9-d.N4 — populate message.images from lazy-fetch result.
+      // Idempotent: if the existing message already has images, no-op.
+      // First writer wins. This handles the race where the user navigates
+      // to a thread before the lazy-fetch returns — getMessages's JOIN
+      // extension already populated images, and we skip overwriting.
+      //
+      // If this conversation isn't the active one, we still no-op the
+      // activeMessages mutation (there are no activeMessages entries to
+      // mutate). The conversations[] list summary doesn't carry image
+      // data, so there's no per-row mutation to do there either — image
+      // messages already bumped via the REALTIME_INSERT path with the
+      // standard preview ("📷 Photo" or caption excerpt).
+      if (action.conversationId !== state.activeConversationId) return state;
+      const idx = state.activeMessages.findIndex(
+        (m) => m.id === action.messageId,
+      );
+      if (idx === -1) return state;
+      const existing = state.activeMessages[idx]!;
+      // Idempotent guard — first writer wins.
+      if (existing.images && existing.images.length > 0) return state;
+      return {
+        ...state,
+        activeMessages: [
+          ...state.activeMessages.slice(0, idx),
+          { ...existing, images: action.images },
+          ...state.activeMessages.slice(idx + 1),
+        ],
       };
     }
 

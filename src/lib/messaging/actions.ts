@@ -19,8 +19,10 @@ import type {
   SendMessageResult,
   MarkReadResult,
   GetMessagesResult,
+  GetMessageImagesResult,
   ListConversationsResult,
   ConversationSummary,
+  ImageRowRef,
   MessageRow,
 } from "./types";
 
@@ -360,10 +362,19 @@ export async function getMessages(
     beforeTs = anchor?.created_at ?? null;
   }
 
+  // 9-d.N6: LEFT JOIN message_images via PostgREST nested select so cold
+  // thread loads return complete image data on first paint. For text
+  // messages the nested array is empty (left join). For image messages
+  // the array is populated; the lazy-fetch path in MessagesShell.tsx is
+  // a no-op (reducer's idempotent IMAGE_DATA_RECEIVED case skips when
+  // existing.images is already populated).
   let q = supabase
     .from("messages")
     .select(
-      "id, conversation_id, sender_id, message_type, content, metadata, attachment_url, read_at, created_at",
+      `
+      id, conversation_id, sender_id, message_type, content, metadata, attachment_url, read_at, created_at,
+      message_images(id, position, width, height, storage_path)
+      `,
     )
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
@@ -380,17 +391,43 @@ export async function getMessages(
   const hasMore = rows.length > capped;
   const page = (hasMore ? rows.slice(0, capped) : rows).reverse(); // chronological
 
-  const messages: MessageRow[] = page.map((m) => ({
-    id: m.id as string,
-    conversationId: m.conversation_id as string,
-    senderId: m.sender_id as string,
-    messageType: m.message_type as string,
-    content: (m.content as string | null) ?? null,
-    metadata: (m.metadata as Record<string, unknown>) ?? {},
-    attachmentUrl: (m.attachment_url as string | null) ?? null,
-    readAt: (m.read_at as string | null) ?? null,
-    createdAt: m.created_at as string,
-  }));
+  const messages: MessageRow[] = page.map((m) => {
+    // 9-d.N6: extract embedded message_images rows and map to ImageRowRef shape.
+    // null width/height from DB are coerced to 0 (display layer uses
+    // aspect-ratio CSS placeholders, not these dimensions, so 0 is safe).
+    const embeddedImages = m.message_images as Array<{
+      id: string;
+      position: number;
+      width: number | null;
+      height: number | null;
+      storage_path: string;
+    }> | null;
+    const images: ImageRowRef[] | undefined =
+      embeddedImages && embeddedImages.length > 0
+        ? embeddedImages
+            .map((img) => ({
+              imageId: img.id,
+              position: img.position,
+              width: img.width ?? 0,
+              height: img.height ?? 0,
+              storagePath: img.storage_path,
+            }))
+            .sort((a, b) => a.position - b.position)
+        : undefined;
+
+    return {
+      id: m.id as string,
+      conversationId: m.conversation_id as string,
+      senderId: m.sender_id as string,
+      messageType: m.message_type as string,
+      content: (m.content as string | null) ?? null,
+      metadata: (m.metadata as Record<string, unknown>) ?? {},
+      attachmentUrl: (m.attachment_url as string | null) ?? null,
+      readAt: (m.read_at as string | null) ?? null,
+      createdAt: m.created_at as string,
+      ...(images ? { images } : {}),
+    };
+  });
 
   // Opening a thread marks the other party's messages read + touches last_seen.
   await markRead(supabase, conversationId, user.id);
@@ -576,4 +613,51 @@ export async function listConversations(
       : null;
 
   return { conversations, nextCursor };
+}
+
+// --- Action 6: getMessageImages (Stage 2.C Commit 9-d) ----------------------
+//
+// Lazy-fetch the message_images rows for a single message. Called by the
+// MessagesShell realtime subscription handler when an INSERT event for an
+// image-type message arrives — Postgres logical replication delivers per-
+// row, per-table events, so the messages INSERT payload carries no
+// message_images data. This action closes that gap.
+//
+// 9-d.N2: position-sorted; signed URLs are NOT minted here (those are
+// per-render via mintMessageImageUrls in ImageBubble's React state).
+// RLS on message_images enforces participant-only SELECT; non-participants
+// receive an empty array (PostgREST + RLS treats blocked rows as if they
+// don't exist).
+//
+// Also called by the retry button in ImageBubble when an initial fetch
+// failed, via the refetchMessageImages context method.
+export async function getMessageImages(
+  messageId: string,
+): Promise<GetMessageImagesResult> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data, error } = await supabase
+    .from("message_images")
+    .select("id, position, width, height, storage_path")
+    .eq("message_id", messageId)
+    .order("position", { ascending: true });
+  if (error) {
+    console.error("[getMessageImages] query failed", error.message);
+    return { error: "Unknown" };
+  }
+  if (!data) return { images: [] };
+
+  const images: ImageRowRef[] = data.map((row) => ({
+    imageId: row.id as string,
+    position: row.position as number,
+    width: (row.width as number | null) ?? 0,
+    height: (row.height as number | null) ?? 0,
+    storagePath: row.storage_path as string,
+  }));
+
+  return { images };
 }

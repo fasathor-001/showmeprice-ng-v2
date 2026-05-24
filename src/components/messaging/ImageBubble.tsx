@@ -9,6 +9,7 @@ import type {
   ThreadMessage,
 } from "@/lib/messaging/realtime";
 import { ImageViewer } from "./ImageViewer";
+import { useMessagesShell } from "./MessagesShell";
 
 // Stage 2.C Commit 9-b — image-message bubble (read-only).
 //
@@ -75,6 +76,13 @@ export function ImageBubble({
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [signedExpiresAt, setSignedExpiresAt] = useState<number | null>(null);
   const [signedFetchError, setSignedFetchError] = useState(false);
+
+  // 9-d — refetchMessageImages context method for the "no images yet"
+  // retry path (placeholder shell tap). Distinct from the slot-level
+  // signed-URL retry (which clears local state to re-trigger
+  // mintMessageImageUrls). Decoupled so each retry path targets the
+  // correct failure mode.
+  const { refetchMessageImages } = useMessagesShell();
 
   const images = message.images ?? [];
   const sortedImages = [...images].sort((a, b) => a.position - b.position);
@@ -152,20 +160,53 @@ export function ImageBubble({
   const opacityClass = isPending ? "opacity-80" : "opacity-100";
 
   // 9-b.N2 + 9-b.N6 — placeholder render path when no image data has
-  // arrived yet (recipient pre-9-d, cold load, admin test row). Bubble
-  // shell renders with a calm pulse + worst-case "📷 Photo" text + the
-  // caption if present. NEVER crashes; never silently null-renders.
+  // arrived yet (recipient pre-9-d cold load, lazy-fetch in flight, OR
+  // an admin test row without companion message_images). Bubble shell
+  // renders with a calm pulse + worst-case "📷 Photo" text + the
+  // caption (if present). 9-d.N5: tap fires refetchMessageImages so the
+  // user can retry if the lazy-fetch failed transiently. NEVER crashes;
+  // never silently null-renders.
+  const handlePlaceholderTap = () => {
+    refetchMessageImages(message.conversationId, message.id);
+  };
   const renderPlaceholderShell = () => (
-    <div className="w-full rounded-xl overflow-hidden aspect-[4/3] max-h-80 bg-neutral-200 relative">
+    <button
+      type="button"
+      onClick={handlePlaceholderTap}
+      aria-label="Tap to retry loading photo"
+      className="w-full rounded-xl overflow-hidden aspect-[4/3] max-h-80 bg-neutral-200 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 hover:bg-neutral-300/40 transition-colors"
+    >
       <div
         className="absolute inset-0 bg-white/10 animate-pulse"
         aria-hidden="true"
       />
       <div className="absolute inset-0 flex items-center justify-center text-ink-500 text-sm">
-        <span aria-label="Photo loading">📷 Photo</span>
+        <span>📷 Photo</span>
       </div>
-    </div>
+    </button>
   );
+
+  // 9-d slot-level retry — clears local signed-URL state to re-trigger
+  // the mintMessageImageUrls useEffect. Distinct from the placeholder
+  // shell retry (which calls the server action for fresh image-data).
+  // The signed URL TTL may have expired between renders, or the network
+  // blipped — clearing local state lets the effect re-run.
+  const handleSignedUrlRetry = () => {
+    setSignedFetchError(false);
+    setSignedUrls({});
+    setSignedExpiresAt(null);
+  };
+
+  // 9-d slot tap dispatcher — branches between open-viewer (happy path)
+  // and signed-URL retry (when local mint failed). Passed to every
+  // ImageSlot so the same handler handles both cases.
+  const handleSlotTap = (i: number) => {
+    if (signedFetchError) {
+      handleSignedUrlRetry();
+    } else {
+      openViewer(i);
+    }
+  };
 
   // 9.1 defensive guards: explicit length-based branches, per-branch
   // existence checks. No unguarded else; no runtime-meaningless `!`.
@@ -180,7 +221,7 @@ export function ImageBubble({
             img={only}
             src={resolveImageSrc(only)}
             phase={phase}
-            onTap={() => openViewer(0)}
+            onTap={() => handleSlotTap(0)}
             aspectClass="aspect-[4/3] max-h-80"
             fetchError={signedFetchError}
           />
@@ -196,7 +237,7 @@ export function ImageBubble({
               img={img}
               src={resolveImageSrc(img)}
               phase={phase}
-              onTap={() => openViewer(i)}
+              onTap={() => handleSlotTap(i)}
               aspectClass="aspect-square"
               fetchError={signedFetchError}
             />
@@ -215,7 +256,7 @@ export function ImageBubble({
               img={first}
               src={resolveImageSrc(first)}
               phase={phase}
-              onTap={() => openViewer(0)}
+              onTap={() => handleSlotTap(0)}
               aspectClass="aspect-square"
               fetchError={signedFetchError}
             />
@@ -223,7 +264,7 @@ export function ImageBubble({
               img={second}
               src={resolveImageSrc(second)}
               phase={phase}
-              onTap={() => openViewer(1)}
+              onTap={() => handleSlotTap(1)}
               aspectClass="aspect-square"
               fetchError={signedFetchError}
             />
@@ -232,7 +273,7 @@ export function ImageBubble({
             img={third}
             src={resolveImageSrc(third)}
             phase={phase}
-            onTap={() => openViewer(2)}
+            onTap={() => handleSlotTap(2)}
             aspectClass="aspect-[16/9]"
             fetchError={signedFetchError}
           />
