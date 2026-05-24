@@ -535,6 +535,174 @@ The current `isLikelyPriceContext` heuristic is **message-wide** — any "last p
 
 Surfaced 2026-05-23 during D-119 / Commit 1.6 design.
 
+### K-045 — Image sharing promised by Commit 7 template chip but not implemented (HIGH, gates Stage 2.C completion)
+
+Commit 7 shipped a localized first-message template chip *"Can I see more pictures?"* (D-108 set) in `MessageSellerModal`. The messaging system does not support image messages — `MessageComposer` has no attach button, `MessageBubble` has no image-type render branch, and there is no `message-images` Storage bucket or `message_images` table.
+
+The schema is partially provisioned: `messages.message_type` enum already includes `'image'` per ACTUAL_SCHEMA. The wiring (table, RLS, Storage bucket, signed-URL minting, upload UI, image-bubble rendering, full-screen viewer, report-image action) is the missing layer.
+
+**Severity:** HIGH. Product coherence gap — the platform promises in chat what it cannot deliver. The buyer who taps the chip writes themselves into a dead-end conversation; the seller has no on-platform way to fulfil the request and the conversation either moves off-platform (where D-119 filters and read receipts don't apply) or dies. WhatsApp and Jiji both support media; Nigerian users are calibrated to that bar.
+
+**Resolution scope (Stage 2.C Commit 9):** see TC-001 surface findings — new `message_images` table + new private `message-images` Storage bucket with participant-gated RLS, attach button in `MessageComposer` (≤3 images, ≤5 MB after client-side compression, parallel upload with per-image progress), image-bubble rendering (1/2/3 layouts), full-screen viewer, report-image action via existing `reports` table. First-message-of-conversation stays text-only (gate parallel to D-114 phone-verification gate). No automated OCR/content scanning at MVP — manual report + moderation pipeline only.
+
+**Related:** TC-001 (audit pre-flagged HIGH); D-108 (template chip set); D-114 (gate pattern); D-119 (filter scope — text only, image binary cannot be filtered); K-010 (Storage orphan pattern that the same RLS shape mitigates).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-046 — sendMessage exception path leaves failed bubble without a Retry affordance (HIGH)
+
+When `sendMessage` throws (network timeout, Wi-Fi drop, transient Supabase error), `MessageComposer`'s `try/catch` marks the optimistic bubble `failed: true` and renders an inline danger banner *"Couldn't send."* in the composer. The failed bubble shows danger border + *"Tap to dismiss."* There is no Retry button on either the bubble or the banner — the user must retype the message and resubmit.
+
+On Nigerian mobile carrier networks, transient send failures are common. Forcing the user to retype erodes trust faster than the underlying network blip ever could.
+
+**Severity:** HIGH. Pre-Stage-2.C-completion blocker.
+
+**Resolution scope (Commit 8):** see TC-002 + TC-019 combined surface findings — Retry button on the failed bubble (small ↻ icon next to Dismiss) AND a Retry text-link in the composer-level danger banner. Both re-dispatch `SEND` with the cached content. Retry budget of 3 attempts per bubble; after the third failure the banner copy escalates to *"Couldn't send — check your connection and try again later."* If `navigator.onLine === false` at retry time, suppress the dispatch and show *"You're offline. Connect to the internet to send."*
+
+**Related:** TC-002 (audit), TC-019 (paired bubble surface), Commit 4 (original composer error handling), D-121 (calm UI principle — Retry is the calm option vs retype).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-047 — Mark-as-read only fires on initial thread SSR; no visibilitychange refire on tab-focus return (HIGH)
+
+`markRead` is invoked server-side inside `getMessages` when the recipient first opens the thread (`/messages/[conversationId]/page.tsx:98`). There is no client-side `visibilitychange` or `focus` listener — if the recipient backgrounds the tab (switches apps, locks the phone) and returns, no second mark-as-read fires, and any messages that arrived via Realtime while backgrounded stay unread server-side.
+
+The server action `markConversationAsRead` exists but is never called from the client.
+
+**Severity:** HIGH. Read receipts shipped in Commit 6 (✓ / ✓✓) but appear unreliable under the single most common Nigerian mobile usage pattern — background-and-return. Compounds with K-048.
+
+**Resolution scope (Commit 8):** see TC-003 surface findings — `useEffect` in `MessageThread.tsx` registering `document.visibilitychange` (and `focus` fallback for browsers where only one fires). Debounce: fire only if `last_fire_at` >2 seconds ago. Edge case for page-back navigation handled naturally — Next.js remounts the page and `getMessages` re-fires server-side.
+
+**Related:** TC-003 (audit), K-048 (companion realtime-UPDATE drop), Commit 6 (where ✓✓ shipped expecting reliable mark-as-read), D-109 (read-tracking model).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-048 — Realtime UPDATE handler drops events for non-active conversations (HIGH)
+
+In `src/lib/messaging/realtime.ts`, the `REALTIME_UPDATE` reducer case short-circuits if `action.message.conversationId !== state.activeConversationId`. When recipient B reads a message in thread X, sender A — currently viewing thread Y or the conversation list — never gets the `read_at` UPDATE merged into either active thread state OR the conversation-list summary. The ✓ → ✓✓ advance only renders if sender is staring at thread X at the moment recipient opens it.
+
+Compounds K-047: even if the recipient's mark-as-read fires correctly, the sender's UI almost never reflects it.
+
+**Severity:** HIGH.
+
+**Resolution scope (Commit 8):** see TC-004 surface findings — remove the `activeConversationId` short-circuit for UPDATE events. Merge `read_at` into both active thread state AND into the conversations-list `lastMessage` field. Performance review: each UPDATE causes a small state diff on the conversations array; React's reconciliation handles row-keyed updates cleanly at v2 scale.
+
+**Related:** TC-004 (audit), K-047 (companion mark-as-read trigger), Commit 5 (original Realtime wiring), Commit 6 (where ✓✓ shipped).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-049 — createListingAction creates product row even when product_images insert fails — silent partial publish (HIGH)
+
+`src/lib/listings/actions.ts:1075-1083` (`createListingAction`) inserts the `products` row first, then the `product_images` rows. If the `product_images` insert errors (Storage upload succeeded but DB write failed, RLS edge case, transient connection drop), the failure is `console.error`'d and the function returns success. The user sees a green "Listing created" toast and is redirected to the dashboard — then opens their listing to find it has zero attached photos.
+
+A first-time seller publishes their flagship listing, sees success, then refreshes to find an imageless listing. The most damaging possible introduction to the platform.
+
+**Severity:** HIGH. Pre-public-beta blocker.
+
+**Resolution scope (Commit 10):** see TC-005 surface findings — on `product_images` insert error, delete the just-created `products` row and return a form error *"Couldn't attach photos — please try again."* Single transactional path. ~30 LOC.
+
+**Related:** TC-005 (audit), K-050 (mirror on update path), K-051 (companion partial-upload gap).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-050 — updateListingAction persists product update even when image reinsert fails — silent partial edit (HIGH)
+
+`src/lib/listings/actions.ts:1239-1241` (`updateListingAction`) commits the `products` UPDATE first, then runs a delete-then-reinsert image cycle. If the image reinsert errors, the title/price/description edit IS persisted and the user sees *"Listing updated"* toast. They discover the stale-images state on reload — particularly damaging when the edit was specifically *"I uploaded better photos."*
+
+**Severity:** HIGH. Mirror of K-049 for the edit path. Pre-public-beta blocker.
+
+**Resolution scope (Commit 10):** see TC-006 surface findings — capture the original product row before UPDATE; on image-reinsert error, restore the product row to its pre-update state and return a form error. ~40 LOC.
+
+**Related:** TC-006 (audit), K-049 (create-path mirror), K-051 (companion partial-upload gap).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-051 — ImageUploader accepts partial multi-image upload silently — form publishable with N-of-M images and no warning (HIGH)
+
+`src/components/listings/ImageUploader.tsx:117-132` processes selected images in a loop. If image 3 of 5 fails (network drop, MIME validation, size), images 1-2 are already committed to local form state. The error banner shows the message for #3 but #4 and #5 are simply skipped — and #1, #2 stay in the form. The user can hit Publish with 2 images, believing they uploaded 5.
+
+**Severity:** HIGH. Seller's flagship product ships with 2 of 5 photos; they notice later and blame the platform. Pre-public-beta blocker.
+
+**Resolution scope (Commit 10):** see TC-007 surface findings — after the batch loop, if `anyImageFailed && uploaded > 0`, render a persistent warning banner above the gallery *"Some photos didn't upload — review before publishing"* with an explicit *"X of Y uploaded"* count. Allow publish but make the partial state visible. ~35 LOC.
+
+**Related:** TC-007 (audit), K-049 (companion create-path silent fail), K-050 (companion update-path silent fail).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-052 — /marketplace and /categories/[slug] Supabase queries have no try/catch — network blip surfaces as Cloudflare "Application error" (HIGH)
+
+`src/app/marketplace/page.tsx` and `src/app/categories/[slug]/page.tsx` are top-level Server Components that `await` Supabase queries with no `try/catch` and no error boundary wrapping them. A network drop mid-SSR or a Supabase transient error throws to Next.js's default error boundary, which renders Cloudflare's generic *"Application error"* page.
+
+**Severity:** HIGH. Discovery is the front door. A blank or "Application error" page on `/marketplace` tells the user the entire platform is down — even when only one query blipped. Pre-public-beta blocker.
+
+**Resolution scope (Commit 11):** see TC-008 surface findings — wrap the Supabase queries in `try/catch`; on failure, render an inline *"Couldn't load listings — refresh to try again"* card with the rest of the page chrome (header, search, filters) intact. ~40 LOC across both routes.
+
+**Related:** TC-008 (audit), K-053 (companion broken-image render), D-124 (calm UI — inline recovery vs full error page).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-053 — Product images use raw `<img>` with no onError handler — Storage 404 renders the browser broken-icon (HIGH)
+
+`ListingImageGallery.tsx`, `ListingCard.tsx`, and `MessageSellerModal.tsx` render product images via vanilla `<img src={url}>` with no `onError` handler. If the Supabase Storage URL 404s (file deleted, RLS-blocked, CDN miss), the browser shows its default broken-image icon — a dotted square with an X.
+
+On a product detail page or marketplace card, broken-icon reads as *"this seller is hiding something"* or *"this is a scam listing."* Single most trust-destroying visual on the platform.
+
+**Severity:** HIGH. Pre-public-beta blocker.
+
+**Resolution scope (Commit 11):** see TC-009 surface findings — small `<ProductImage>` wrapper component with `onError` fallback to the existing SVG placeholder used in the no-images case. Pair with TC-014 (next/image migration / lazy + responsive sizes) for the broader image-pipeline pass. ~50 LOC including all surfaces.
+
+**Related:** TC-009 (audit), TC-014 / K-055 (companion lazy-load + responsive-sizes work), K-010 (Storage orphan that's the upstream cause of some 404s).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-054 — No email path when message recipient is offline — biggest single uncertainty gap on the platform (HIGH)
+
+`src/lib/messaging/actions.ts` (`sendMessage` and `createConversation`) has no email side-effect. When a buyer messages a seller (or vice versa) and the recipient is offline (tab closed, no active session, browser closed), the only notification path is the in-app Realtime push — which they will not receive. The recipient discovers the message only on their next platform visit, which may be hours or days later.
+
+**Severity:** HIGH. THE biggest single uncertainty gap on the platform. A new buyer messages a Pro-tier seller about a ₦450k laptop; the seller has their tab closed and no email — the buyer's message sits unanswered, the conversation dies, the deal goes off-platform or never happens. Without email, the messaging surface is invisible to anyone not actively browsing.
+
+**Resolution scope (Commit 8):** see TC-023 surface findings — Resend API integration (`RESEND_API_KEY` Cloudflare Pages env var), a `sendMessageNotificationEmail` server action invoked from `sendMessage`/`createConversation` when the recipient's `profiles.last_seen_at` is more than 30 seconds stale, hybrid debounce strategy (first email immediate <60s after send; subsequent messages within 10 minutes suppressed; next message after 10 minutes of silence earns a fresh email), one React Email template carrying sender name + ~140-char preview + listing thumbnail + reply CTA. Sender's `from` address `notifications@showmeprice.ng`. No unsubscribe link at MVP (transactional, not marketing).
+
+**Related:** TC-023 (audit), K-057 (companion verification-status email), K-044 (push notifications — different surface, both close the offline-recipient gap), D-125 (calm-not-noisy email cadence).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-055 — Product images served at full Storage resolution without lazy-loading or responsive sizes (MEDIUM)
+
+All product images on `ListingImageGallery.tsx`, `ListingCard.tsx`, and `MessageSellerModal.tsx` use `<img src={url}>` with no `loading="lazy"`, no `srcset`, and no responsive size negotiation. A listing detail page on mobile downloads full-resolution Storage objects for every gallery item, including thumbs the user may never see. On a Nigerian 3G connection, the detail page can take 8-15 seconds to settle.
+
+**Severity:** MEDIUM. Slow correlates with untrustworthy in user perception. Pre-public-beta recommended.
+
+**Resolution scope (Commit 11):** see TC-014 surface findings — migrate to `next/image` where Cloudflare Pages permits, otherwise add `loading="lazy"` + `srcset` + Supabase Storage image-transform query parameters for size variants. Pairs with K-053 — both use the same `<ProductImage>` wrapper.
+
+**Related:** TC-014 (audit), K-053 (companion broken-icon work), D-125 (mobile-first reality).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-056 — Composer textarea on Android Chrome may be covered by the on-screen keyboard — no scrollIntoView on focus (MEDIUM)
+
+Neither `src/components/messaging/MessageComposer.tsx` nor `src/components/listings/MessageSellerModal.tsx` calls `scrollIntoView` when the textarea gains focus. Android Chrome shrinks the visual viewport when the keyboard appears but does not always scroll the focused element into the remaining viewport. Result: a buyer types in the textarea without seeing their cursor or their input.
+
+**Severity:** MEDIUM. The composer IS the conversion surface. If a buyer can't see what they're typing when reaching out to a seller, they abandon mid-message. Pre-public-beta recommended.
+
+**Resolution scope (Commit 11):** see TC-016 surface findings — `onFocus` handler with `setTimeout 200ms` (lets the keyboard finish opening) then `textareaRef.current.scrollIntoView({block: "center"})`. ~15 LOC across both composers.
+
+**Related:** TC-016 (audit), D-124 (Tier 1 surface — messaging entry), Commit 4.1 (sticky-bottom composer that pairs with keyboard behavior).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
+### K-057 — Verification status change is not communicated to the seller — no email side-effect on admin approval/rejection (MEDIUM)
+
+`src/app/admin/verifications/actions.ts` (approve/reject seller identity verification) has no email side-effect on admin decision. The seller is not notified; they must check their dashboard. They submit verification documents, hear nothing for days, don't know whether to keep checking or assume it failed.
+
+**Severity:** MEDIUM. Each anxious-check session that finds *"still pending"* or *"approved 2 days ago"* erodes confidence in platform timeliness. Pre-public-beta recommended.
+
+**Resolution scope (Commit 10):** see TC-024 surface findings — Resend infrastructure lands in Commit 8 (K-054); this is additive: send-on-admin-decision with one approval template + one rejection template (carries rejection reason if present). `from` address consistent with K-054 (`notifications@showmeprice.ng`). ~50 LOC.
+
+**Related:** TC-024 (audit), K-054 (companion Resend integration — opens this path), Commit 8 (Resend lands here), D-125 (calm cadence — one email per decision, no follow-up nags).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+
 ## Resolved or superseded
 
 ### K-019 — Phone validation gap + NG-only-vs-international product decision (RESOLVED)
