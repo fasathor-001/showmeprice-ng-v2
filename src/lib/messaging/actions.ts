@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isPhoneVerified } from "@/lib/auth";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { runMessageFilter, blockReason, logFilterAction } from "./filters";
+import { dispatchNewMessageEmail } from "@/lib/notifications/send-message-notification";
 import type {
   CreateConversationResult,
   SendMessageResult,
@@ -172,6 +173,16 @@ export async function createConversation(
     userProceeded: true,
   });
 
+  // TC-023: best-effort email if recipient (seller, here) is offline. Never
+  // throws; logs internally. Awaited so it doesn't get cut off mid-call on
+  // Cloudflare's Edge runtime (no waitUntil here yet).
+  await dispatchNewMessageEmail({
+    recipientId: listing.seller_id,
+    senderId: actor.user.id,
+    conversationId: conv.id,
+    messageContent: content,
+  });
+
   return { conversationId: conv.id };
 }
 
@@ -251,6 +262,19 @@ export async function sendMessage(
     result: filter,
     content: text,
     userProceeded: true,
+  });
+
+  // TC-023: best-effort email if recipient is offline. Recipient is whichever
+  // party in this conversation isn't the sender. Dispatcher is fire-and-await:
+  // never throws (errors logged inside), respects offline threshold +
+  // notification_preferences + 10-min suppression window.
+  const recipientId =
+    conv.buyer_id === actor.user.id ? conv.seller_id : conv.buyer_id;
+  await dispatchNewMessageEmail({
+    recipientId,
+    senderId: actor.user.id,
+    conversationId,
+    messageContent: text,
   });
 
   return {

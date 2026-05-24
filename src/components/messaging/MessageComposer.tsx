@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui";
 import { sendMessage } from "@/lib/messaging/actions";
+import { useNavigatorOnline } from "@/lib/use-navigator-online";
 import { useMessagesShell } from "./MessagesShell";
 
 // Stage 2.B Commit 4 — message composer (refactored for optimistic UI in
@@ -37,6 +38,18 @@ import { useMessagesShell } from "./MessagesShell";
 const MAX_LEN = 2000;
 const COUNTER_THRESHOLD = 1600;
 const MAX_TEXTAREA_HEIGHT = 5 * 24 + 16;
+
+// TC-010: sessionStorage key prefix for draft preservation across auth-
+// expiry redirects. Namespaced `sp:msg-draft:` (per §4.A surface findings)
+// so future draft types (listing drafts, etc.) can coexist without
+// collisions. sessionStorage is tab-scoped; drafts naturally clear on tab
+// close so transient negotiation content doesn't persist to disk.
+const DRAFT_KEY_PREFIX = "sp:msg-draft:";
+
+// TC-002: banner-level retry budget (mirrors the bubble-level RETRY_BUDGET
+// in MessageBubble). After the 3rd failure, the banner Retry link disappears
+// and the copy escalates.
+const BANNER_RETRY_BUDGET = 3;
 
 interface MessageComposerProps {
   conversationId: string;
@@ -88,11 +101,41 @@ function Composer({
 }) {
   const router = useRouter();
   const { optimisticSend, confirmSend, failSend } = useMessagesShell();
+  const isOnline = useNavigatorOnline();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // TC-002: cache the last failed-send content for the banner Retry link.
+  // null when no recent failure (banner Retry hidden). Reset on successful
+  // send. Budget tracked alongside via lastFailureRetries.
+  const [lastFailedContent, setLastFailedContent] = useState<string | null>(
+    null,
+  );
+  const [lastFailureRetries, setLastFailureRetries] = useState(0);
+  // TC-002 §1.E: show "You're offline..." inline below the banner when the
+  // user attempted to send/retry while offline. Cleared when isOnline returns
+  // to true OR when content is cleared via successful send.
+  const [showOfflineHint, setShowOfflineHint] = useState(false);
+
+  // TC-010: hydrate textarea from any stashed draft on mount. Silent restore
+  // per §4.B surface findings — no toast, no visual indicator. Drafts come
+  // from a pre-send action that hit auth-expiry and redirected the user;
+  // after re-login they land back here with their content waiting.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stashed = sessionStorage.getItem(
+        `${DRAFT_KEY_PREFIX}${conversationId}`,
+      );
+      if (stashed && stashed.trim().length > 0) {
+        setContent(stashed);
+      }
+    } catch {
+      // sessionStorage may throw in private-mode Safari; non-fatal.
+    }
+  }, [conversationId]);
 
   // Auto-grow textarea on content change.
   useEffect(() => {
@@ -102,28 +145,52 @@ function Composer({
     el.style.height = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT) + "px";
   }, [content]);
 
+  // Clear the offline hint when the user reconnects.
+  useEffect(() => {
+    if (isOnline && showOfflineHint) setShowOfflineHint(false);
+  }, [isOnline, showOfflineHint]);
+
+  // TC-010: explicit sessionStorage helpers. NOT a useEffect mirror — that
+  // would race with the "clear textarea on send" → "discover auth-expiry"
+  // sequence and lose the draft before we got to redirect. Instead:
+  //   - handleChange writes on every keystroke (drafts survive page reload)
+  //   - handleSend on SUCCESS calls dropDraft()
+  //   - handleSend on auth-expiry does NOT clear (the typed content was
+  //     already in sessionStorage from handleChange writes; survives the
+  //     /sign-in round-trip)
+  //   - handleSend on filter/other inline error also doesn't clear (we
+  //     restore content into the textarea via setContent(text), and the
+  //     stash still matches).
+  const writeDraft = (value: string) => {
+    if (typeof window === "undefined") return;
+    try {
+      const key = `${DRAFT_KEY_PREFIX}${conversationId}`;
+      if (value.length === 0) sessionStorage.removeItem(key);
+      else sessionStorage.setItem(key, value);
+    } catch {
+      // sessionStorage may throw in private-mode Safari; non-fatal.
+    }
+  };
+  const dropDraft = () => {
+    if (typeof window === "undefined") return;
+    try {
+      sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${conversationId}`);
+    } catch {
+      // non-fatal
+    }
+  };
+
   const trimmedLen = content.trim().length;
   const isEmpty = trimmedLen === 0;
   const isOverLimit = content.length > MAX_LEN;
   const showCounter = content.length >= COUNTER_THRESHOLD;
   const sendDisabled = isEmpty || isOverLimit || isSending;
 
-  const handleSend = async () => {
-    if (sendDisabled) return;
+  // Core send routine, parameterised so the same path serves both the
+  // primary Send button and the TC-002 banner Retry link.
+  const performSend = async (text: string) => {
     setIsSending(true);
     setError(null);
-
-    // Capture text + clear textarea immediately for snappy UX.
-    const text = content;
-    setContent("");
-
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[MessageComposer] handleSend start", {
-        conversationId,
-        currentUserId,
-        textPreview: text.slice(0, 40),
-      });
-    }
 
     // Optimistic: dispatch to shell, get tempId for later reconciliation.
     const tempId = optimisticSend(conversationId, {
@@ -136,17 +203,13 @@ function Composer({
       readAt: null,
     });
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[MessageComposer] optimisticSend returned tempId:", tempId);
-    }
-
     try {
       const result = await sendMessage(conversationId, text);
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[MessageComposer] sendMessage result:", result);
-      }
 
       // Auth / participation errors → redirect (rare; backstop).
+      // Draft sessionStorage was already written by handleChange + persists
+      // through the redirect, so the user lands back here with their content
+      // intact (TC-010).
       if (result.error === "Unauthorized") {
         failSend(conversationId, tempId);
         router.push(`/sign-in?next=/messages/${conversationId}`);
@@ -164,39 +227,49 @@ function Composer({
       }
 
       // Filter / validation errors → mark bubble failed + inline banner.
+      // Cache the failed content for banner Retry (TC-002). Bump retry count
+      // so the 3-attempt budget escalates the banner copy after exhaustion.
+      const noteFailure = () => {
+        setLastFailedContent(text);
+        setLastFailureRetries((n) => n + 1);
+      };
       if (result.error === "ContentBlocked") {
         failSend(conversationId, tempId);
         setError(result.reason ?? "This message can't be sent.");
-        // Restore content so the user can edit + retry.
+        noteFailure();
         setContent(text);
         return;
       }
       if (result.error === "TooLong") {
         failSend(conversationId, tempId);
         setError(`Message is too long (${MAX_LEN} character maximum).`);
+        noteFailure();
         setContent(text);
         return;
       }
       if (result.error === "Empty") {
         failSend(conversationId, tempId);
         setError("Type a message first.");
+        noteFailure();
         setContent(text);
         return;
       }
       if (result.error === "FilterUnavailable") {
         failSend(conversationId, tempId);
         setError("Couldn't check message safety — please try again.");
+        noteFailure();
         setContent(text);
         return;
       }
       if (result.error === "Unknown") {
         failSend(conversationId, tempId);
         setError("Couldn't send. Please try again.");
+        noteFailure();
         setContent(text);
         return;
       }
 
-      // Success — swap tempId for real message via the shell.
+      // Success — swap tempId for real message via the shell + drop draft.
       if (result.messageId) {
         confirmSend(conversationId, tempId, {
           id: result.messageId,
@@ -210,6 +283,10 @@ function Composer({
           createdAt: new Date().toISOString(),
         });
       }
+      // TC-010: successful send clears the draft stash + the failure cache.
+      dropDraft();
+      setLastFailedContent(null);
+      setLastFailureRetries(0);
 
       if (result.containsWarning) {
         setWarning(
@@ -222,10 +299,46 @@ function Composer({
       console.error("[MessageComposer] send failed", err);
       failSend(conversationId, tempId);
       setError("Couldn't send. Please try again.");
+      setLastFailedContent(text);
+      setLastFailureRetries((n) => n + 1);
       setContent(text);
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSend = async () => {
+    if (sendDisabled) return;
+
+    // §1.E: navigator.onLine guard. If offline, surface the inline hint and
+    // do not consume any retry budget. Banner Retry path uses the same guard
+    // via handleBannerRetry.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setShowOfflineHint(true);
+      setError("Couldn't send. Please try again.");
+      // Cache the content so the banner Retry can re-attempt later.
+      setLastFailedContent(content);
+      return;
+    }
+
+    // Capture text + clear textarea immediately for snappy UX.
+    const text = content;
+    setContent("");
+    // Ensure the draft is captured before any redirect path runs.
+    writeDraft(text);
+    await performSend(text);
+  };
+
+  const handleBannerRetry = async () => {
+    if (!lastFailedContent) return;
+    if (isSending) return;
+    if (lastFailureRetries >= BANNER_RETRY_BUDGET) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setShowOfflineHint(true);
+      return;
+    }
+    setShowOfflineHint(false);
+    await performSend(lastFailedContent);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -236,8 +349,19 @@ function Composer({
   };
 
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
+    const next = e.target.value;
+    setContent(next);
+    // TC-010: keep sessionStorage in sync with the user's typing so a
+    // redirect-after-send (auth-expiry) preserves the latest content.
+    writeDraft(next);
     if (error) setError(null);
+    // User started typing a new message — they've moved past the previous
+    // failure. Clear the banner Retry context so the stale failed-send isn't
+    // offered for retry once they start a new attempt.
+    if (lastFailedContent !== null && next !== lastFailedContent) {
+      setLastFailedContent(null);
+      setLastFailureRetries(0);
+    }
   };
 
   const counterClass = isOverLimit
@@ -270,7 +394,39 @@ function Composer({
           className="mb-2 px-3 py-2 rounded-lg bg-danger-bg text-danger-text text-xs"
           role="alert"
         >
-          {error}
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="flex-1">
+              {lastFailureRetries >= BANNER_RETRY_BUDGET ? (
+                <>
+                  Couldn&apos;t send — check your connection and try again
+                  later.
+                </>
+              ) : (
+                error
+              )}
+            </span>
+            {/* TC-002 banner Retry — only shows when there's a recent failure
+                cached and budget remains. Suppressed when budget exhausted
+                (copy escalates above) or when offline (the offline hint
+                below takes over). */}
+            {lastFailedContent !== null &&
+              lastFailureRetries < BANNER_RETRY_BUDGET &&
+              !isSending && (
+                <button
+                  type="button"
+                  onClick={handleBannerRetry}
+                  className="font-medium underline hover:no-underline focus:outline-none focus-visible:no-underline text-danger-text"
+                  aria-label="Retry sending"
+                >
+                  Retry
+                </button>
+              )}
+          </div>
+          {showOfflineHint && !isOnline && (
+            <div className="mt-1 text-ink-600">
+              You&apos;re offline. Connect to the internet to send.
+            </div>
+          )}
         </div>
       )}
       <div className="flex items-end gap-2">

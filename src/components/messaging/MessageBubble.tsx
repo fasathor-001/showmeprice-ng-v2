@@ -6,17 +6,12 @@ import type { ThreadMessage } from "@/lib/messaging/realtime";
 
 // Stage 2.B Commit 3 — single message bubble. Pending / failed visual states
 // added in Commit 5 for optimistic-UI feedback (surface findings E).
-// Commit 5.5: "use client" + useClientTime for the timestamp — previous
-// `t.getHours()/getMinutes()` on a Date during server render used UTC, then
-// the client rendered local time, producing a text-content hydration
-// mismatch on every bubble. The mismatch cascaded to React #423 (root
-// fallback to client-only rendering), which silently broke optimistic UI
-// dispatches and realtime subscription init. See useClientTime docstring.
+// Commit 5.5: "use client" + useClientTime for the timestamp.
 //
 // Visual states for current-user bubbles:
 //   - normal: full opacity, no indicator
 //   - pending (server insert in flight): opacity-60, small ⌚ next to timestamp
-//   - failed (server returned error): danger border, "Tap to retry" link
+//   - failed (server returned error): danger border + ↻ Retry · Dismiss
 //   - confirmed (server returned success): same as normal
 //
 // Other-party bubbles never carry pending/failed state — they only ever
@@ -27,16 +22,30 @@ import type { ThreadMessage } from "@/lib/messaging/realtime";
 //
 // Commit 6 — K-041 read receipts SHIPPED. Two-state model (sent ✓ / read ✓✓)
 // with teal-700 for the read state. Symmetric data; both buyer + seller get
-// receipts on their own sent messages. Recipient's view never shows receipts
-// on the other party's incoming bubbles. Receipts hidden during pending +
+// receipts on their own sent messages. Receipts hidden during pending +
 // failed states (the clock icon / danger border own those signals).
+//
+// Commit 8 (Stage 2.C) — TC-002 + TC-019 — failed-state bubble now offers
+// BOTH Retry (↻) and Dismiss. Retry re-uses the same tempId so the bubble
+// stays in place; ~3 attempts per bubble (`retryCount` on ThreadMessage).
+// After the 3rd failure, Retry disables and the bubble copy escalates to
+// "Couldn't send after 3 attempts." Dismiss stays available throughout.
+// Retry budget resets on page refresh (acceptable MVP behavior).
+
+const RETRY_BUDGET = 3;
 
 interface MessageBubbleProps {
   message: MessageRow | ThreadMessage;
   isCurrentUser: boolean;
   groupedWithPrevious: boolean;
-  /** When set, the bubble is in failed state and clicking the retry link calls this. */
+  /** When set, the bubble is failed and clicking Dismiss calls this. */
   onDismissFailed?: () => void;
+  /**
+   * When set, the bubble is failed and the user has retry budget remaining.
+   * Calling this triggers RETRY_FAILED → re-dispatch sendMessage. Omit when
+   * the budget is exhausted to render the Retry link as visually disabled.
+   */
+  onRetryFailed?: () => void;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -50,6 +59,7 @@ export function MessageBubble({
   isCurrentUser,
   groupedWithPrevious,
   onDismissFailed,
+  onRetryFailed,
 }: MessageBubbleProps) {
   // Client-only HH:mm in the user's local timezone (Commit 5.5 hydration fix).
   // Hooks must run unconditionally before any early return — system-message
@@ -160,14 +170,56 @@ export function MessageBubble({
             </svg>
           )}
         </div>
-        {isFailed && onDismissFailed && (
-          <button
-            type="button"
-            onClick={onDismissFailed}
-            className="mt-1 text-xs text-danger-text hover:underline focus:outline-none focus-visible:underline"
-          >
-            Failed to send. Tap to dismiss.
-          </button>
+        {isFailed && (onDismissFailed || onRetryFailed) && (
+          <div className="mt-1 flex items-center gap-2 text-xs">
+            {(threadMsg.retryCount ?? 0) >= RETRY_BUDGET ? (
+              // Budget exhausted — bubble-level copy escalates; Retry hidden.
+              <span className="text-danger-text">
+                Couldn&apos;t send after {RETRY_BUDGET} attempts.
+              </span>
+            ) : (
+              <>
+                {onRetryFailed && (
+                  <button
+                    type="button"
+                    onClick={onRetryFailed}
+                    className="inline-flex items-center gap-1 text-danger-text hover:underline focus:outline-none focus-visible:underline"
+                    aria-label="Retry sending this message"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M21 12a9 9 0 1 1-3.18-6.87" />
+                      <path d="M21 4v5h-5" />
+                    </svg>
+                    Retry
+                  </button>
+                )}
+                {onRetryFailed && onDismissFailed && (
+                  <span className="text-ink-400" aria-hidden="true">
+                    ·
+                  </span>
+                )}
+              </>
+            )}
+            {onDismissFailed && (
+              <button
+                type="button"
+                onClick={onDismissFailed}
+                className="text-ink-500 hover:text-ink hover:underline focus:outline-none focus-visible:underline"
+                aria-label="Dismiss failed message"
+              >
+                Dismiss
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

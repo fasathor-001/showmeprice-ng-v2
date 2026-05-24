@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useClientTime } from "@/lib/use-client-time";
 import type { MessageRow } from "@/lib/messaging/types";
 import type { ThreadMessage } from "@/lib/messaging/realtime";
+import { markConversationAsRead } from "@/lib/messaging/actions";
 import { useMessagesShell } from "./MessagesShell";
 import { MessageBubble } from "./MessageBubble";
 import { ScrollToBottom } from "./ScrollToBottom";
@@ -57,7 +58,7 @@ export function MessageThread({
   hasMore,
   currentUserId,
 }: MessageThreadProps) {
-  const { state, seedActive, dismissFailed, loadEarlierMessages } =
+  const { state, seedActive, dismissFailed, retryFailed, loadEarlierMessages } =
     useMessagesShell();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
@@ -68,6 +69,39 @@ export function MessageThread({
   useEffect(() => {
     seedActive(conversationId, initialMessages as ThreadMessage[], hasMore);
   }, [conversationId, initialMessages, hasMore, seedActive]);
+
+  // TC-003 (Commit 8): mark conversation as read when the tab returns to
+  // foreground. The server-side markRead in getMessages handles the initial
+  // SSR; this listener covers the Nigerian mobile background-and-return
+  // pattern where the user opens the thread, switches apps, then returns —
+  // any messages that arrived via Realtime while backgrounded need to be
+  // acknowledged so the sender's ✓ → ✓✓ advance fires.
+  //
+  // Two-event surface (§2.A): visibilitychange AND focus, gated by
+  // document.visibilityState so focus events that arrive while still hidden
+  // don't trigger a redundant call. Debounce: simple last-fire ref; only
+  // dispatch if >2s since last fire (§2.B).
+  useEffect(() => {
+    let lastFireAt = 0;
+
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastFireAt < 2_000) return;
+      lastFireAt = now;
+      // Best-effort; never throws on caller per action's contract.
+      void markConversationAsRead(conversationId).catch((err) => {
+        console.error("[MessageThread] markConversationAsRead failed", err);
+      });
+    };
+
+    document.addEventListener("visibilitychange", handler);
+    window.addEventListener("focus", handler);
+    return () => {
+      document.removeEventListener("visibilitychange", handler);
+      window.removeEventListener("focus", handler);
+    };
+  }, [conversationId]);
 
   // Live messages from the shell. Falls back to initialMessages until SEED_ACTIVE
   // has committed (first render race — useEffect runs after paint).
@@ -152,6 +186,9 @@ export function MessageThread({
         groupedWithPrevious={groupedWithPrevious}
         onDismissFailed={
           msg.failed ? () => dismissFailed(conversationId, msg.id) : undefined
+        }
+        onRetryFailed={
+          msg.failed ? () => retryFailed(conversationId, msg.id) : undefined
         }
       />,
     );

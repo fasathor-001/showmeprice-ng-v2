@@ -24,13 +24,16 @@
   },
   "packageManager": "pnpm@9.15.9",
   "dependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.8",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "drizzle-orm": "^0.45.2",
     "next": "14.2.35",
     "postgres": "^3.4.9",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "resend": "^6.12.3"
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.15",

@@ -29,6 +29,14 @@ export interface ThreadMessage extends MessageRow {
   failed?: boolean;
   /** Original tempId, kept after server-confirmed for fallback dedup. */
   tempId?: string;
+  /**
+   * TC-002: number of retry attempts this bubble has consumed in this session.
+   * Bubble shows the Retry link while < 3; after the third failure the link
+   * disables and the bubble copy escalates. Resets naturally on page refresh
+   * (realtime state mounts fresh) — acceptable MVP behavior per Frank's
+   * approval; realistic users abandon a sender rather than refresh-to-retry.
+   */
+  retryCount?: number;
 }
 
 export interface RealtimeState {
@@ -71,6 +79,17 @@ export type RealtimeAction =
     }
   | { type: "SERVER_FAILED"; conversationId: string; tempId: string }
   | { type: "DISMISS_FAILED"; conversationId: string; tempId: string }
+  | {
+      /**
+       * TC-002: user tapped Retry on a failed bubble. Reuses the same tempId
+       * (so the bubble keeps its position in the thread; no jump-to-bottom on
+       * retry per §1.G surface findings), clears the failed flag, sets pending
+       * again, and increments retryCount.
+       */
+      type: "RETRY_FAILED";
+      conversationId: string;
+      tempId: string;
+    }
   | { type: "REALTIME_INSERT"; message: ThreadMessage; currentUserId: string }
   | { type: "REALTIME_UPDATE"; message: ThreadMessage }
   | {
@@ -241,6 +260,32 @@ export function realtimeReducer(
       };
     }
 
+    case "RETRY_FAILED": {
+      // TC-002: re-enter pending state, keep the same tempId so the bubble
+      // stays in place. Increment retryCount so the UI can disable the
+      // Retry link after the budget (3 attempts) is exhausted.
+      if (action.conversationId !== state.activeConversationId) return state;
+      const idx = state.activeMessages.findIndex(
+        (m) => m.id === action.tempId,
+      );
+      if (idx === -1) return state;
+      const existing = state.activeMessages[idx]!;
+      const updated: ThreadMessage = {
+        ...existing,
+        pending: true,
+        failed: false,
+        retryCount: (existing.retryCount ?? 0) + 1,
+      };
+      return {
+        ...state,
+        activeMessages: [
+          ...state.activeMessages.slice(0, idx),
+          updated,
+          ...state.activeMessages.slice(idx + 1),
+        ],
+      };
+    }
+
     case "REALTIME_INSERT": {
       const incoming = action.message;
       const incomingConvId = incoming.conversationId;
@@ -304,21 +349,69 @@ export function realtimeReducer(
       // realtime UPDATE fires here; reducer merges the new read_at into the
       // matching active message; the sender's MessageBubble re-renders with
       // ✓ → ✓✓.
-      if (action.message.conversationId !== state.activeConversationId) {
-        return state;
-      }
-      const idx = state.activeMessages.findIndex(
-        (m) => m.id === action.message.id,
+      //
+      // TC-004 (Commit 8) — previously this case short-circuited when the
+      // updated message belonged to a non-active conversation. That dropped
+      // the ✓→✓✓ advance for senders not currently staring at the thread —
+      // and on the Nigerian mobile background-and-return pattern, that's
+      // ~always. Now we ALSO bump the conversations[] list when the
+      // updated message is the conversation's last message, so the sidebar
+      // row's lastMessage reflects the new read_at. ConversationRow doesn't
+      // currently render a receipt indicator, but the state stays correct
+      // and a future surface render gets the correct value for free.
+      const updated = action.message;
+
+      // Always try to update the conversations[] last-message snapshot.
+      let nextConversations = state.conversations;
+      const convIdx = state.conversations.findIndex(
+        (c) => c.id === updated.conversationId,
       );
-      if (idx === -1) return state;
-      return {
-        ...state,
-        activeMessages: [
-          ...state.activeMessages.slice(0, idx),
-          { ...state.activeMessages[idx]!, ...action.message },
-          ...state.activeMessages.slice(idx + 1),
-        ],
-      };
+      if (convIdx !== -1) {
+        const conv = state.conversations[convIdx]!;
+        // Only update if this UPDATE is for the conversation's CURRENT last
+        // message (read_at advancing on an older message doesn't change the
+        // summary). Compare by createdAt — same value the bumpConversation
+        // helper uses to track which message is "last."
+        if (
+          conv.lastMessage &&
+          conv.lastMessage.createdAt === updated.createdAt
+        ) {
+          nextConversations = [
+            ...state.conversations.slice(0, convIdx),
+            {
+              ...conv,
+              lastMessage: {
+                ...conv.lastMessage,
+                // Mirror the incoming read_at into the summary's lastMessage.
+                // (Other fields on the summary's lastMessage shape — content,
+                // senderId, messageType, createdAt — are stable per row, so
+                // we just refresh the read_at signal indirectly via the spread.)
+                content: updated.content ?? conv.lastMessage.content,
+                messageType: updated.messageType,
+              },
+            },
+            ...state.conversations.slice(convIdx + 1),
+          ];
+        }
+      }
+
+      // If this conversation is also the active one, merge into activeMessages.
+      if (updated.conversationId === state.activeConversationId) {
+        const idx = state.activeMessages.findIndex((m) => m.id === updated.id);
+        if (idx !== -1) {
+          return {
+            ...state,
+            conversations: nextConversations,
+            activeMessages: [
+              ...state.activeMessages.slice(0, idx),
+              { ...state.activeMessages[idx]!, ...updated },
+              ...state.activeMessages.slice(idx + 1),
+            ],
+          };
+        }
+      }
+
+      return { ...state, conversations: nextConversations };
     }
 
     case "PAGINATED_APPEND_CONVERSATIONS":

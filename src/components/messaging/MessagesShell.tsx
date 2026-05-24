@@ -7,6 +7,8 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { useSelectedLayoutSegment } from "next/navigation";
@@ -14,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   getMessages,
   listConversations,
+  sendMessage,
 } from "@/lib/messaging/actions";
 import {
   makeTempId,
@@ -27,6 +30,7 @@ import type {
   MessageRow,
 } from "@/lib/messaging/types";
 import { SidebarConversationList } from "./SidebarConversationList";
+import { ConnectionStrip } from "./ConnectionStrip";
 
 // Stage 2.B Commit 5 — split-pane shell + realtime owner.
 //
@@ -71,6 +75,13 @@ export interface MessagesShellContextValue {
   failSend: (conversationId: string, tempId: string) => void;
   /** User-initiated: drop a failed bubble from the thread. */
   dismissFailed: (conversationId: string, tempId: string) => void;
+  /**
+   * TC-002: re-attempt sending a failed bubble. Re-uses the same tempId so
+   * the bubble stays in place. The MessageThread looks up the bubble's
+   * cached content and dispatches RETRY_FAILED + a fresh sendMessage call.
+   * Returns the tempId so the caller can wire confirmSend / failSend.
+   */
+  retryFailed: (conversationId: string, tempId: string) => void;
   /** "Load more" on the sidebar — fetches and appends the next page of conversations. */
   loadMoreConversations: (cursor: string) => Promise<void>;
   /**
@@ -126,6 +137,21 @@ export function MessagesShell({
     activeMessagesHasMore: false,
     activeSeeded: false,
   } satisfies RealtimeState);
+
+  // TC-011: track whether the realtime channel is currently connected. Driven
+  // by the .subscribe(status) handler below; ConnectionStrip applies its own
+  // 2s threshold so micro-flaps don't render. Initial value is true (we
+  // optimistically assume connected until the subscribe handler tells us
+  // otherwise; ConnectionStrip is hidden until isReconnecting flips true and
+  // stays true past the threshold).
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  // Ref to the latest activeMessages so retryFailed can read the cached
+  // content without recreating the callback on every state change.
+  const messagesRef = useRef(state.activeMessages);
+  useEffect(() => {
+    messagesRef.current = state.activeMessages;
+  }, [state.activeMessages]);
 
   // Sync active conversation id on URL change (also resets active-thread state).
   useEffect(() => {
@@ -199,6 +225,11 @@ export function MessagesShell({
               status,
             );
           }
+          // TC-011: reflect connection state for the ConnectionStrip. SUBSCRIBED
+          // is the healthy state; anything else (CHANNEL_ERROR, TIMED_OUT, CLOSED)
+          // counts as reconnecting. The strip applies its own 2s threshold so
+          // micro-flaps don't render.
+          setIsReconnecting(status !== "SUBSCRIBED");
         });
     })();
 
@@ -325,6 +356,63 @@ export function MessagesShell({
     [],
   );
 
+  // TC-002: retry a failed bubble. Look up the cached content from the
+  // current messages state, dispatch RETRY_FAILED (resets pending+failed,
+  // increments retryCount), then re-call sendMessage. On success/failure,
+  // dispatches SERVER_CONFIRMED or SERVER_FAILED using the SAME tempId so
+  // the bubble keeps its in-thread position (per §1.G surface findings).
+  //
+  // Offline guard: navigator.onLine check before dispatching. If offline,
+  // no-op silently — no budget consumed (§1.E). User feedback for offline
+  // retry is surfaced by the composer banner separately.
+  const retryFailed = useCallback(
+    (conversationId: string, tempId: string) => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        // Offline guard — no dispatch, no budget consumed.
+        return;
+      }
+      const target = messagesRef.current.find((m) => m.id === tempId);
+      if (!target) return;
+      const content = target.content ?? "";
+      if (!content.trim()) return;
+
+      dispatch({ type: "RETRY_FAILED", conversationId, tempId });
+
+      void (async () => {
+        try {
+          const result = await sendMessage(conversationId, content);
+          if (result.error) {
+            dispatch({ type: "SERVER_FAILED", conversationId, tempId });
+            return;
+          }
+          if (result.messageId) {
+            dispatch({
+              type: "SERVER_CONFIRMED",
+              conversationId,
+              tempId,
+              real: {
+                id: result.messageId,
+                conversationId,
+                senderId: target.senderId,
+                messageType: target.messageType,
+                content,
+                metadata: target.metadata,
+                attachmentUrl: target.attachmentUrl,
+                readAt: null,
+                createdAt: new Date().toISOString(),
+                tempId,
+              },
+            });
+          }
+        } catch (err) {
+          console.error("[MessagesShell] retryFailed sendMessage threw", err);
+          dispatch({ type: "SERVER_FAILED", conversationId, tempId });
+        }
+      })();
+    },
+    [],
+  );
+
   const ctxValue = useMemo<MessagesShellContextValue>(
     () => ({
       state,
@@ -333,6 +421,7 @@ export function MessagesShell({
       confirmSend,
       failSend,
       dismissFailed,
+      retryFailed,
       loadMoreConversations,
       loadEarlierMessages,
     }),
@@ -343,6 +432,7 @@ export function MessagesShell({
       confirmSend,
       failSend,
       dismissFailed,
+      retryFailed,
       loadMoreConversations,
       loadEarlierMessages,
     ],
@@ -358,21 +448,27 @@ export function MessagesShell({
 
   return (
     <Ctx.Provider value={ctxValue}>
-      <div className="fixed left-0 right-0 top-16 z-20 bg-white h-[calc(100dvh-4rem)] lg:flex">
-        <aside
-          className={`${hasActive ? "hidden lg:flex" : "flex"} lg:w-96 lg:flex-shrink-0 lg:border-r lg:border-neutral-200 flex-col w-full h-full overflow-y-auto`}
-          aria-label="Conversation list"
-        >
-          <SidebarConversationList
-            conversations={state.conversations}
-            activeConversationId={activeConversationId}
-          />
-        </aside>
-        <main
-          className={`${hasActive ? "flex" : "hidden lg:flex"} flex-1 min-w-0 flex-col h-full`}
-        >
-          {children}
-        </main>
+      <div className="fixed left-0 right-0 top-16 z-20 bg-white h-[calc(100dvh-4rem)] flex flex-col">
+        {/* TC-011: thin strip at the top of the messaging surface when the
+            realtime channel is disconnected past the 2s threshold. Spans
+            full width across sidebar + main pane. */}
+        <ConnectionStrip isReconnecting={isReconnecting} />
+        <div className="flex-1 min-h-0 lg:flex">
+          <aside
+            className={`${hasActive ? "hidden lg:flex" : "flex"} lg:w-96 lg:flex-shrink-0 lg:border-r lg:border-neutral-200 flex-col w-full h-full overflow-y-auto`}
+            aria-label="Conversation list"
+          >
+            <SidebarConversationList
+              conversations={state.conversations}
+              activeConversationId={activeConversationId}
+            />
+          </aside>
+          <main
+            className={`${hasActive ? "flex" : "hidden lg:flex"} flex-1 min-w-0 flex-col h-full`}
+          >
+            {children}
+          </main>
+        </div>
       </div>
     </Ctx.Provider>
   );
