@@ -82,11 +82,42 @@ export function ImageBubble({
   // signed-URL retry (which clears local state to re-trigger
   // mintMessageImageUrls). Decoupled so each retry path targets the
   // correct failure mode.
-  const { refetchMessageImages } = useMessagesShell();
+  //
+  // 9-c — uploadingMessages map provides composer-driven upload state
+  // (phase + per-image progress/failed) for the sender's own pending
+  // bubbles. When a matching entry exists for this bubble's id (=
+  // tempId), it OVERRIDES the reducer-derived imagePhase + per-image
+  // progress fields. Dual-data-source render per 9-c.N1: reducer for
+  // existence/structure, composer state for upload UI.
+  const { refetchMessageImages, uploadingMessages } = useMessagesShell();
+  const uploadState = uploadingMessages[message.id];
 
-  const images = message.images ?? [];
-  const sortedImages = [...images].sort((a, b) => a.position - b.position);
-  const phase: ImageMessagePhase = message.imagePhase ?? "sent";
+  // 9-c.N1 dual-data-source render. When composer has an upload entry
+  // for this bubble's id, its phase + per-image progress/failed override
+  // the reducer-derived data. Otherwise use reducer state (server-truth
+  // or 9-d lazy-fetched).
+  //
+  // uploadState.images carries the composer-local upload fields (blob,
+  // abortController, etc.) — those aren't needed for render. Map to the
+  // narrower ThreadImage shape inline so downstream code sees a
+  // consistent type regardless of source.
+  const baseImages = message.images ?? [];
+  const sortedImages: ThreadImage[] = uploadState
+    ? [...uploadState.images]
+        .sort((a, b) => a.position - b.position)
+        .map((img): ThreadImage => ({
+          position: img.position,
+          width: img.width,
+          height: img.height,
+          blobUrl: img.blobUrl,
+          storagePath: img.storagePath,
+          progress: img.progress,
+          failed: img.failed,
+        }))
+    : [...baseImages].sort((a, b) => a.position - b.position);
+  const phase: ImageMessagePhase = uploadState
+    ? uploadState.phase
+    : (message.imagePhase ?? "sent");
   const caption = (message.content ?? "").trim();
   const isPending =
     phase === "scheduled" || phase === "uploading" || phase === "confirming";

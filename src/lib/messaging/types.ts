@@ -41,6 +41,26 @@ export interface SendMessageResult {
   reason?: string;
 }
 
+/**
+ * 9-c: result of sendImageMessage. Returns the inserted message_images.id
+ * values alongside the message id so the client can populate imageId in
+ * its server-confirmed bubble — this lets ImageBubble's signed-URL fetch
+ * effect fire on reload and on the recipient's lazy-fetch path.
+ */
+export interface SendImageMessageResult {
+  messageId?: string;
+  imageIds?: string[];
+  containsWarning?: boolean;
+  error?: MessagingError;
+  reason?: string;
+}
+
+/** 9-c: result of reportMessage. */
+export interface ReportMessageResult {
+  ok?: boolean;
+  error?: MessagingError;
+}
+
 export interface MarkReadResult {
   ok?: boolean;
   error?: MessagingError;

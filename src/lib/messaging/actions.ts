@@ -14,9 +14,12 @@ import { isPhoneVerified } from "@/lib/auth";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { runMessageFilter, blockReason, logFilterAction } from "./filters";
 import { dispatchNewMessageEmail } from "@/lib/notifications/send-message-notification";
+import { isImageMessagingEnabled } from "@/lib/feature-flags";
 import type {
   CreateConversationResult,
   SendMessageResult,
+  SendImageMessageResult,
+  ReportMessageResult,
   MarkReadResult,
   GetMessagesResult,
   GetMessageImagesResult,
@@ -660,4 +663,226 @@ export async function getMessageImages(
   }));
 
   return { images };
+}
+
+// --- Action 7: sendImageMessage (Stage 2.C Commit 9-c) ----------------------
+//
+// Inserts an image-typed message row + one message_images row per attachment.
+// The CLIENT has already:
+//   1. Compressed each image client-side (canvas → JPEG q=0.85, ≤1600px).
+//   2. Minted signed-upload URLs via mintMessageImageUploadUrls() against a
+//      client-generated tempMessageId UUID.
+//   3. Uploaded each blob via XHR PUT to the signed URL.
+//   4. Confirmed all uploads completed.
+//
+// This action ONLY inserts the DB rows. It does NOT touch Storage. The
+// tempMessageId becomes messages.id (transparent reuse so the storage
+// path `message-images/{conversation_id}/{tempMessageId}/...` matches
+// the final messages row's id without a rename).
+//
+// 9-c.N7: feature flag check is the first line — server refuses if the
+// flag is off, even if a rogue client bypasses UI gating.
+//
+// 9-c.N6: caption D-119 filter. If blocked, NO rows are inserted (caller
+// surfaces failed bubble with editable caption + Retry). Storage objects
+// already uploaded become orphans handled by K-010 cleanup queue.
+//
+// Returns imageIds[] so the client can populate imageId on each ThreadImage
+// in its server-confirmed bubble — enables signed-URL minting on reload.
+export async function sendImageMessage(
+  conversationId: string,
+  tempMessageId: string,
+  images: Array<{
+    position: number;
+    storagePath: string;
+    width: number;
+    height: number;
+    byteSize: number;
+    mimeType: string;
+  }>,
+  caption: string | null,
+): Promise<SendImageMessageResult> {
+  if (!isImageMessagingEnabled()) return { error: "Forbidden" };
+
+  const supabase = createClient();
+  const actor = await resolveActor(supabase);
+  if (!actor.user) return { error: "Unauthorized" };
+  if (!actor.phoneVerified) return { error: "PhoneVerificationRequired" };
+
+  if (images.length === 0 || images.length > 3) return { error: "Empty" };
+  // Validate positions are unique + in [0,2].
+  const positions = new Set<number>();
+  for (const img of images) {
+    if (img.position < 0 || img.position > 2) return { error: "Empty" };
+    if (positions.has(img.position)) return { error: "Empty" };
+    positions.add(img.position);
+  }
+
+  const captionText = (caption ?? "").trim();
+  if (captionText.length > MAX_LEN) return { error: "TooLong" };
+
+  // Participant check.
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("id, buyer_id, seller_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!conv) return { error: "NotFound" };
+  if (conv.buyer_id !== actor.user.id && conv.seller_id !== actor.user.id) {
+    return { error: "Forbidden" };
+  }
+
+  let filter;
+  if (captionText.length > 0) {
+    try {
+      filter = await runMessageFilter(captionText, actor.tier);
+    } catch (err) {
+      console.error("[sendImageMessage] filter unavailable", err);
+      return { error: "FilterUnavailable" };
+    }
+    if (filter.action === "block") {
+      await logFilterAction({
+        userId: actor.user.id,
+        messageId: null,
+        result: filter,
+        content: captionText,
+        userProceeded: false,
+      });
+      return { error: "ContentBlocked", reason: blockReason(filter.rule) };
+    }
+  }
+
+  const metadata: Record<string, unknown> = { has_images: true };
+  if (filter && filter.action === "warn") metadata.contains_warning = true;
+
+  // Insert message row with the client-supplied id (transparent reuse so
+  // storage paths keyed by tempMessageId align).
+  const { data: msg, error: msgErr } = await supabase
+    .from("messages")
+    .insert({
+      id: tempMessageId,
+      conversation_id: conversationId,
+      sender_id: actor.user.id,
+      message_type: "image",
+      content: captionText.length > 0 ? captionText : null,
+      metadata,
+    })
+    .select("id")
+    .single();
+  if (msgErr || !msg) {
+    console.error("[sendImageMessage] message insert failed", msgErr?.message);
+    return { error: "Unknown" };
+  }
+
+  // Insert image rows; on failure cascade-delete the message row.
+  const imageRows = images.map((img) => ({
+    message_id: msg.id,
+    storage_path: img.storagePath,
+    position: img.position,
+    width: img.width,
+    height: img.height,
+    byte_size: img.byteSize,
+    mime_type: img.mimeType,
+  }));
+  const { data: insertedImages, error: imgErr } = await supabase
+    .from("message_images")
+    .insert(imageRows)
+    .select("id, position");
+  if (imgErr || !insertedImages) {
+    console.error("[sendImageMessage] images insert failed", imgErr?.message);
+    await supabase.from("messages").delete().eq("id", msg.id);
+    return { error: "Unknown" };
+  }
+
+  // Build position-sorted imageIds for the client's confirmed-bubble update.
+  const imageIds: string[] = [...insertedImages]
+    .sort((a, b) => (a.position as number) - (b.position as number))
+    .map((row) => row.id as string);
+
+  await supabase
+    .from("conversations")
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_type: "image",
+    })
+    .eq("id", conversationId);
+
+  await touchLastSeen(supabase, actor.user.id);
+  if (filter) {
+    await logFilterAction({
+      userId: actor.user.id,
+      messageId: msg.id,
+      result: filter,
+      content: captionText,
+      userProceeded: true,
+    });
+  }
+
+  // TC-023 offline-recipient email reuse. Preview shows "📷 Photo" + caption.
+  const recipientId =
+    conv.buyer_id === actor.user.id ? conv.seller_id : conv.buyer_id;
+  const previewText =
+    captionText.length > 0 ? `📷 ${captionText}` : "📷 Photo";
+  await dispatchNewMessageEmail({
+    recipientId,
+    senderId: actor.user.id,
+    conversationId,
+    messageContent: previewText,
+  });
+
+  return {
+    messageId: msg.id,
+    imageIds,
+    containsWarning: filter && filter.action === "warn" ? true : undefined,
+  };
+}
+
+// --- Action 8: reportMessage (Stage 2.C Commit 9-c) -------------------------
+//
+// User-filed moderation report against a message (and any images in it).
+// MVP scope (per surface findings §10.C): target_type='message' — admin
+// queue picks up the whole message row + its message_images children. No
+// per-image enum value yet.
+//
+// Replaces the placeholder submit in ReportImageSheet.tsx that shipped in
+// 9-b. No flag check (reports can be filed against any message; the flag
+// gates SENDING, not reading or reporting).
+export async function reportMessage(
+  messageId: string,
+  reason: string,
+  details: string | null,
+): Promise<ReportMessageResult> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const trimmedReason = reason.trim().slice(0, 80);
+  if (!trimmedReason) return { error: "Empty" };
+  const trimmedDetails = (details ?? "").trim().slice(0, 200);
+
+  // Verify the message exists AND the reporter can see it. RLS on messages
+  // filters to participant-only reads — non-participants get an empty
+  // SELECT result and our NotFound (avoids leaking existence to outsiders).
+  const { data: msg } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("id", messageId)
+    .maybeSingle();
+  if (!msg) return { error: "NotFound" };
+
+  const { error: insertErr } = await supabase.from("reports").insert({
+    reporter_id: user.id,
+    target_type: "message",
+    target_id: messageId,
+    reason: trimmedReason,
+    description: trimmedDetails.length > 0 ? trimmedDetails : null,
+  });
+  if (insertErr) {
+    console.error("[reportMessage] insert failed", insertErr.message);
+    return { error: "Unknown" };
+  }
+
+  return { ok: true };
 }

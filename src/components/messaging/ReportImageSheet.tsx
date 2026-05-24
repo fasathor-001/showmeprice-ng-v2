@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
+import { reportMessage } from "@/lib/messaging/actions";
 
 // Stage 2.C Commit 9-b — read-only report-image action sheet.
 //
@@ -67,17 +68,21 @@ export function ReportImageSheet({
     setStep("sending");
     setError(null);
 
-    // 9-b PLACEHOLDER — the real reportMessage server action ships in 9-c.
-    // We simulate a successful network call so the UX flow is exercisable
-    // (sheet collapses, viewer shows acknowledgment) without actually
-    // writing to the reports table. Wire to reportMessage() in 9-c.
+    // 9-c — wired to the real reportMessage server action. Inserts into
+    // reports table with target_type='message' (per §10.C MVP scope).
+    // Admin queue picks up the message + its images on review.
     const chip = REASON_CHIPS.find((c) => c.id === selectedReason);
     const reason = chip?.label ?? selectedReason;
-    console.warn(
-      "[ReportImageSheet] placeholder submit — wire to reportMessage() in 9-c",
-      { messageId, reason, details: details.trim() || null },
+    const result = await reportMessage(
+      messageId,
+      reason,
+      details.trim().length > 0 ? details.trim() : null,
     );
-    await new Promise((r) => setTimeout(r, 250));
+    if (result.error) {
+      setError("Couldn't submit your report. Please try again.");
+      setStep("reason");
+      return;
+    }
     onSubmitted();
   };
 

@@ -105,6 +105,78 @@ export interface MessagesShellContextValue {
     conversationId: string,
     messageId: string,
   ) => void;
+  /**
+   * 9-c — uploading-message state slice. Kept OUT of the realtime
+   * reducer per the locked architectural fix #3: reducer's job is
+   * "what messages exist in this thread per the server's truth";
+   * upload-progress is a transient client-side concern that fires
+   * dozens of events per upload. Mixing them in the reducer churns
+   * shared state and was the suspected (unproven) cause of the
+   * original Commit 9 Regression 2 read-receipt mystery.
+   *
+   * Composer mutates this via setUploadingMessage. ImageBubble reads
+   * via this map and overrides reducer-derived state when an entry is
+   * present (dual-data-source render per 9-c.N1).
+   */
+  uploadingMessages: Record<string, UploadingMessage>;
+  /** Mutator for composer-driven upload state. */
+  setUploadingMessage: (
+    tempId: string,
+    updater: (
+      prev: UploadingMessage | undefined,
+    ) => UploadingMessage | undefined,
+  ) => void;
+  /**
+   * 9-c.N2 — explicit reducer-mutating method for adding the optimistic
+   * image bubble. Wraps OPTIMISTIC_ADD with image-specific shape. NO
+   * raw dispatch via context.
+   */
+  addOptimisticImageMessage: (params: {
+    tempId: string;
+    conversationId: string;
+    senderId: string;
+    caption: string;
+    images: Array<{
+      position: number;
+      blobUrl: string;
+      width: number;
+      height: number;
+    }>;
+  }) => void;
+  /**
+   * 9-c.N2 — explicit reducer-mutating method for dismissing the
+   * optimistic image bubble (Undo or terminal failure). Wraps
+   * DISMISS_FAILED behavior — semantic match: remove bubble by tempId.
+   */
+  dismissOptimisticImageMessage: (
+    tempId: string,
+    conversationId: string,
+  ) => void;
+}
+
+/**
+ * 9-c — Composer-owned upload state. The realtime reducer NEVER sees
+ * this; ImageBubble overrides reducer-derived render data when an entry
+ * exists for the bubble's id (= tempId from the original send tap).
+ */
+export interface UploadingMessage {
+  tempId: string;
+  conversationId: string;
+  phase: "scheduled" | "uploading" | "confirming";
+  caption: string;
+  images: Array<{
+    position: number;
+    blobUrl: string;
+    width: number;
+    height: number;
+    byteSize: number;
+    mimeType: "image/jpeg";
+    blob: Blob;
+    progress: number;
+    failed: boolean;
+    storagePath?: string;
+    abortController: AbortController;
+  }>;
 }
 
 const Ctx = createContext<MessagesShellContextValue | null>(null);
@@ -157,6 +229,14 @@ export function MessagesShell({
   // otherwise; ConnectionStrip is hidden until isReconnecting flips true and
   // stays true past the threshold).
   const [isReconnecting, setIsReconnecting] = useState(false);
+
+  // 9-c — composer-owned upload state. Separate useState slice so the
+  // realtime reducer never sees image-upload progress events (which fire
+  // dozens of times per upload). Reducer stays pure / server-driven;
+  // upload-progress is purely local-to-this-render-pass concern.
+  const [uploadingMessages, setUploadingMessages] = useState<
+    Record<string, UploadingMessage>
+  >({});
 
   // Ref to the latest activeMessages so retryFailed can read the cached
   // content without recreating the callback on every state change.
@@ -377,6 +457,93 @@ export function MessagesShell({
     [],
   );
 
+  // 9-c — upload-state mutator. Functional updater pattern (prev => next)
+  // so composer's per-image progress / phase / failed-flag operations
+  // remain composer-local in concept, just persisted in this state slice.
+  // Returning undefined from the updater removes the entry entirely.
+  const setUploadingMessage = useCallback(
+    (
+      tempId: string,
+      updater: (
+        prev: UploadingMessage | undefined,
+      ) => UploadingMessage | undefined,
+    ) => {
+      setUploadingMessages((prev) => {
+        const next = { ...prev };
+        const updated = updater(next[tempId]);
+        if (updated === undefined) {
+          delete next[tempId];
+        } else {
+          next[tempId] = updated;
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  // 9-c.N2 — explicit context method for adding an optimistic image
+  // bubble to the reducer state. Wraps OPTIMISTIC_ADD with image-typed
+  // shape. Caller (composer) is responsible for also calling
+  // setUploadingMessage to register the upload tracking in composer-local
+  // state. ImageBubble's render combines both: reducer for the bubble's
+  // existence + sender identity + caption, upload state for the
+  // phase/progress/failed overlay.
+  const addOptimisticImageMessage = useCallback(
+    (params: {
+      tempId: string;
+      conversationId: string;
+      senderId: string;
+      caption: string;
+      images: Array<{
+        position: number;
+        blobUrl: string;
+        width: number;
+        height: number;
+      }>;
+    }) => {
+      const { tempId, conversationId, senderId, caption, images } = params;
+      const optimisticMessage: ThreadMessage = {
+        id: tempId,
+        conversationId,
+        senderId,
+        messageType: "image",
+        content: caption.length > 0 ? caption : null,
+        metadata: { has_images: true },
+        attachmentUrl: null,
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        pending: true,
+        failed: false,
+        images: images.map((img) => ({
+          position: img.position,
+          width: img.width,
+          height: img.height,
+          blobUrl: img.blobUrl,
+        })),
+        imagePhase: "scheduled",
+      };
+      dispatch({
+        type: "OPTIMISTIC_ADD",
+        conversationId,
+        message: optimisticMessage,
+      });
+    },
+    [],
+  );
+
+  // 9-c.N2 — explicit context method for dismissing the optimistic image
+  // bubble (Undo within 3s grace OR terminal failure). Semantic match
+  // for the existing DISMISS_FAILED reducer action: remove bubble by
+  // tempId from activeMessages. Caller also clears the upload-state
+  // entry via setUploadingMessage(tempId, () => undefined).
+  const dismissOptimisticImageMessage = useCallback(
+    (tempId: string, conversationId: string) => {
+      dispatch({ type: "DISMISS_FAILED", conversationId, tempId });
+    },
+    [],
+  );
+
   const optimisticSend = useCallback(
     (
       conversationId: string,
@@ -507,6 +674,10 @@ export function MessagesShell({
       loadMoreConversations,
       loadEarlierMessages,
       refetchMessageImages,
+      uploadingMessages,
+      setUploadingMessage,
+      addOptimisticImageMessage,
+      dismissOptimisticImageMessage,
     }),
     [
       state,
@@ -519,6 +690,10 @@ export function MessagesShell({
       loadMoreConversations,
       loadEarlierMessages,
       refetchMessageImages,
+      uploadingMessages,
+      setUploadingMessage,
+      addOptimisticImageMessage,
+      dismissOptimisticImageMessage,
     ],
   );
 

@@ -10,9 +10,24 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Button } from "@/components/ui";
-import { sendMessage } from "@/lib/messaging/actions";
+import {
+  sendMessage,
+  sendImageMessage,
+} from "@/lib/messaging/actions";
+import { mintMessageImageUploadUrls } from "@/lib/messaging/image-urls";
+import {
+  compressImage,
+  uploadImageToStorage,
+  type CompressedImage,
+} from "@/lib/messaging/upload-image";
+import { isImageMessagingEnabled } from "@/lib/feature-flags";
 import { useNavigatorOnline } from "@/lib/use-navigator-online";
-import { useMessagesShell } from "./MessagesShell";
+import { ImageAttachButton } from "./ImageAttachButton";
+import { SendUndoStrip } from "./SendUndoStrip";
+import {
+  useMessagesShell,
+  type UploadingMessage,
+} from "./MessagesShell";
 
 // Stage 2.B Commit 4 — message composer (refactored for optimistic UI in
 // Commit 5 per surface findings E + F).
@@ -100,13 +115,38 @@ function Composer({
   currentUserId: string;
 }) {
   const router = useRouter();
-  const { optimisticSend, confirmSend, failSend } = useMessagesShell();
+  const {
+    optimisticSend,
+    confirmSend,
+    failSend,
+    addOptimisticImageMessage,
+    dismissOptimisticImageMessage,
+    setUploadingMessage,
+    uploadingMessages,
+  } = useMessagesShell();
   const isOnline = useNavigatorOnline();
+  const imageMessagingEnabled = isImageMessagingEnabled();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // 9-c image attach state. Compressed blobs held LOCALLY in composer
+  // until Send tap; on Send the bubble is registered via context +
+  // grace timer starts; on grace expiry uploads begin.
+  const [pendingAttachments, setPendingAttachments] = useState<
+    Array<{
+      id: string;
+      file: File;
+      compressed: CompressedImage | null;
+      blobUrl: string;
+      compressing: boolean;
+      failed: boolean;
+    }>
+  >([]);
+  // 9-c — when set, an image-message is in the 3s send-undo grace window.
+  // Holds the tempId so timer/undo handlers can target the right bubble.
+  const [scheduledTempId, setScheduledTempId] = useState<string | null>(null);
   // TC-002: cache the last failed-send content for the banner Retry link.
   // null when no recent failure (banner Retry hidden). Reset on successful
   // send. Budget tracked alongside via lastFailureRetries.
@@ -196,7 +236,27 @@ function Composer({
   const isEmpty = trimmedLen === 0;
   const isOverLimit = content.length > MAX_LEN;
   const showCounter = content.length >= COUNTER_THRESHOLD;
-  const sendDisabled = isEmpty || isOverLimit || isSending;
+  // 9-c — send-disabled rules:
+  // · Disabled if textarea is empty AND no ready attachments
+  // · Disabled while over-limit or already sending text
+  // · Disabled while any attachment is still compressing
+  // · Disabled while a scheduled image message is awaiting grace expiry
+  //   (the SendUndoStrip owns this window; user must Undo first to send
+  //   a different message)
+  const hasReadyAttachment = pendingAttachments.some(
+    (a) => !a.compressing && !a.failed && a.compressed,
+  );
+  const anyCompressing = pendingAttachments.some((a) => a.compressing);
+  const sendDisabled =
+    (isEmpty && !hasReadyAttachment) ||
+    isOverLimit ||
+    isSending ||
+    anyCompressing ||
+    Boolean(scheduledTempId);
+  const attachDisabled =
+    pendingAttachments.length >= 3 ||
+    Boolean(scheduledTempId) ||
+    isSending;
 
   // Core send routine, parameterised so the same path serves both the
   // primary Send button and the TC-002 banner Retry link.
@@ -328,7 +388,415 @@ function Composer({
     }
   };
 
+  // ===== 9-c image-attach orchestration =====
+
+  // Cleanup blob URLs on unmount so user's RAM stays calm.
+  useEffect(() => {
+    return () => {
+      pendingAttachments.forEach((a) => URL.revokeObjectURL(a.blobUrl));
+    };
+    // Empty deps: revoke on unmount only. Per-item revoke happens in
+    // handleRemoveAttachment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleFilesPicked = async (files: File[]) => {
+    const capacity = 3 - pendingAttachments.length;
+    if (capacity <= 0) return;
+    let taken = files;
+    let overflow = false;
+    if (files.length > capacity) {
+      taken = files.slice(0, capacity);
+      overflow = true;
+    }
+    if (overflow) {
+      setWarning(
+        `Added ${capacity} of ${files.length} photos — max 3 per message.`,
+      );
+    }
+    // §2.C — 30MB raw upper bound.
+    const MAX_RAW = 30 * 1024 * 1024;
+    const accepted = taken.filter((f) => {
+      if (f.size > MAX_RAW) {
+        setWarning("Photo too large — please pick a smaller image.");
+        return false;
+      }
+      return true;
+    });
+    if (accepted.length === 0) return;
+
+    const newDrafts = accepted.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      compressed: null as CompressedImage | null,
+      blobUrl: URL.createObjectURL(file),
+      compressing: true,
+      failed: false,
+    }));
+    setPendingAttachments((prev) => [...prev, ...newDrafts]);
+
+    // Parallel compression. §3.B: always compress (predictable invariant).
+    await Promise.all(
+      newDrafts.map(async (draft) => {
+        try {
+          const compressed = await compressImage(draft.file);
+          setPendingAttachments((prev) =>
+            prev.map((a) =>
+              a.id === draft.id
+                ? { ...a, compressed, compressing: false }
+                : a,
+            ),
+          );
+        } catch (err) {
+          console.error("[MessageComposer] compression failed", err);
+          setPendingAttachments((prev) =>
+            prev.map((a) =>
+              a.id === draft.id
+                ? { ...a, compressing: false, failed: true }
+                : a,
+            ),
+          );
+        }
+      }),
+    );
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setPendingAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target) URL.revokeObjectURL(target.blobUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  };
+
+  // 9-c.N3 — after 3s grace expires, start uploads. uploads are PARALLEL;
+  // per-image progress + failure tracked in uploadingMessages state via
+  // setUploadingMessage. NEVER touches the realtime reducer (per 9-c.N1).
+  const performImageUploads = async (tempId: string) => {
+    const entry = uploadingMessages[tempId];
+    if (!entry) return;
+
+    // Transition phase to uploading (composer-local; reducer untouched).
+    setUploadingMessage(tempId, (prev) =>
+      prev ? { ...prev, phase: "uploading" } : prev,
+    );
+
+    // Mint upload URLs in one batch.
+    const positions = entry.images.map((img) => img.position);
+    const mintResult = await mintMessageImageUploadUrls(
+      conversationId,
+      tempId,
+      positions,
+    );
+    if (mintResult.error || !mintResult.slots) {
+      console.error(
+        "[MessageComposer] mintMessageImageUploadUrls failed",
+        mintResult.error,
+      );
+      failImageSend(tempId, "Couldn't prepare upload. Try again.");
+      return;
+    }
+
+    // Parallel uploads with per-image progress + cancellation.
+    const outcomes = await Promise.all(
+      entry.images.map(async (img, idx) => {
+        const slot = mintResult.slots![idx]!;
+        try {
+          await uploadImageToStorage({
+            signedUploadUrl: slot.signedUploadUrl,
+            blob: img.blob,
+            signal: img.abortController.signal,
+            onProgress: ({ loaded, total }) => {
+              const progress =
+                total > 0 ? Math.round((loaded / total) * 100) : 0;
+              setUploadingMessage(tempId, (prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      images: prev.images.map((i) =>
+                        i.position === img.position
+                          ? { ...i, progress }
+                          : i,
+                      ),
+                    }
+                  : prev,
+              );
+            },
+          });
+          // Mark this image completed + record its storage path.
+          setUploadingMessage(tempId, (prev) =>
+            prev
+              ? {
+                  ...prev,
+                  images: prev.images.map((i) =>
+                    i.position === img.position
+                      ? {
+                          ...i,
+                          progress: 100,
+                          storagePath: slot.storagePath,
+                        }
+                      : i,
+                  ),
+                }
+              : prev,
+          );
+          return {
+            ok: true as const,
+            position: img.position,
+            storagePath: slot.storagePath,
+            width: img.width,
+            height: img.height,
+            byteSize: img.byteSize,
+            mimeType: img.mimeType,
+          };
+        } catch (err) {
+          // Skip silently if aborted (Undo path).
+          if (
+            err instanceof DOMException &&
+            err.name === "AbortError"
+          ) {
+            return { ok: false as const, position: img.position };
+          }
+          console.error(
+            "[MessageComposer] image upload failed",
+            img.position,
+            err,
+          );
+          setUploadingMessage(tempId, (prev) =>
+            prev
+              ? {
+                  ...prev,
+                  images: prev.images.map((i) =>
+                    i.position === img.position
+                      ? { ...i, failed: true }
+                      : i,
+                  ),
+                }
+              : prev,
+          );
+          return { ok: false as const, position: img.position };
+        }
+      }),
+    );
+
+    const successful = outcomes.filter(
+      (o): o is Extract<typeof outcomes[number], { ok: true }> => o.ok,
+    );
+    if (successful.length === 0) {
+      // All uploads failed — leave bubble in failed state for user retry.
+      failImageSend(tempId, "Couldn't upload photos. Try again.");
+      return;
+    }
+
+    // Transition phase to confirming and call server action.
+    setUploadingMessage(tempId, (prev) =>
+      prev ? { ...prev, phase: "confirming" } : prev,
+    );
+
+    const captionForSend = entry.caption;
+    const result = await sendImageMessage(
+      conversationId,
+      tempId,
+      successful.map((s) => ({
+        position: s.position,
+        storagePath: s.storagePath,
+        width: s.width,
+        height: s.height,
+        byteSize: s.byteSize,
+        mimeType: s.mimeType,
+      })),
+      captionForSend.length > 0 ? captionForSend : null,
+    );
+
+    if (result.error === "Unauthorized") {
+      failSend(conversationId, tempId);
+      setUploadingMessage(tempId, () => undefined);
+      router.push(`/sign-in?next=/messages/${conversationId}`);
+      return;
+    }
+    if (result.error === "PhoneVerificationRequired") {
+      failSend(conversationId, tempId);
+      setUploadingMessage(tempId, () => undefined);
+      router.push(`/verify-phone?next=/messages/${conversationId}`);
+      return;
+    }
+    if (result.error) {
+      // Caption blocked or other inline error — bubble enters failed
+      // state, user can dismiss or re-edit caption + retry (orphan
+      // storage objects go to K-010 cleanup per 9-c.N6).
+      failImageSend(tempId, "Couldn't send. Please try again.");
+      return;
+    }
+
+    // SUCCESS — swap tempId entry with real MessageRow + clean up state.
+    // Build the final ThreadMessage shape with images populated from
+    // imageIds[] returned by the server. Reducer's SERVER_CONFIRMED path
+    // replaces the optimistic bubble with this final shape.
+    if (result.messageId) {
+      const finalImages = successful.map((s, i) => ({
+        position: s.position,
+        width: s.width,
+        height: s.height,
+        storagePath: s.storagePath,
+        imageId: result.imageIds?.[i] ?? "",
+      }));
+      confirmSend(conversationId, tempId, {
+        id: result.messageId,
+        conversationId,
+        senderId: currentUserId,
+        messageType: "image",
+        content: captionForSend.length > 0 ? captionForSend : null,
+        metadata: { has_images: true },
+        attachmentUrl: null,
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        images: finalImages,
+      });
+    }
+    // Clean up composer-local upload state. Blob URLs stay alive on the
+    // confirmed bubble (sender's local preview) until tab close.
+    setUploadingMessage(tempId, () => undefined);
+  };
+
+  // Helper: mark the bubble as failed + leave attachments in place for retry.
+  const failImageSend = (tempId: string, errorMsg: string) => {
+    failSend(conversationId, tempId);
+    setError(errorMsg);
+    setUploadingMessage(tempId, (prev) =>
+      prev ? { ...prev, phase: "confirming" } : prev,
+    );
+  };
+
+  // §14.A — fired by SendUndoStrip when its 3s timer expires.
+  const handleScheduledProceed = () => {
+    if (!scheduledTempId) return;
+    const tempId = scheduledTempId;
+    setScheduledTempId(null);
+    void performImageUploads(tempId);
+  };
+
+  // §14.A — fired by SendUndoStrip's Undo button within the 3s window.
+  const handleScheduledCancel = () => {
+    if (!scheduledTempId) return;
+    const tempId = scheduledTempId;
+    const entry = uploadingMessages[tempId];
+    // Abort any in-flight uploads (shouldn't be any during grace — uploads
+    // don't start until grace expires per 9-c.N3 — but defense in depth).
+    if (entry) {
+      entry.images.forEach((img) => img.abortController.abort());
+    }
+    // Remove the optimistic bubble from the reducer.
+    dismissOptimisticImageMessage(tempId, conversationId);
+    // Clear the upload state entry.
+    setUploadingMessage(tempId, () => undefined);
+    // Restore attachments to compose state so the user can edit + re-send.
+    if (entry) {
+      // Reconstruct pendingAttachments from the upload-state's
+      // compressed-blob references. The blob URLs are still alive.
+      setPendingAttachments(
+        entry.images.map((img) => {
+          // Reconstruct a File-like from the blob (composer doesn't need
+          // the original File object after compression).
+          const file = new File([img.blob], "photo.jpg", {
+            type: "image/jpeg",
+          });
+          return {
+            id: crypto.randomUUID(),
+            file,
+            compressed: {
+              blob: img.blob,
+              width: img.width,
+              height: img.height,
+              byteSize: img.byteSize,
+              mimeType: "image/jpeg",
+            },
+            blobUrl: img.blobUrl,
+            compressing: false,
+            failed: false,
+          };
+        }),
+      );
+      setContent(entry.caption);
+    }
+    setScheduledTempId(null);
+  };
+
+  // §14.A — fired when user taps Send and at least one ready attachment
+  // is present. Builds the optimistic bubble + scheduledImageMessage
+  // state + arms the SendUndoStrip via setScheduledTempId.
+  const handleSendImageMessage = () => {
+    const readyAttachments = pendingAttachments.filter(
+      (a) => !a.compressing && !a.failed && a.compressed,
+    );
+    if (readyAttachments.length === 0) return;
+    // §1.E — same offline guard as text path.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setShowOfflineHint(true);
+      setError("Couldn't send. Please try again.");
+      return;
+    }
+
+    const tempId = crypto.randomUUID();
+    const caption = content.trim();
+
+    // Register the upload state in MessagesShell's local slice (NOT in
+    // the realtime reducer). 9-c.N1 architecture: reducer stays pure;
+    // per-image progress fires through this slice only.
+    const uploadEntry: UploadingMessage = {
+      tempId,
+      conversationId,
+      phase: "scheduled",
+      caption,
+      images: readyAttachments.map((a, i) => ({
+        position: i,
+        blobUrl: a.blobUrl,
+        width: a.compressed!.width,
+        height: a.compressed!.height,
+        byteSize: a.compressed!.byteSize,
+        mimeType: "image/jpeg",
+        blob: a.compressed!.blob,
+        progress: 0,
+        failed: false,
+        abortController: new AbortController(),
+      })),
+    };
+    setUploadingMessage(tempId, () => uploadEntry);
+
+    // Add the optimistic bubble to the reducer. Wraps OPTIMISTIC_ADD
+    // internally; no raw dispatch via context (9-c.N2).
+    addOptimisticImageMessage({
+      tempId,
+      conversationId,
+      senderId: currentUserId,
+      caption,
+      images: readyAttachments.map((a, i) => ({
+        position: i,
+        blobUrl: a.blobUrl,
+        width: a.compressed!.width,
+        height: a.compressed!.height,
+      })),
+    });
+
+    // Clear compose state — user can start typing the next message during
+    // the 3s grace window. Attachments are now held in the upload state
+    // (not pendingAttachments).
+    setPendingAttachments([]);
+    setContent("");
+    dropDraft();
+
+    // Arm the SendUndoStrip.
+    setScheduledTempId(tempId);
+  };
+
+  // ===== End 9-c image-attach orchestration =====
+
   const handleSend = async () => {
+    // If there are attachments, route to image-send path.
+    if (pendingAttachments.length > 0) {
+      handleSendImageMessage();
+      return;
+    }
+
     if (sendDisabled) return;
 
     // §1.E: navigator.onLine guard. If offline, surface the inline hint and
@@ -428,6 +896,14 @@ function Composer({
 
   return (
     <div className="px-3 sm:px-6 py-3 border-t border-neutral-200 bg-white shrink-0">
+      {/* §14.A — 3s send-undo grace strip. Visible only when an image
+          message is in 'scheduled' phase awaiting timer expiry / Undo. */}
+      {scheduledTempId && (
+        <SendUndoStrip
+          onProceed={handleScheduledProceed}
+          onCancel={handleScheduledCancel}
+        />
+      )}
       {warning && (
         <div className="mb-2 px-3 py-2 rounded-lg bg-warning-bg text-warning-text text-xs flex items-start gap-2">
           <span className="flex-1">{warning}</span>
@@ -501,16 +977,81 @@ function Composer({
           )}
         </div>
       )}
+      {/* 9-c — attachment preview strip above textarea. Calm UI: fixed
+          64×64 thumbnails, no layout shifts as compression resolves. */}
+      {pendingAttachments.length > 0 && (
+        <div
+          className="mb-2 flex items-center gap-2 flex-wrap"
+          aria-label="Photos to send"
+        >
+          {pendingAttachments.map((a) => (
+            <div
+              key={a.id}
+              className="relative w-16 h-16 rounded-lg overflow-hidden bg-neutral-200"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={a.blobUrl}
+                alt=""
+                className={`w-full h-full object-cover ${a.compressing ? "opacity-60" : ""}`}
+                draggable={false}
+              />
+              {a.compressing && (
+                <div
+                  className="absolute inset-0 bg-white/10 animate-pulse"
+                  aria-label="Processing"
+                />
+              )}
+              {a.failed && (
+                <div className="absolute inset-0 flex items-center justify-center bg-danger-bg/80 text-danger-text text-[10px] text-center px-1">
+                  Format not supported
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => handleRemoveAttachment(a.id)}
+                aria-label="Remove this photo"
+                className="absolute top-0.5 right-0.5 w-5 h-5 inline-flex items-center justify-center rounded-full bg-ink/60 hover:bg-ink/80 text-white text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-end gap-2">
+        {/* §1.A — image attach button. §1.B camera icon + teal accent dot
+            (§14.E). Gated on feature flag (§9-c.N7) — hidden when off.
+            Hidden during scheduled-grace too (user must Undo first). */}
+        {imageMessagingEnabled && !scheduledTempId && (
+          <ImageAttachButton
+            disabled={attachDisabled}
+            onFilesPicked={handleFilesPicked}
+          />
+        )}
         <textarea
           ref={textareaRef}
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message"
+          placeholder={
+            pendingAttachments.length > 0
+              ? "Add a note (optional)"
+              : "Type a message"
+          }
           rows={1}
           enterKeyHint="send"
-          disabled={isSending}
+          disabled={isSending || Boolean(scheduledTempId)}
           className={`flex-1 min-h-[40px] resize-none rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 disabled:bg-neutral-50 disabled:cursor-not-allowed ${textareaBorderClass}`}
           aria-label="Message"
           aria-invalid={isOverLimit || Boolean(error)}
