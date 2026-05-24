@@ -703,6 +703,31 @@ Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
+### K-058 — Latent Tailwind palette gap: ink-50/100/500/700 used in codebase but not defined in tailwind.config.ts (LOW)
+
+`tailwind.config.ts` defines the `ink` palette with only `DEFAULT/400/600/800/900` shades. Multiple components in the messaging surface reference `bg-ink-100`, `text-ink-500`, `text-ink-700`, `via-ink-50`, etc. Tailwind silently produces NO CSS for those undefined color-scale stops — the classes are present in the rendered HTML but have no styling effect.
+
+**Severity:** LOW. Visual-fidelity issue, not functional. Affected elements render with their parent backgrounds or inherited colors showing through; nothing breaks. Likely shipped silently since the Commit 8 work added ConnectionStrip without anyone catching the missing shades.
+
+**How surfaced:** Stage 2.C Commit 9-c.1 attempted a gradient shimmer using `from-ink-100 via-ink-50 to-ink-100` and the shimmer was invisible in production. 9-c.2 replaced those with `bg-neutral-300` (a guaranteed-defined Tailwind default) to ship the fix surgically. The broader palette gap was banked here for a dedicated pass.
+
+**Confirmed affected files (audit not exhaustive):**
+- `src/components/messaging/ConnectionStrip.tsx` — `text-ink-500 bg-ink-100`
+- `src/components/messaging/ImageBubble.tsx` — placeholder shell text `text-ink-500`
+- Other files likely contain similar patterns — grep `text-ink-[157]\|bg-ink-[157]\|via-ink\|from-ink\|to-ink` across `src/` for the full list.
+
+**Resolution scope (post-Stage 2.C, dedicated commit):**
+
+Two options, owner picks:
+- **(a) Extend `tailwind.config.ts`** to add the missing `ink` shades (50, 100, 200, 300, 500, 700) matching the existing 400/600/800/900 pattern. Single-file change; retroactively fixes every silently-broken usage. Risk: unintended visual changes if any current usage was "compensating" for the missing colors with parent-color fallback.
+- **(b) Replace each ink-50/100/500/700 usage** with a defined Tailwind class (`neutral-*` or one of the project's existing teal/ink shades). Multi-file but more explicit; lower risk of visual surprises. Requires a full grep + visual review pass.
+
+Recommendation when prioritized: **(a) first**, with a visual diff verification pass on each affected surface. If any surfaces look worse with the new shades than they did pre-extension, address with surgical class swaps post-extension.
+
+**NOT urgent.** Defer to its own commit/pass post-Stage 2.C closure. Pairs naturally with any other UI-polish sweep.
+
+Surfaced 2026-05-25 during Stage 2.C Commit 9-c.1 post-mortem.
+
 ## Resolved or superseded
 
 ### K-019 — Phone validation gap + NG-only-vs-international product decision (RESOLVED)
