@@ -341,7 +341,25 @@ Stage 2.B Commit 1.6 smoke testing (2026-05-23) confirmed: 7+ BLOCK events fired
 
 Surfaced 2026-05-23 during D-119 production smoke testing.
 
-### K-040 — Header Messages icon — unread-presence dot — RESOLVED by Commit 5.1 (2026-05-23)
+### K-040 — Header Messages icon — unread-presence dot — RESOLVED across Commits 5.1 + 5.3 + 5.4 + 6 (2026-05-23)
+
+**Status:** Fully closed by Commit 6's lifted-state architecture. Original "presence dot" scope superseded across the 5.x sequence into full realtime count + three-surface coverage:
+
+| Surface | Treatment | Shipped |
+|---|---|---|
+| Header chat icon | Red count badge (bg-red-500 + white digit, ring-2 white) | Commit 5.1 |
+| UserMenu dropdown "Messages" row | Inline red count badge, right-aligned | Commit 5.1 |
+| UserMenu avatar trigger button | Small red presence dot (no number — count lives in the icon next door) | **Commit 6** |
+
+**Architecture (Commit 6 closeout):** `src/components/layout/UnreadMessagesProvider.tsx` owns ONE realtime subscription + count state. Both `MessagesIconWithBadge` and `UserMenu` consume from the same context — single source of truth, always in sync, one websocket channel for all three surfaces.
+
+**Robustness layers (5.3 + 5.4 + 6):**
+- Explicit `supabase.realtime.setAuth(jwt)` before `.subscribe()` to defeat the @supabase/ssr session-load race.
+- Permissive UPDATE detection (`!oldRow?.read_at && !!newRow.read_at`) tolerates Realtime payload shapes where `payload.old.read_at` is omitted.
+- Periodic refetch every 30s via `fetchMyUnreadMessagesCount()` server action as a fallback if realtime drops events.
+- Visibility-change refetch on tab refocus.
+
+Original framing (boolean has-unread dot at two entry points) preserved below for historical context.
 
 **Status:** Closed. Frank's D-121 reaffirmation directive ("outstandingly world-class professional UX") raised the bar from presence-dot to full count. Commit 5.1 shipped:
 
@@ -376,7 +394,47 @@ Shipped as Commit 5.1 (`hash TBD on push`) — see commit body for the helper mo
 
 Surfaced 2026-05-23 during Commit 2 surface findings (Question G2); scope expanded 2026-05-23 during Commit 3 surface findings (Question E).
 
-### K-043 — Loading skeletons via Suspense boundaries for messaging routes (medium, D-121 polish)
+### K-044 — Browser push notifications when tab is backgrounded (medium, post-Stage-2.B)
+
+Mature messaging platforms (WhatsApp Web, Telegram Web, Messenger, Slack) prompt for browser notification permission and send Web Push when the user has the app open in a background tab. ShowMePrice doesn't yet.
+
+**Deferred reasoning (Commit 6 surface findings F):**
+- Service worker registration (new file at root scope)
+- Web Push API subscription flow + VAPID key generation
+- DB writes against `push_subscriptions` (Drizzle schema already has the empty table from Phase E.1.3 — infrastructure half-present)
+- Server-side push dispatcher (Edge route or server action)
+- Permission-request UX timing (asking on first visit is the wrong moment; asking after first message exchange is right)
+- Cloudflare env var for the VAPID private key
+
+Substantial scope (~300-500 LOC plus a service worker + new vendor key). Deserves its own commit with its own surface findings under D-121.
+
+**Resolution scope (post-Stage-2.B, paired with whichever phase needs notifications most — likely Phase F+ when listing-saved-alerts and reveal-credit-purchases also benefit):**
+- Generate VAPID key pair; store private as `VAPID_PRIVATE_KEY` in Cloudflare env. Public goes into a client-readable config.
+- Add service worker at `/sw.js` (root scope). Handle the `push` event to render a notification with the conversation context.
+- Subscribe-to-push flow: prompt the user AFTER their first message exchange (not on landing). Store the subscription in `push_subscriptions`.
+- Server-side push: in the `sendMessage` server action, if the recipient is offline (`profiles.last_seen_at` more than ~30s ago), enqueue a push to their subscriptions.
+- Permission UX: when the user has 1+ unread message and is signed in, show a non-blocking banner "Get notified of new messages?" with Enable / Maybe later. Respects user choice; doesn't re-ask if dismissed.
+
+**Severity:** medium. Not a launch blocker — ShowMePrice's primary surface is the on-platform chat experience. Push notifications are convenience for power users.
+
+**Related:** Commit 6 (closed K-040 / K-041 / K-043 polish set; this was explicitly deferred from that bundle), D-121 (world-class polish — push notifications ARE world-class but deserve proper scope), `push_subscriptions` empty schema table (Phase E.1.3 prep), D-109 (last_seen_at — drives the "is recipient offline?" check).
+
+Surfaced 2026-05-23 during Commit 6 surface findings (Question F).
+
+### K-043 — Loading skeletons via Suspense boundaries for messaging routes — RESOLVED by Commit 6 (2026-05-23)
+
+**Status:** Closed. Stage 2.B Commit 6 shipped:
+- `src/components/messaging/skeletons/MessagesShellSkeleton.tsx` — full-shell layout placeholder with sidebar `ListSkeleton` and a soft-neutral main pane. Same `fixed left-0 right-0 top-16 z-20 h-[calc(100dvh-4rem)]` geometry as the real shell so there's no layout shift when it swaps in.
+- `src/components/messaging/skeletons/ListSkeleton.tsx` — 6 shimmer rows matching `ConversationRow` geometry 1:1 (56×56 thumbnail + 3-line text column + time chip on the right). Wrapped in `animate-pulse`.
+- `src/components/messaging/skeletons/ThreadSkeleton.tsx` — back-button + name row, listing-context strip, 4 alternating left/right bubble shapes with mixed widths, and the composer textarea + send-button placeholder. Geometry matches the real thread to avoid CLS.
+
+**Suspense wiring:**
+- `src/app/messages/layout.tsx` — auth check stays at the top (fast; redirects unauthenticated requests immediately). The `listConversations` fetch was moved into an inner async `ShellWithData` component wrapped in `<Suspense fallback={<MessagesShellSkeleton />}>`. Users on slow Nigerian mobile connections now see the skeleton during the DB roundtrip instead of a blank viewport.
+- `src/app/messages/[conversationId]/page.tsx` — same pattern. Outer `MessageThreadPage` is synchronous and returns `<Suspense fallback={<ThreadSkeleton />}><ThreadContent ... /></Suspense>`. The async `ThreadContent` does the three parallel fetches.
+
+Resolved by Commit 6 (commit hash filled in after deploy).
+
+### K-043 (archived original framing) — Loading skeletons via Suspense boundaries for messaging routes (medium, D-121 polish)
 
 Stage 2.B Commit 4.2 polish review (under D-121) surfaced the question of loading-state skeletons for `/messages` and `/messages/[conversationId]`. Server Components currently SSR content fully — users on slow connections see a brief blank screen before the page paints, then content snaps in. Mature competitors (WhatsApp Web, Telegram Web) show skeleton placeholders during route transitions for perceived performance.
 
@@ -403,7 +461,26 @@ Surfaced 2026-05-23 during Commit 4.2 polish review.
 
 See entry in "Resolved" section below for original framing.
 
-### K-041 — Read receipts on sent messages (low, Commit 6 polish)
+### K-041 — Read receipts on sent messages — RESOLVED by Commit 6 (2026-05-23)
+
+**Status:** Closed. Stage 2.B Commit 6 shipped a two-state read-receipt model on current-user bubbles in `MessageBubble.tsx`:
+
+| State | Visual | Trigger |
+|---|---|---|
+| Pending (sending) | ⌚ clock icon (existing from Commit 5) | Optimistic, before server response |
+| Sent (server-confirmed, not yet read) | Single `✓` in ink-400 | server-confirmed AND `read_at IS NULL` |
+| Read | Double `✓✓` in **teal-700** (brand-positive completion signal, not WhatsApp blue) | `read_at IS NOT NULL` |
+| Failed | (no receipt — danger border + dismiss link owns the signal) | Send error returned |
+
+**Architecture:** zero new data wiring. `messages.read_at` already updates when the recipient opens the thread (via `getMessages` → `markRead`). Realtime UPDATE fires, MessagesShell's reducer merges read_at into the matching active message, MessageBubble re-renders with `✓✓` — automatic, no extra fetches.
+
+**Granularity:** per-message. Each bubble carries its own receipt. WhatsApp pattern. No "delivered" intermediate state — ShowMePrice doesn't have a separate delivery-confirmation signal, so we ship a real two-state model rather than fake three.
+
+**Privacy boundary:** receipts only render on the current user's OWN sent bubbles (`isCurrentUser && !isPending && !isFailed`). The recipient's view never shows receipts on incoming messages — read state belongs to the sender's UI, not the recipient's.
+
+Original framing (deferred to Commit 6) preserved below for context.
+
+### K-041 (archived original framing) — Read receipts on sent messages (low, Commit 6 polish)
 
 Stage 2.B Commit 3 ships the message thread UI without read-receipt indicators. WhatsApp-style receipts (single ✓ sent / double ✓✓ read) on the current user's own SENT messages are a high-value low-cost UX cue but were deferred to keep Commit 3's surface clean.
 

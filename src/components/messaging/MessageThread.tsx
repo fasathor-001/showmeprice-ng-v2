@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useClientTime } from "@/lib/use-client-time";
 import type { MessageRow } from "@/lib/messaging/types";
 import type { ThreadMessage } from "@/lib/messaging/realtime";
@@ -8,17 +8,19 @@ import { useMessagesShell } from "./MessagesShell";
 import { MessageBubble } from "./MessageBubble";
 import { ScrollToBottom } from "./ScrollToBottom";
 
-// Stage 2.B Commit 5 — message thread (client component as of this commit).
+// Stage 2.B Commit 5 (Commit 6 polish: pagination + scroll preservation).
 //
-// Hydration pattern: the page (Server Component) calls getMessages() server-
-// side and passes the result as `initialMessages`. On mount we SEED these
-// into the shell's reducer state, then read live state back from the shell.
-// All subsequent updates — realtime INSERTs, optimistic sends, server
-// confirmations, send failures — flow through the shell's reducer and
-// reactively re-render this thread.
+// Hydration pattern: page (Server Component) calls getMessages() server-side
+// and passes the result as `initialMessages`. On mount we SEED these into the
+// shell's reducer state, then read live state back from the shell. All
+// subsequent updates — realtime INSERTs, optimistic sends, server
+// confirmations, send failures, paginated prepend of older messages —
+// flow through the shell's reducer and reactively re-render this thread.
 //
-// hasMore stays in the public API; "Load older" UI still deferred to Commit 6
-// polish per Commit 4.2's earlier surface findings.
+// Commit 6 change: this component now OWNS the scrollable container (was
+// previously a wrapping div in page.tsx). Moving it here lets the "Load
+// earlier messages" handler hold a ref to the scrollable element and
+// preserve scroll position when older messages prepend.
 
 interface MessageThreadProps {
   conversationId: string;
@@ -55,14 +57,17 @@ export function MessageThread({
   hasMore,
   currentUserId,
 }: MessageThreadProps) {
-  const { state, seedActive, dismissFailed } = useMessagesShell();
+  const { state, seedActive, dismissFailed, loadEarlierMessages } =
+    useMessagesShell();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
 
   // Seed shell state with the server-rendered initial messages on first mount
   // (or when the conversation changes). The reducer's SEED_ACTIVE is idempotent
   // — subsequent re-renders with the same conversationId no-op.
   useEffect(() => {
-    seedActive(conversationId, initialMessages as ThreadMessage[]);
-  }, [conversationId, initialMessages, seedActive]);
+    seedActive(conversationId, initialMessages as ThreadMessage[], hasMore);
+  }, [conversationId, initialMessages, hasMore, seedActive]);
 
   // Live messages from the shell. Falls back to initialMessages until SEED_ACTIVE
   // has committed (first render race — useEffect runs after paint).
@@ -71,19 +76,57 @@ export function MessageThread({
       ? state.activeMessages
       : (initialMessages as ThreadMessage[]);
 
-  // hasMore param retained in the public API; Commit 6 polish wires
-  // "Load older" UI. Reference here to silence unused-param lint.
-  void hasMore;
+  const showLoadEarlier =
+    state.activeConversationId === conversationId &&
+    state.activeSeeded &&
+    state.activeMessagesHasMore;
+
+  // "Load earlier messages" handler with scroll-position preservation.
+  // Pattern: snapshot the scrollable container's scrollHeight + scrollTop
+  // BEFORE prepending. After React commits the prepend, the new scrollHeight
+  // grows by exactly the prepended content's height. Adjust scrollTop by
+  // that delta so the previously-visible content stays at the same viewport
+  // position — no jarring jump to the top.
+  const handleLoadEarlier = async () => {
+    if (loadingEarlier || messages.length === 0) return;
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const beforeHeight = scrollEl.scrollHeight;
+    const beforeTop = scrollEl.scrollTop;
+
+    setLoadingEarlier(true);
+    try {
+      const oldestId = messages[0]!.id;
+      const prependedCount = await loadEarlierMessages(conversationId, oldestId);
+      if (prependedCount > 0) {
+        // Wait one frame for React to commit the prepended messages and the
+        // browser to recompute scrollHeight, then restore relative position.
+        requestAnimationFrame(() => {
+          const after = scrollRef.current;
+          if (!after) return;
+          const newHeight = after.scrollHeight;
+          after.scrollTop = newHeight - beforeHeight + beforeTop;
+        });
+      }
+    } finally {
+      setLoadingEarlier(false);
+    }
+  };
 
   if (messages.length === 0) {
     return (
-      <div className="px-3 sm:px-6 py-12 text-center text-sm text-ink-600">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-6 py-12 text-center text-sm text-ink-600"
+      >
         No messages yet.
         <ScrollToBottom />
       </div>
     );
   }
 
+  // Build the render list — interleave date dividers between days, mark
+  // bubbles grouped-with-previous when same sender within same day.
   const items: React.ReactNode[] = [];
   let prevDate: Date | null = null;
   let prevSender: string | null = null;
@@ -93,9 +136,7 @@ export function MessageThread({
     const dayChanged = !prevDate || !isSameDay(prevDate, msgDate);
 
     if (dayChanged) {
-      items.push(
-        <DateDivider key={`d-${msg.id}`} iso={msg.createdAt} />,
-      );
+      items.push(<DateDivider key={`d-${msg.id}`} iso={msg.createdAt} />);
     }
 
     const groupedWithPrevious =
@@ -110,9 +151,7 @@ export function MessageThread({
         isCurrentUser={msg.senderId === currentUserId}
         groupedWithPrevious={groupedWithPrevious}
         onDismissFailed={
-          msg.failed
-            ? () => dismissFailed(conversationId, msg.id)
-            : undefined
+          msg.failed ? () => dismissFailed(conversationId, msg.id) : undefined
         }
       />,
     );
@@ -121,12 +160,25 @@ export function MessageThread({
     prevSender = msg.senderId;
   }
 
-  // ScrollToBottom keyed on the last message's id so it re-fires whenever a
-  // new message (optimistic, realtime, or server-confirmed) lands at the end.
   const lastMsgId = messages[messages.length - 1]?.id ?? "empty";
 
   return (
-    <div className="px-3 sm:px-6 py-4">
+    <div
+      ref={scrollRef}
+      className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-6 py-4"
+    >
+      {showLoadEarlier && (
+        <div className="text-center py-2">
+          <button
+            type="button"
+            onClick={handleLoadEarlier}
+            disabled={loadingEarlier}
+            className="text-sm text-teal-700 hover:text-teal-900 font-medium disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:underline"
+          >
+            {loadingEarlier ? "Loading…" : "Load earlier messages"}
+          </button>
+        </div>
+      )}
       {items}
       <ScrollToBottom key={lastMsgId} />
     </div>

@@ -24,7 +24,12 @@ import type { ThreadMessage } from "@/lib/messaging/realtime";
 //
 // `metadata.contains_warning` is NOT surfaced in the bubble (K-038 trust-
 // positioning: filter signals are admin-only, not user-facing).
-// Read receipts (K-041) deferred to Commit 6 polish.
+//
+// Commit 6 — K-041 read receipts SHIPPED. Two-state model (sent ✓ / read ✓✓)
+// with teal-700 for the read state. Symmetric data; both buyer + seller get
+// receipts on their own sent messages. Recipient's view never shows receipts
+// on the other party's incoming bubbles. Receipts hidden during pending +
+// failed states (the clock icon / danger border own those signals).
 
 interface MessageBubbleProps {
   message: MessageRow | ThreadMessage;
@@ -67,6 +72,10 @@ export function MessageBubble({
   const threadMsg = message as Partial<ThreadMessage>;
   const isPending = Boolean(threadMsg.pending);
   const isFailed = Boolean(threadMsg.failed);
+  const isRead = Boolean(message.readAt);
+  // Show a read-receipt indicator only on the current user's OWN bubbles
+  // (after server-confirmed; never during pending / failed states).
+  const showReceipt = isCurrentUser && !isPending && !isFailed;
 
   const gapClass = groupedWithPrevious ? "mt-0.5" : "mt-3";
   const alignClass = isCurrentUser ? "justify-end" : "justify-start";
@@ -116,6 +125,38 @@ export function MessageBubble({
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+            </svg>
+          )}
+          {/* K-041 read receipts (Commit 6). Single ✓ ink-400 = sent,
+              awaiting read. Double ✓✓ teal-700 = read. Only on own bubbles,
+              never during pending / failed (those have their own signals). */}
+          {showReceipt && !isRead && (
+            <svg
+              viewBox="0 0 16 12"
+              className="w-3.5 h-2.5 text-ink-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-label="Sent"
+            >
+              <path d="M1 6.5 L5.5 11 L15 1" />
+            </svg>
+          )}
+          {showReceipt && isRead && (
+            <svg
+              viewBox="0 0 22 12"
+              className="w-5 h-2.5 text-teal-700"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-label="Read"
+            >
+              <path d="M1 6.5 L5.5 11 L13 2" />
+              <path d="M9 6.5 L13 11 L21 1" />
             </svg>
           )}
         </div>

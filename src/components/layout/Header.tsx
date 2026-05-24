@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { Container } from "./Container";
 import { HeaderSearch } from "./HeaderSearch";
 import { MessagesIconWithBadge } from "./MessagesIconWithBadge";
+import { UnreadMessagesProvider } from "./UnreadMessagesProvider";
 import { UserMenu } from "./UserMenu";
 
 export async function Header() {
@@ -69,24 +70,23 @@ export async function Header() {
           </nav>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {user && (
-              // Stage 2.B Commit 5.1 — Messages icon with realtime red count
-              // badge (D-121 reaffirmation: world-class unread visibility).
-              // Server-rendered initial count; client subscription updates
-              // it live across all pages. K-040 closed by this commit
-              // (shipped as full count + realtime, better than original dot).
-              <MessagesIconWithBadge
+            {user ? (
+              // Commit 6 K-040 closeout — UnreadMessagesProvider owns the
+              // realtime subscription + count state. Both the chat icon
+              // (count badge) and UserMenu (avatar dot + dropdown badge)
+              // read the SAME count from context. One subscription, three
+              // surfaces, always in sync.
+              <UnreadMessagesProvider
                 userId={user.id}
                 initialCount={unreadMessagesCount}
-              />
-            )}
-            {user ? (
-              <UserMenu
-                displayName={displayName ?? "Account"}
-                email={user.email ?? ""}
-                isAdmin={isAdmin}
-                unreadMessagesCount={unreadMessagesCount}
-              />
+              >
+                <MessagesIconWithBadge />
+                <UserMenu
+                  displayName={displayName ?? "Account"}
+                  email={user.email ?? ""}
+                  isAdmin={isAdmin}
+                />
+              </UnreadMessagesProvider>
             ) : (
               <>
                 <Link

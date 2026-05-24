@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMessages } from "@/lib/messaging/actions";
@@ -6,25 +7,20 @@ import { getProductImagePublicUrl } from "@/lib/storage";
 import { MessageComposer } from "@/components/messaging/MessageComposer";
 import { MessageThread } from "@/components/messaging/MessageThread";
 import { ThreadHeader } from "@/components/messaging/ThreadHeader";
+import { ThreadSkeleton } from "@/components/messaging/skeletons/ThreadSkeleton";
 
 export const runtime = "edge";
 
-// Stage 2.B Commit 3 — message thread page. Composer wired in Commit 4;
-// layout owned by the /messages/* route-segment layout as of Commit 5.
+// Stage 2.B Commit 3 (Commit 6 K-043: Suspense + skeleton).
 //
-// ARCHITECTURAL CHANGE (Commit 5, 2026-05-23): the previously fixed-fullheight
-// wrapper at this page level moved up to `src/app/messages/layout.tsx` (via
-// MessagesShell). This page now returns a flex-column fragment intended to
-// fill the shell's `<main>` slot — no positioning chrome, no height-coupling
-// to Header. The same chat-app context (Footer hidden, internal scroll on
-// messages, composer at flex bottom) is preserved by the layout.
+// Thread page wraps the data-fetching async work in a Suspense boundary so
+// users see ThreadSkeleton while the conversation context + messages +
+// profile fetches complete. Once data resolves, the real ThreadHeader +
+// MessageThread + MessageComposer stream in.
 //
-// Three parallel server-side fetches:
-//   1. `getMessages(conversationId, 50)` — already marks unread→read on render.
-//   2. Conversation context (other-party + listing + primary image).
-//   3. Current user's verification_status — drives composer's D-114 gate.
-//
-// Permission denied (privacy hygiene): NotFound and Forbidden both → notFound().
+// MessageThread now owns its own `flex-1 overflow-y-auto min-h-0` (moved
+// from this page's wrapping div in Commit 6) so it can hold a ref to its
+// own scroll container for "Load earlier messages" scroll preservation.
 
 interface Props {
   params: { conversationId: string };
@@ -66,8 +62,15 @@ function pickOne<T>(v: T | T[] | null | undefined): T | null {
   return v ?? null;
 }
 
-export default async function MessageThreadPage({ params }: Props) {
-  const { conversationId } = params;
+export default function MessageThreadPage({ params }: Props) {
+  return (
+    <Suspense fallback={<ThreadSkeleton />}>
+      <ThreadContent conversationId={params.conversationId} />
+    </Suspense>
+  );
+}
+
+async function ThreadContent({ conversationId }: { conversationId: string }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -140,9 +143,6 @@ export default async function MessageThreadPage({ params }: Props) {
     primaryImageUrl = getProductImagePublicUrl(sorted[0]!.storage_path);
   }
 
-  // No outer fixed wrapper — the route-segment layout (MessagesShell) owns
-  // height + scroll containment. This page contributes the column children:
-  // header (intrinsic) + scrollable middle + composer (intrinsic).
   return (
     <>
       <ThreadHeader
@@ -160,14 +160,12 @@ export default async function MessageThreadPage({ params }: Props) {
         primaryImageUrl={primaryImageUrl}
         conversationStatus={ctx.status}
       />
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <MessageThread
-          conversationId={conversationId}
-          initialMessages={msgResult.messages ?? []}
-          hasMore={msgResult.hasMore ?? false}
-          currentUserId={user.id}
-        />
-      </div>
+      <MessageThread
+        conversationId={conversationId}
+        initialMessages={msgResult.messages ?? []}
+        hasMore={msgResult.hasMore ?? false}
+        currentUserId={user.id}
+      />
       <MessageComposer
         conversationId={conversationId}
         isPhoneVerified={phoneVerified}

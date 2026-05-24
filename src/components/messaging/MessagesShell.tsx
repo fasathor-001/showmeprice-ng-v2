@@ -12,6 +12,10 @@ import {
 import { useSelectedLayoutSegment } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
+  getMessages,
+  listConversations,
+} from "@/lib/messaging/actions";
+import {
   makeTempId,
   normalizeMessageRow,
   realtimeReducer,
@@ -47,7 +51,11 @@ import { SidebarConversationList } from "./SidebarConversationList";
 export interface MessagesShellContextValue {
   state: RealtimeState;
   /** Tell the shell that this conversation's thread has mounted with these initial messages. */
-  seedActive: (conversationId: string, messages: ThreadMessage[]) => void;
+  seedActive: (
+    conversationId: string,
+    messages: ThreadMessage[],
+    hasMore: boolean,
+  ) => void;
   /** Optimistically prepend a temp message; returns the tempId for later swap. */
   optimisticSend: (
     conversationId: string,
@@ -63,6 +71,17 @@ export interface MessagesShellContextValue {
   failSend: (conversationId: string, tempId: string) => void;
   /** User-initiated: drop a failed bubble from the thread. */
   dismissFailed: (conversationId: string, tempId: string) => void;
+  /** "Load more" on the sidebar — fetches and appends the next page of conversations. */
+  loadMoreConversations: (cursor: string) => Promise<void>;
+  /**
+   * "Load earlier messages" on the thread — fetches an older page using the
+   * oldest currently-loaded message as the cursor. Returns the number of
+   * messages prepended so callers can adjust scroll position.
+   */
+  loadEarlierMessages: (
+    conversationId: string,
+    oldestMessageId: string,
+  ) => Promise<number>;
 }
 
 const Ctx = createContext<MessagesShellContextValue | null>(null);
@@ -84,12 +103,14 @@ export function useMessagesShell(): MessagesShellContextValue {
 interface MessagesShellProps {
   userId: string;
   initialConversations: ConversationSummary[];
+  initialNextCursor: string | null;
   children: ReactNode;
 }
 
 export function MessagesShell({
   userId,
   initialConversations,
+  initialNextCursor,
   children,
 }: MessagesShellProps) {
   // Active conversation id from URL: at /messages/[id], segment === [id];
@@ -99,8 +120,10 @@ export function MessagesShell({
 
   const [state, dispatch] = useReducer(realtimeReducer, {
     conversations: initialConversations,
+    conversationsNextCursor: initialNextCursor,
     activeConversationId,
     activeMessages: [],
+    activeMessagesHasMore: false,
     activeSeeded: false,
   } satisfies RealtimeState);
 
@@ -191,8 +214,52 @@ export function MessagesShell({
   // ---- Context actions ----
 
   const seedActive = useCallback(
-    (conversationId: string, messages: ThreadMessage[]) => {
-      dispatch({ type: "SEED_ACTIVE", conversationId, messages });
+    (conversationId: string, messages: ThreadMessage[], hasMore: boolean) => {
+      dispatch({ type: "SEED_ACTIVE", conversationId, messages, hasMore });
+    },
+    [],
+  );
+
+  // Sidebar "Load more conversations" handler.
+  const loadMoreConversations = useCallback(async (cursor: string) => {
+    const result = await listConversations("all", 20, cursor);
+    if (result.error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error(
+          "[MessagesShell] loadMoreConversations error:",
+          result.error,
+        );
+      }
+      return;
+    }
+    dispatch({
+      type: "PAGINATED_APPEND_CONVERSATIONS",
+      conversations: result.conversations ?? [],
+      nextCursor: result.nextCursor ?? null,
+    });
+  }, []);
+
+  // Thread "Load earlier messages" handler. Returns the number of messages
+  // prepended so the caller can adjust scroll position.
+  const loadEarlierMessages = useCallback(
+    async (conversationId: string, oldestMessageId: string): Promise<number> => {
+      const result = await getMessages(conversationId, 50, oldestMessageId);
+      if (result.error || !result.messages) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error(
+            "[MessagesShell] loadEarlierMessages error:",
+            result.error,
+          );
+        }
+        return 0;
+      }
+      dispatch({
+        type: "PAGINATED_PREPEND_MESSAGES",
+        conversationId,
+        messages: result.messages as ThreadMessage[],
+        hasMore: result.hasMore ?? false,
+      });
+      return result.messages.length;
     },
     [],
   );
@@ -266,8 +333,19 @@ export function MessagesShell({
       confirmSend,
       failSend,
       dismissFailed,
+      loadMoreConversations,
+      loadEarlierMessages,
     }),
-    [state, seedActive, optimisticSend, confirmSend, failSend, dismissFailed],
+    [
+      state,
+      seedActive,
+      optimisticSend,
+      confirmSend,
+      failSend,
+      dismissFailed,
+      loadMoreConversations,
+      loadEarlierMessages,
+    ],
   );
 
   // ---- Layout ----

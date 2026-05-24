@@ -34,17 +34,34 @@ export interface ThreadMessage extends MessageRow {
 export interface RealtimeState {
   /** Conversation list (bumps on realtime, mirrors deployed sort: last_message_at DESC). */
   conversations: ConversationSummary[];
+  /**
+   * Cursor for paginating to the next page of conversations.
+   * null = no more pages OR not initialised yet.
+   *
+   * Commit 6 trade-off: realtime INSERTs for conversations BEYOND the loaded
+   * pages are ignored by the list bumper — the conversation only enters
+   * client state when the user paginates to it. Acceptable at MVP scale;
+   * revisit when pagination becomes user-friction.
+   */
+  conversationsNextCursor: string | null;
   /** Active conversation id (from URL segment); null when at /messages. */
   activeConversationId: string | null;
   /** Active conversation's messages — only populated when a thread is open. */
   activeMessages: ThreadMessage[];
+  /** Whether the active conversation has more older messages to paginate. */
+  activeMessagesHasMore: boolean;
   /** Whether the active conversation has been seeded from the server's initial fetch. */
   activeSeeded: boolean;
 }
 
 export type RealtimeAction =
   | { type: "SET_ACTIVE"; conversationId: string | null }
-  | { type: "SEED_ACTIVE"; conversationId: string; messages: ThreadMessage[] }
+  | {
+      type: "SEED_ACTIVE";
+      conversationId: string;
+      messages: ThreadMessage[];
+      hasMore: boolean;
+    }
   | { type: "OPTIMISTIC_ADD"; conversationId: string; message: ThreadMessage }
   | {
       type: "SERVER_CONFIRMED";
@@ -55,7 +72,18 @@ export type RealtimeAction =
   | { type: "SERVER_FAILED"; conversationId: string; tempId: string }
   | { type: "DISMISS_FAILED"; conversationId: string; tempId: string }
   | { type: "REALTIME_INSERT"; message: ThreadMessage; currentUserId: string }
-  | { type: "REALTIME_UPDATE"; message: ThreadMessage };
+  | { type: "REALTIME_UPDATE"; message: ThreadMessage }
+  | {
+      type: "PAGINATED_APPEND_CONVERSATIONS";
+      conversations: ConversationSummary[];
+      nextCursor: string | null;
+    }
+  | {
+      type: "PAGINATED_PREPEND_MESSAGES";
+      conversationId: string;
+      messages: ThreadMessage[];
+      hasMore: boolean;
+    };
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -119,6 +147,7 @@ export function realtimeReducer(
         ...state,
         activeConversationId: action.conversationId,
         activeMessages: [],
+        activeMessagesHasMore: false,
         activeSeeded: false,
       };
 
@@ -129,6 +158,7 @@ export function realtimeReducer(
       return {
         ...state,
         activeMessages: action.messages,
+        activeMessagesHasMore: action.hasMore,
         activeSeeded: true,
       };
 
@@ -269,7 +299,11 @@ export function realtimeReducer(
     }
 
     case "REALTIME_UPDATE": {
-      // Currently used for read_at changes; future K-041 read receipts consume this.
+      // Read-receipts driver (K-041 closed in Commit 6): when the recipient
+      // opens a thread, getMessages → markRead → messages.read_at updated;
+      // realtime UPDATE fires here; reducer merges the new read_at into the
+      // matching active message; the sender's MessageBubble re-renders with
+      // ✓ → ✓✓.
       if (action.message.conversationId !== state.activeConversationId) {
         return state;
       }
@@ -284,6 +318,32 @@ export function realtimeReducer(
           { ...state.activeMessages[idx]!, ...action.message },
           ...state.activeMessages.slice(idx + 1),
         ],
+      };
+    }
+
+    case "PAGINATED_APPEND_CONVERSATIONS":
+      // "Load more" on the sidebar — append next page to the existing list.
+      // Realtime INSERT semantics for conversations beyond the loaded pages:
+      // those conversations DON'T get bumped client-side (they're not in
+      // state.conversations), so they stay in their server-determined
+      // position. User sees them only when they paginate. See state's
+      // `conversationsNextCursor` docstring for the trade-off rationale.
+      return {
+        ...state,
+        conversations: [...state.conversations, ...action.conversations],
+        conversationsNextCursor: action.nextCursor,
+      };
+
+    case "PAGINATED_PREPEND_MESSAGES": {
+      // "Load earlier messages" on the thread — prepend older page to the
+      // active conversation. Caller is responsible for scroll-position
+      // preservation (snapshot scrollHeight + scrollTop before dispatch,
+      // restore after the render).
+      if (action.conversationId !== state.activeConversationId) return state;
+      return {
+        ...state,
+        activeMessages: [...action.messages, ...state.activeMessages],
+        activeMessagesHasMore: action.hasMore,
       };
     }
 

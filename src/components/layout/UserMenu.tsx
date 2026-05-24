@@ -4,23 +4,29 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/ui";
 import { signOutAction } from "@/app/(auth)/actions";
+import { useUnreadMessagesCount } from "./UnreadMessagesProvider";
+
+// Stage 2.B Commit 6 — K-040 closeout: avatar gets a small red presence dot
+// when the user has unread messages. Three surfaces now signal unread:
+//   1. Header chat icon → red count badge (precise count)
+//   2. UserMenu avatar trigger → small red dot (presence signal — picks up
+//      users glancing at their avatar instead of the icon)
+//   3. UserMenu dropdown "Messages" row → inline red count badge (visible
+//      after dropdown opens)
+//
+// All three read the same realtime count from UnreadMessagesProvider so
+// they're always in sync (no stale-state divergence between surfaces).
 
 interface UserMenuProps {
   displayName: string;
   email: string;
   isAdmin?: boolean;
-  /** Total unread messages — drives the inline red badge on the Messages row. */
-  unreadMessagesCount?: number;
 }
 
-export function UserMenu({
-  displayName,
-  email,
-  isAdmin = false,
-  unreadMessagesCount = 0,
-}: UserMenuProps) {
+export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const unreadMessagesCount = useUnreadMessagesCount();
 
   useEffect(() => {
     if (!open) return;
@@ -42,6 +48,7 @@ export function UserMenu({
       .join("")
       .toUpperCase() || "U";
 
+  const hasUnread = unreadMessagesCount > 0;
   const unreadDisplay =
     unreadMessagesCount > 99 ? "99+" : String(unreadMessagesCount);
 
@@ -50,12 +57,26 @@ export function UserMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full p-0.5 hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2"
+        className="relative flex items-center gap-2 rounded-full p-0.5 hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Account menu"
+        aria-label={
+          hasUnread
+            ? `Account menu, ${unreadMessagesCount} unread messages`
+            : "Account menu"
+        }
       >
         <Avatar initials={initials} alt={displayName} size="sm" />
+        {hasUnread && (
+          // K-040 avatar presence dot. Same red as the icon's count badge
+          // (bg-red-500) for visual consistency. Smaller than the icon
+          // badge (no number inside) — distinct visual hierarchy: icon
+          // shows count, avatar shows presence only.
+          <span
+            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white"
+            aria-hidden="true"
+          />
+        )}
       </button>
 
       {open && (
@@ -75,10 +96,9 @@ export function UserMenu({
           >
             Dashboard
           </Link>
-          {/* Stage 2.B Commit 5.1 — inline red unread badge next to "Messages"
-              when count > 0. Server-rendered count (refreshes on navigation);
-              the realtime-live indicator is the header Messages icon badge
-              above. UserMenu re-syncs on next route change. */}
+          {/* Inline red unread badge next to "Messages" when count > 0.
+              Reads from the same realtime-updating context as the header
+              icon — both surfaces stay in sync (Commit 6 K-040 closeout). */}
           <Link
             href="/messages"
             className="flex items-center justify-between px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
@@ -86,7 +106,7 @@ export function UserMenu({
             onClick={() => setOpen(false)}
           >
             <span>Messages</span>
-            {unreadMessagesCount > 0 && (
+            {hasUnread && (
               <span
                 className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
                 aria-label={`${unreadMessagesCount} unread`}
