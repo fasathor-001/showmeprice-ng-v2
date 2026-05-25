@@ -205,7 +205,7 @@ export function ImageBubble({
       type="button"
       onClick={handlePlaceholderTap}
       aria-label="Tap to retry loading photo"
-      className="w-full rounded-xl overflow-hidden aspect-[4/3] max-h-80 bg-neutral-200 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 hover:bg-neutral-300/40 transition-colors"
+      className="w-72 max-w-full rounded-xl overflow-hidden aspect-[4/3] max-h-80 bg-neutral-200 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 hover:bg-neutral-300/40 transition-colors"
     >
       <div
         className="absolute inset-0 bg-white/10 animate-pulse"
