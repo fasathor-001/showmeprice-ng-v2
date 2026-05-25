@@ -26,6 +26,7 @@ import {
   parseSpecsFromFormData,
 } from "@/lib/categorySpecs";
 import { isLaunchCategory } from "@/lib/categories";
+import { dispatchVerificationDecisionEmail } from "@/lib/notifications/send-verification-decision-notification";
 
 export interface ActionResult {
   errors?: ValidationErrors & {
@@ -755,6 +756,23 @@ export async function approveVerificationAction(
     .update({ verification_status: "verified" })
     .eq("id", verification.business_id);
 
+  // TC-024 (Stage 2.C Commit 10-b): best-effort email to the seller.
+  // Look up the business owner via DP-8's approved JOIN-equivalent
+  // (separate select — businesses.owner_id is the auth.users.id by
+  // schema definition). dispatchVerificationDecisionEmail never throws;
+  // a Resend failure is logged but won't block the admin's redirect.
+  const { data: businessOwner } = await supabase
+    .from("businesses")
+    .select("owner_id")
+    .eq("id", verification.business_id)
+    .maybeSingle();
+  if (businessOwner?.owner_id) {
+    await dispatchVerificationDecisionEmail({
+      ownerId: businessOwner.owner_id as string,
+      decision: { kind: "approved" },
+    });
+  }
+
   redirect("/admin/verifications?toast=verification-approved");
 }
 
@@ -829,6 +847,22 @@ export async function rejectVerificationAction(
       })
       .eq("id", verification.business_id);
     if (bizErr) return { errors: { _form: bizErr.message } };
+
+    // TC-024 (Stage 2.C Commit 10-b): best-effort email to the seller
+    // with the verbatim rejection reason (DP-6 approved). Separate
+    // select for owner_id mirrors approveVerificationAction's pattern;
+    // dispatchVerificationDecisionEmail never throws.
+    const { data: businessOwner } = await supabase
+      .from("businesses")
+      .select("owner_id")
+      .eq("id", verification.business_id)
+      .maybeSingle();
+    if (businessOwner?.owner_id) {
+      await dispatchVerificationDecisionEmail({
+        ownerId: businessOwner.owner_id as string,
+        decision: { kind: "rejected", rejectionReason },
+      });
+    }
   } catch (e) {
     if (
       e &&
