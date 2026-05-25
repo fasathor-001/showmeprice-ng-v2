@@ -535,19 +535,45 @@ The current `isLikelyPriceContext` heuristic is **message-wide** — any "last p
 
 Surfaced 2026-05-23 during D-119 / Commit 1.6 design.
 
-### K-045 — Image sharing promised by Commit 7 template chip but not implemented (HIGH, gates Stage 2.C completion)
+### K-045 — Image sharing promised by Commit 7 template chip — RESOLVED via Stage 2.C Commit 9 (4-step replan) + 9-c.{1,2,3,4} polish (2026-05-25)
 
-Commit 7 shipped a localized first-message template chip *"Can I see more pictures?"* (D-108 set) in `MessageSellerModal`. The messaging system does not support image messages — `MessageComposer` has no attach button, `MessageBubble` has no image-type render branch, and there is no `message-images` Storage bucket or `message_images` table.
+Commit 7 shipped a localized first-message template chip *"Can I see more pictures?"* (D-108 set) in `MessageSellerModal`. The messaging system did not support image messages — `MessageComposer` had no attach button, `MessageBubble` had no image-type render branch, and there was no `message-images` Storage bucket or `message_images` table.
 
-The schema is partially provisioned: `messages.message_type` enum already includes `'image'` per ACTUAL_SCHEMA. The wiring (table, RLS, Storage bucket, signed-URL minting, upload UI, image-bubble rendering, full-screen viewer, report-image action) is the missing layer.
+The schema was partially provisioned: `messages.message_type` enum already included `'image'` per ACTUAL_SCHEMA. The wiring (table, RLS, Storage bucket, signed-URL minting, upload UI, image-bubble rendering, full-screen viewer, report-image action) was the missing layer.
 
-**Severity:** HIGH. Product coherence gap — the platform promises in chat what it cannot deliver. The buyer who taps the chip writes themselves into a dead-end conversation; the seller has no on-platform way to fulfil the request and the conversation either moves off-platform (where D-119 filters and read receipts don't apply) or dies. WhatsApp and Jiji both support media; Nigerian users are calibrated to that bar.
+**Original severity:** HIGH. Product coherence gap — the platform promised in chat what it could not deliver. The buyer who tapped the chip wrote themselves into a dead-end conversation; the seller had no on-platform way to fulfil the request and the conversation either moved off-platform (where D-119 filters and read receipts don't apply) or died. WhatsApp and Jiji both support media; Nigerian users are calibrated to that bar.
 
-**Resolution scope (Stage 2.C Commit 9):** see TC-001 surface findings — new `message_images` table + new private `message-images` Storage bucket with participant-gated RLS, attach button in `MessageComposer` (≤3 images, ≤5 MB after client-side compression, parallel upload with per-image progress), image-bubble rendering (1/2/3 layouts), full-screen viewer, report-image action via existing `reports` table. First-message-of-conversation stays text-only (gate parallel to D-114 phone-verification gate). No automated OCR/content scanning at MVP — manual report + moderation pipeline only.
+**Resolution narrative:**
 
-**Related:** TC-001 (audit pre-flagged HIGH); D-108 (template chip set); D-114 (gate pattern); D-119 (filter scope — text only, image binary cannot be filtered); K-010 (Storage orphan pattern that the same RLS shape mitigates).
+- **Commit 9 (original, single-shot)** attempted in one push and **reverted** when validation surfaced an architectural gap: Postgres realtime `postgres_changes` events do not carry related-table rows, so the recipient's reducer received the image-type `messages` row but no `message_images` array. Locked doctrine: *do not merge the split later — the split is part of the fix.*
+- **4-step replan shipped:**
+  - **9-a (infrastructure):** migration E.2.9.1 + private `message-images` bucket + participant-gated RLS + signed-URL helpers + `NEXT_PUBLIC_IMAGE_MESSAGES` feature flag (`759fb6d`).
+  - **9-b (read-only UI):** `ImageBubble` + `ImageViewer` + `ReportImageSheet` with 1/2/3 image layouts per §14.D (`1f960be`).
+  - **9-d (realtime lazy-fetch):** `getMessageImages` server action + `getMessages` PostgREST JOIN extension + `IMAGE_DATA_RECEIVED` reducer action with idempotent first-writer-wins guard (`4048fc7`).
+  - **9-c (composer + flag flip):** `MessageComposer` image-send orchestration + `ImageAttachButton` + `SendUndoStrip` (3-second grace) + `sendImageMessage` + `reportMessage` server actions + flag-flip to `true` (`b4074c1`).
+- **Post-flag-flip polish:**
+  - **9-c.1** (`bb53e94`) — blob URL lifecycle crash on optimistic-bubble dismissal.
+  - **9-c.2** (`3da6bff`) — Tailwind palette gap (K-058) surfaced and routed around: shimmer using `from-ink-100 via-ink-50` rendered invisible; replaced with `bg-neutral-300` to ship surgically.
+  - **9-c.3** (`45e5eb6`) — shimmer color inverted to `bg-neutral-100` (lighter than wrapper) for premium airy feel after Frank verified 9-c.2 read as a compressed dark block, not an airy placeholder.
+  - **9-c.4** (`d73b2f3`) — CSS circular-sizing collapse on recipient under throttling. `<button w-full aspect-[4/3]>` inside auto-sized parent in flex column resolved to ~0×0; recipient saw nothing until manual refresh. Single-line className swap to `w-72 max-w-full` gave the placeholder explicit 288px width.
+- **Gate 2 (Real-Android scenario):** 9 of 10 watch items passed. Item 8 (per-image upload failure UI) deferred to Gate 5 — XHR retry handled brief network blips within 60-second timeout, so the failure state was not exercised by the scenario.
+- **Gate 3 (instrumented harness, Fast 4G recipient):** PASSED 2026-05-25. Friday → Mark with Mark on real Fast 4G DevTools throttling. Harness captured: bubble-added at T+213.057s with `w-72 max-w-full` className verified, computed 288×216px, hasW72: true; `<img>` swap-in at T+215.335s (2.28-second visible placeholder window); both images loaded by T+215.915s. Zero console errors over 237-second watch. The 2.28s shimmer window satisfies D-121 calm-UI standard.
 
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+**Outstanding (banked, NOT blocking K-045 closure):**
+- **Item 8 — per-image upload failure UI** deferred to Gate 5 testing. Real-Android scenario didn't surface this because XHR retry logic handled brief network blips within 60-second timeout. Verification requires DevTools-based deliberate per-image failure injection. Defer to when real users actually experience upload failures during beta, OR run Gate 5 deliberately later.
+- **Gate 4 — memory snapshots deferred.** Code-level audits confirmed blob URL cleanup pairs correctly (every `createObjectURL` has a matching `revokeObjectURL` in the same effect's cleanup). Real memory testing during beta usage is higher-leverage than synthetic snapshots now.
+- **2 orphan placeholder bubbles** from earlier test data (SQL inserts during 9-b validation, never cleaned up) remain visible in the Friday Onome / Mercedes G 63 thread. NOT K-045's concern — those are stale test rows where the `messages` row exists but no companion `message_images` rows do. The placeholder shell correctly renders the *"📷 Photo · Tap to retry loading photo"* fallback. Optional cleanup via `DELETE FROM messages WHERE message_type = 'image' AND id IN (...)` for the specific orphan IDs, when convenient.
+
+**Commit chain:** `759fb6d` → `1f960be` → `4048fc7` → `b4074c1` → `bb53e94` → `3da6bff` → `45e5eb6` → `d73b2f3`.
+
+**Cross-references:**
+- **D-125** (trust narrative — *"show me the goods, on the platform, safely"*) — now real. The chip's promise is honored end-to-end without leaving the platform's safety perimeter.
+- **D-121** (world-class UX/UI standard) — 2.28-second placeholder window with light shimmer qualifies as calm: not a jarring blink, not a flash of unstyled content, not an empty box. A visible airy shell for the right duration, then a clean swap.
+- **D-108** (template chip set), **D-114** (gate pattern), **D-119** (filter scope — text only).
+- **K-010** (Storage orphan pattern that the same RLS shape mitigates).
+- **K-058** (Tailwind palette gap — surfaced during 9-c.1 post-mortem, remains open).
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 9 chain. Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 ### K-046 — sendMessage exception path leaves failed bubble without a Retry affordance (HIGH)
 
@@ -727,6 +753,77 @@ Recommendation when prioritized: **(a) first**, with a visual diff verification 
 **NOT urgent.** Defer to its own commit/pass post-Stage 2.C closure. Pairs naturally with any other UI-polish sweep.
 
 Surfaced 2026-05-25 during Stage 2.C Commit 9-c.1 post-mortem.
+
+### K-059 — Home page polish gap: not yet at international-tier standard (LOW)
+
+The home page reads as a competent v1 mobile build with the desktop view forgotten about. No embarrassing errors — palette, typography, spacing rhythm, and copy voice are all defensible — but the gap to Stripe / Linear / Airbnb / Hipcamp tier is in five concrete places:
+
+1. **Desktop hero wastes ~60% of the canvas.** At 1568px wide, the hero compresses to a ~500px centered column with vast plain-grey expanses on either side. Reads as a mobile screenshot stretched to a desktop browser. Fix vector: asymmetric hero — copy + CTA on the left half, a curated 2×2 listing grid or a Lagos-skyline / verification-badge illustration on the right.
+2. **Category icons are OS emoji** (👕 💄 ⚡ 📺 etc). Rendering depends on the user's OS font — inconsistent across Samsung / iPhone / Windows, cannot be art-directed, reads as MVP placeholder art. **This is the single most visible "we're not done yet" tell.** Replace with a single consistent line-icon set (Lucide / Phosphor / Heroicons-outline) tinted teal-600.
+3. **City chips below the search are second-class navigation.** Small, identical, no visual weight — read as overflow tags. For a Nigerian marketplace, city pickers are first-class navigation. Try larger tiles with a count (*"Lagos · 12,400 listings"*) or photographs.
+4. **"Browse by category" has no hierarchy.** Power & Generators sits next to Fashion & Apparel with identical visual weight. Either feature 3 hero categories and a small grid for the rest, or add listing counts so the user understands what's hot.
+5. **"How it works" is generic.** *"Browse with real prices / See verified sellers / Chat directly on WhatsApp"* reads like every marketplace explainer. The Nigerian-specific story is stronger: *"No more DM for price" / "ID-verified — not just phone-OTP" / "We never touch your money."* Lead with what differentiates from Jiji/Jumia.
+6. **Sell CTA undersold in header.** Text-only at the same weight as Browse/Categories. Pro tier monetisation lives or dies on seller acquisition; the header should be working harder.
+
+**Severity:** LOW. Polish, not functional. NOT a private beta launch blocker. The site works; it just doesn't yet feel São-Paulo-or-Jakarta-tomorrow.
+
+**Resolution path:** absorb into Commit 12 (discovery polish) where appropriate, OR a dedicated post-Stage-2.C home-page polish pass. None of these are weeks of work individually — together maybe a focused 2-week design+build sprint.
+
+**Cross-references:** D-121 (world-class UX/UI standard).
+
+Surfaced 2026-05-25 during home-page review (Mercedes G 63 thread navigation context).
+
+### K-060 — Listing detail polish gap: below-fold sparseness + unloved spec block (LOW)
+
+The listing detail page is the strongest page on the site — hero gallery + price + verified-seller card + WhatsApp CTA. But it stops at MVP and there is clear runway to international tier:
+
+1. **Below the fold = nothing.** After Specifications (2 rows) + Description (one line) the page ends and the footer begins. A ₦210M G-Wagon deserves: more listings from this seller, similar listings, an inline "Safety tips for high-value purchases" strip, an embedded city pin/map for "Lagos", and date-of-listing in absolute form (*"Listed Nov 18, 2026"*) not just *"1 week ago"*.
+2. **Specifications block is unloved.** Two rows in a key/value table with no visual hierarchy. For cars, this is where buyers live — Year, Mileage, Transmission, Fuel, Body color, VIN-last-4, accident history. Compare to Cars45 / AutoTrader / Carro — they all use icon-keyed pill rows.
+3. **"Price negotiable" chip is buried.** Sits in a row of three identical-weight chips next to "Verified seller" and "Lagos". For a Nigerian buyer, "negotiable vs firm" is a primary signal. Pull it out — put it under the price as a softer-coloured pill.
+4. **No "Report listing" affordance surfaced.** Table-stakes for marketplace trust + admin pipeline. May exist behind an overflow menu, but it isn't surfaced.
+5. **No share / save / favourite.** No bookmark, no copy-link, no "send to a friend on WhatsApp". For a ₦210M item, the buyer is going to want to forward this to a partner/spouse before paying. Add a WhatsApp share button right next to "Continue conversation".
+6. **Continue-conversation CTA is over-wide on desktop.** Full content-column width (~600px) — reads as "we don't have anything else to put here" rather than "this is important." Cap at ~360px and right-align or center.
+7. **Description echoes the title.** *"Used 2024 Mercedes Benz G 63 AMG 7G-Tronic with 6 141km"* is the title restated. One-line descriptions should render with a placeholder (*"Seller hasn't added a description — ask on WhatsApp"*) rather than echoing the title.
+
+**Severity:** LOW. Polish, not functional. NOT a private beta launch blocker.
+
+**Resolution path:** absorb into Commit 12 (discovery polish) where appropriate, OR a dedicated post-Stage-2.C listing-detail polish pass. Items 4 (Report listing) and 5 (share / WhatsApp forward) are the highest-leverage as they touch trust + virality.
+
+**Cross-references:** D-121 (world-class UX/UI standard), D-125 (trust narrative — Report-listing is part of "safely").
+
+Surfaced 2026-05-25 during listing-detail review (Mercedes G 63 listing).
+
+### K-061 — Admin refactor gap: 305 LOC across 3 files = MVP shape, not production shape (LOW)
+
+The admin surface is currently:
+
+```
+src/app/admin/
+├── page.tsx                          61 lines
+├── verifications/page.tsx            99 lines
+├── verifications/[id]/page.tsx
+├── verifications/[id]/ReviewActions.tsx
+├── staff/page.tsx                    145 lines
+├── staff/GrantAdminPanel.tsx
+└── staff/RevokeAdminControl.tsx
+```
+
+**305 LOC total across 3 page files.** Functional but not professional. What a world-class admin needs that this almost certainly doesn't have yet:
+
+1. **Layout chrome** — persistent sidebar nav (Verifications · Reports · Listings · Sellers · Subscriptions · Staff · Audit log · Metrics), top bar with environment indicator + admin search, breadcrumbs on every page. Closes K-024 (no nav entry point) and K-026 (no back-navigation) by design.
+2. **Density** — Linear / Retool-tier list views: sortable columns, sticky headers, keyboard nav, batch actions on the verifications queue.
+3. **Empty states with action affordances** — not *"no records found"*, but *"Inbox zero — last reviewed verification was 2 minutes ago. ✓"*
+4. **Audit trail surfaced.** Every admin action timestamped + who did it. Currently no admin-visible audit view.
+5. **Reports queue triage UI.** Commit 9-c shipped the `reportMessage` write path; admin still has no actual queue to review reports against. Will be needed once image reports start arriving.
+6. **Metrics tiles** — verified sellers count, pending verifications, reports awaiting review, weekly listing volume.
+
+**Severity:** LOW. Polish, not functional. Admin still works for the operations it covers today (verification approval/rejection, staff role grants). NOT a private beta launch blocker — but **becomes higher-priority once private beta opens** because the admin workload scales with user count.
+
+**Resolution path:** dedicated admin-refactor pass, ideally before private beta opens beyond initial cohort. Pair with K-024 (no nav entry point) and K-026 (no back-navigation) closure — those become free byproducts of layout chrome work.
+
+**Cross-references:** D-121 (world-class UX/UI standard), K-024, K-026.
+
+Surfaced 2026-05-25 during admin-surface review (codebase audit + buyer-session redirect attempt).
 
 ## Resolved or superseded
 
