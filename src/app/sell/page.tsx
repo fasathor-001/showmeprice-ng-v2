@@ -34,7 +34,12 @@ export default async function SellPage() {
     return (
       <Container size="narrow">
         <ToastFromSearchParams />
-        <div className="py-12 sm:py-16 max-w-xl mx-auto">
+        <div className="py-8 sm:py-12 max-w-xl mx-auto">
+          <div className="mb-2 text-sm text-ink-600">
+            <Link href="/dashboard" className="hover:text-ink">
+              ← Dashboard
+            </Link>
+          </div>
           <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-2 text-center">
             Sell on ShowMePrice
           </h1>
