@@ -46,6 +46,14 @@ export function ImageUploader({
     done: 0,
     total: 0,
   });
+  // K-051 (Stage 2.C Commit 10-a): persistent partial-upload warning. Set
+  // when a batch finishes with some files succeeded AND some failed. The
+  // user sees "X of Y uploaded — review before publishing" so they can't
+  // ship a flagship listing missing photos without noticing.
+  const [partialUpload, setPartialUpload] = useState<{
+    uploaded: number;
+    total: number;
+  } | null>(null);
 
   // Snapshot of paths that were already in product_images at mount. Used in
   // deleteImage() to decide whether to clean up Storage now (newly uploaded)
@@ -113,25 +121,44 @@ export function ImageUploader({
 
     setUploadState("uploading");
     setProgress({ done: 0, total: toUpload.length });
+    // K-051: reset any prior partial-upload warning at the START of a new
+    // batch — the user is actively trying to recover. We'll re-set it after
+    // the loop if this batch ALSO ends partial.
+    setPartialUpload(null);
     const uploaded: UploaderImage[] = [];
+    let failedCount = 0;
+    let lastErrorMessage = "";
+    // K-051: continue past failures so a single mid-batch failure doesn't
+    // silently skip the remaining files. Pre-fix behavior: image 3 of 5
+    // fails → images 4 and 5 never attempted → user publishes with 2 of 5
+    // photos and never notices. Post-fix: try all, report the partial.
     for (let i = 0; i < toUpload.length; i++) {
       try {
         const slot = images.length + uploaded.length;
         const result = await uploadOne(toUpload[i], slot);
         if (result) uploaded.push(result);
       } catch (err) {
-        setUploadError(
-          err instanceof Error ? err.message : "Upload failed — please retry."
-        );
-        setUploadState("error");
-        // Commit what's uploaded so far even if a later file failed.
-        if (uploaded.length > 0) setImages((prev) => [...prev, ...uploaded]);
-        return;
+        failedCount++;
+        lastErrorMessage =
+          err instanceof Error ? err.message : "Upload failed — please retry.";
       }
       setProgress({ done: i + 1, total: toUpload.length });
     }
-    setImages((prev) => [...prev, ...uploaded]);
-    setUploadState("idle");
+    if (uploaded.length > 0) setImages((prev) => [...prev, ...uploaded]);
+    if (failedCount > 0) {
+      setUploadError(lastErrorMessage);
+      setUploadState("error");
+      if (uploaded.length > 0) {
+        // K-051: partial batch — render persistent warning above gallery.
+        setPartialUpload({
+          uploaded: uploaded.length,
+          total: toUpload.length,
+        });
+      }
+    } else {
+      setUploadError("");
+      setUploadState("idle");
+    }
   };
 
   const deleteImage = async (idx: number) => {
@@ -178,6 +205,39 @@ export function ImageUploader({
           className="bg-danger-bg border border-danger/30 text-danger-text text-sm px-3 py-2 rounded-lg"
         >
           {uploadError}
+        </div>
+      )}
+
+      {/* K-051 (Stage 2.C Commit 10-a): persistent partial-upload warning.
+          Calm not noisy — amber palette, role=status (not alert) so it
+          doesn't interrupt screen readers redundantly with the danger
+          banner above. Stays until the next successful batch clears it. */}
+      {partialUpload && (
+        <div
+          role="status"
+          className="bg-amber-50 border border-amber-300 text-amber-900 text-sm px-3 py-2 rounded-lg flex items-start gap-2"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="w-4 h-4 mt-0.5 flex-shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>
+            <strong>
+              {partialUpload.uploaded} of {partialUpload.total} uploaded
+            </strong>{" "}
+            — review before publishing. Re-add the missing photos to complete
+            the listing.
+          </span>
         </div>
       )}
 

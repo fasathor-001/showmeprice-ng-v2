@@ -1076,10 +1076,20 @@ export async function createListingAction(
     .from("product_images")
     .insert(imageInserts);
   if (imageError) {
-    // Listing created but images failed to attach — log and continue. The
-    // seller can edit the listing to retry image attachment; the storage
-    // objects themselves are uploaded and will be picked up later.
-    console.error("Failed to attach images", imageError);
+    // K-049 transactional rollback (Stage 2.C Commit 10-a): delete the
+    // just-created product row so the listing doesn't ship as a silent
+    // partial publish (product row with zero attached photos). The seller
+    // sees an honest form error and retries from a clean state — the most
+    // damaging possible first introduction (an imageless flagship listing)
+    // is prevented entirely.
+    console.error(
+      "[createListingAction] product_images insert failed, rolling back product row",
+      imageError,
+    );
+    await supabase.from("products").delete().eq("id", product.id);
+    return {
+      errors: { _form: "Couldn't attach photos — please try again." },
+    };
   }
 
   // No revalidatePath (broken on Cloudflare edge — banked C.5.6.0 lesson).
@@ -1172,10 +1182,14 @@ export async function updateListingAction(
     }
   }
 
-  // Snapshot current DB rows so we can compute which Storage files to remove.
+  // Snapshot current DB rows so we can compute which Storage files to
+  // remove AND restore on K-050 image-reinsert failure. Single snapshot
+  // serves both purposes; position is captured so a restore preserves
+  // ordering exactly. Mirrors the established snapshot-before-mutate
+  // pattern used elsewhere in this action.
   const { data: dbImages } = await supabase
     .from("product_images")
-    .select("storage_path")
+    .select("storage_path, position")
     .eq("product_id", productId);
   const submittedSet = new Set(imagePaths);
   const filesToRemove = (dbImages ?? [])
@@ -1209,6 +1223,18 @@ export async function updateListingAction(
   );
   if (specError) return { errors: { _form: specError } };
 
+  // K-050 (Stage 2.C Commit 10-a): snapshot the original product row before
+  // UPDATE. Mirrors the dbImages snapshot above; used to restore state on
+  // image-reinsert failure so the edit doesn't ship as a silent partial
+  // (title/price changed but images didn't).
+  const { data: productSnapshot } = await supabase
+    .from("products")
+    .select(
+      "title, description, price_kobo, is_negotiable, category_id, state_id, city_area, category_specs",
+    )
+    .eq("id", productId)
+    .maybeSingle();
+
   const { error: updateError } = await supabase
     .from("products")
     .update({
@@ -1237,7 +1263,35 @@ export async function updateListingAction(
     .from("product_images")
     .insert(imageInserts);
   if (imageError) {
-    console.error("Failed to update images", imageError);
+    // K-050 transactional rollback: restore product row + product_images
+    // rows to their pre-update state. The edit failed mid-stream; the
+    // seller sees an honest error instead of a silent partial-edit (where
+    // title/price persisted but the new photos didn't). Best-effort
+    // restore — if either restore call also fails, the database is in
+    // the same state it would have been pre-rollback-logic (the original
+    // K-050 bug), which is no worse than today.
+    console.error(
+      "[updateListingAction] product_images reinsert failed, rolling back product + image state",
+      imageError,
+    );
+    if (productSnapshot) {
+      await supabase
+        .from("products")
+        .update(productSnapshot)
+        .eq("id", productId);
+    }
+    if (dbImages && dbImages.length > 0) {
+      await supabase.from("product_images").insert(
+        dbImages.map((r) => ({
+          product_id: productId,
+          storage_path: r.storage_path,
+          position: r.position,
+        })),
+      );
+    }
+    return {
+      errors: { _form: "Couldn't update photos — your listing is unchanged." },
+    };
   }
 
   // Best-effort Storage cleanup for files no longer referenced. Failures
