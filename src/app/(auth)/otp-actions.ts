@@ -17,6 +17,7 @@ import { getOtpProvider, OtpRateLimitedError } from "@/lib/otp";
 import { sha256Hex } from "@/lib/otp/hash";
 import { generateOtpCode } from "@/lib/otp/code";
 import { renderOtpMessage } from "@/lib/otp/message";
+import { dispatchWelcomeEmail } from "@/lib/notifications/send-welcome-notification";
 
 export interface OtpActionState {
   ok?: boolean;
@@ -239,7 +240,16 @@ export async function verifyPhoneOtpAction(
     console.error("mark_phone_verified rpc failed", rpcErr.message);
     return { error: "Could not complete verification. Please try again." };
   }
-  if (ok === true) return { ok: true };
+  if (ok === true) {
+    // TC-025 (Stage 2.C Commit 10-c): best-effort welcome email at the
+    // moment phone verification completes — D-114 alignment per DP-9.
+    // The mark_phone_verified RPC is atomic-consume, so this branch
+    // fires exactly once per user under normal flow; dispatcher adds
+    // a notification_log subject-based dedup as belt-and-braces.
+    // dispatchWelcomeEmail never throws.
+    await dispatchWelcomeEmail({ userId: user.id });
+    return { ok: true };
+  }
 
   // false = couldn't atomically consume (e.g. a concurrent verify already
   // did). Re-check the profile: if it's now verified, treat as success.
