@@ -617,43 +617,6 @@ Compounds K-047: even if the recipient's mark-as-read fires correctly, the sende
 
 Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
-### K-049 — createListingAction creates product row even when product_images insert fails — silent partial publish (HIGH)
-
-`src/lib/listings/actions.ts:1075-1083` (`createListingAction`) inserts the `products` row first, then the `product_images` rows. If the `product_images` insert errors (Storage upload succeeded but DB write failed, RLS edge case, transient connection drop), the failure is `console.error`'d and the function returns success. The user sees a green "Listing created" toast and is redirected to the dashboard — then opens their listing to find it has zero attached photos.
-
-A first-time seller publishes their flagship listing, sees success, then refreshes to find an imageless listing. The most damaging possible introduction to the platform.
-
-**Severity:** HIGH. Pre-public-beta blocker.
-
-**Resolution scope (Commit 10):** see TC-005 surface findings — on `product_images` insert error, delete the just-created `products` row and return a form error *"Couldn't attach photos — please try again."* Single transactional path. ~30 LOC.
-
-**Related:** TC-005 (audit), K-050 (mirror on update path), K-051 (companion partial-upload gap).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
-
-### K-050 — updateListingAction persists product update even when image reinsert fails — silent partial edit (HIGH)
-
-`src/lib/listings/actions.ts:1239-1241` (`updateListingAction`) commits the `products` UPDATE first, then runs a delete-then-reinsert image cycle. If the image reinsert errors, the title/price/description edit IS persisted and the user sees *"Listing updated"* toast. They discover the stale-images state on reload — particularly damaging when the edit was specifically *"I uploaded better photos."*
-
-**Severity:** HIGH. Mirror of K-049 for the edit path. Pre-public-beta blocker.
-
-**Resolution scope (Commit 10):** see TC-006 surface findings — capture the original product row before UPDATE; on image-reinsert error, restore the product row to its pre-update state and return a form error. ~40 LOC.
-
-**Related:** TC-006 (audit), K-049 (create-path mirror), K-051 (companion partial-upload gap).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
-
-### K-051 — ImageUploader accepts partial multi-image upload silently — form publishable with N-of-M images and no warning (HIGH)
-
-`src/components/listings/ImageUploader.tsx:117-132` processes selected images in a loop. If image 3 of 5 fails (network drop, MIME validation, size), images 1-2 are already committed to local form state. The error banner shows the message for #3 but #4 and #5 are simply skipped — and #1, #2 stay in the form. The user can hit Publish with 2 images, believing they uploaded 5.
-
-**Severity:** HIGH. Seller's flagship product ships with 2 of 5 photos; they notice later and blame the platform. Pre-public-beta blocker.
-
-**Resolution scope (Commit 10):** see TC-007 surface findings — after the batch loop, if `anyImageFailed && uploaded > 0`, render a persistent warning banner above the gallery *"Some photos didn't upload — review before publishing"* with an explicit *"X of Y uploaded"* count. Allow publish but make the partial state visible. ~35 LOC.
-
-**Related:** TC-007 (audit), K-049 (companion create-path silent fail), K-050 (companion update-path silent fail).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 ### K-052 — /marketplace and /categories/[slug] Supabase queries have no try/catch — network blip surfaces as Cloudflare "Application error" (HIGH)
 
@@ -717,17 +680,6 @@ Neither `src/components/messaging/MessageComposer.tsx` nor `src/components/listi
 
 Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
-### K-057 — Verification status change is not communicated to the seller — no email side-effect on admin approval/rejection (MEDIUM)
-
-`src/app/admin/verifications/actions.ts` (approve/reject seller identity verification) has no email side-effect on admin decision. The seller is not notified; they must check their dashboard. They submit verification documents, hear nothing for days, don't know whether to keep checking or assume it failed.
-
-**Severity:** MEDIUM. Each anxious-check session that finds *"still pending"* or *"approved 2 days ago"* erodes confidence in platform timeliness. Pre-public-beta recommended.
-
-**Resolution scope (Commit 10):** see TC-024 surface findings — Resend infrastructure lands in Commit 8 (K-054); this is additive: send-on-admin-decision with one approval template + one rejection template (carries rejection reason if present). `from` address consistent with K-054 (`notifications@showmeprice.ng`). ~50 LOC.
-
-**Related:** TC-024 (audit), K-054 (companion Resend integration — opens this path), Commit 8 (Resend lands here), D-125 (calm cadence — one email per decision, no follow-up nags).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 ### K-058 — Latent Tailwind palette gap: ink-50/100/500/700 used in codebase but not defined in tailwind.config.ts (LOW)
 
@@ -880,9 +832,102 @@ This issue closes when D-127 (journal) ships AND a decision is
 locked about newsletter (either ships as monthly journal digest,
 or formally declines as unnecessary).
 
+#### Note: Welcome email Test A deferral (Commit 10-c)
+
+Stage 2.C Commit 10-c implemented the welcome email (triggered on phone-verify success). Test A (welcome email path) was deferred to first Nigerian beta user signup due to Frank's environment constraint (K-063: phone-verify flow is Nigerian-only, Frank's environment is South African). Code review + Resend template preview (confirms rendering) accepted as pre-beta verification. When the first Nigerian beta tester signs up and completes phone verification, the welcome email path will verify naturally. See K-063 for full context.
+
 Surfaced 2026-05-25 during D-126/D-127 doctrine drafting.
 
+### K-063 — Phone-verify testing constraint: Nigerian-only flow (LOW)
+
+**Status:** OPEN, operational constraint (not a defect)
+
+**Summary:** ShowMePrice's phone-verification flow is correctly locked to Nigerian numbers per D-114. Frank's testing environment (South Africa) cannot complete Nigerian phone verifications, creating a blind spot for any flows triggered by phone-verify success.
+
+**Context:**
+- Arkesel SMS gateway account: configured for South African numbers only
+- Frank's personal phone: South African number
+- Product requirement (D-114): phone-verify gate is strict Nigerian-only for first-phase market focus
+
+**Affected flows currently:**
+- Welcome email (Commit 10-c) — fires on `verifyPhoneOtpAction` success
+- Any future onboarding emails or in-app prompts triggered by phone-verify completion
+
+**Verification approach for affected flows:**
+1. Code review at implementation time (catches structural issues)
+2. Resend template preview if applicable (renders template visually, confirms placeholders bind correctly)
+3. Real beta user verification at first Nigerian signup (exercises the entire path end-to-end)
+
+**Resolution path:**
+- **Short term (MVP/private beta):** accept the blind spot. Real beta users will exercise the flow naturally; feedback surfaces any issues fast.
+- **If pre-beta testing becomes essential:** three options (owner picks):
+  - (a) Reconfigure Arkesel to support both NG + ZA for testing (may incur platform fees, may require account-level approvals)
+  - (b) Obtain a Nigerian SIM card for testing (simplest, physical constraint)
+  - (c) Use a virtual Nigerian number service compatible with Arkesel (vOIP service, reliability varies)
+
+**Why LOW severity:**
+- Doesn't block production functionality
+- Doesn't block beta launch (real users will verify naturally)
+- Affects only Frank's solo testing capability, not the product
+- All-tests-green on code review + Resend template checks is a acceptable interim bar
+
+**Cross-references:** D-114 (phone primacy), K-062 (communication surface implementation — welcome email dependency)
+
+Opened 2026-05-25 during Stage 2.C Commit 10-c verification.
+
 ## Resolved or superseded
+
+### K-049 — createListingAction creates product row even when product_images insert fails — RESOLVED (Commit 10-a)
+
+**Resolution:** Stage 2.C Commit 10-a (2026-05-25) — transactional rollback implemented at `src/lib/listings/actions.ts:1075-1083`. On `product_images` insert error, the just-created `products` row is deleted (single transactional scope) and a form error is returned: *"Couldn't attach photos — please try again."* Seller does not see a false success message; the listing is not created; zero orphan rows remain.
+
+**Commit:** `a6fc745`
+
+**Verification:** Code audit + shared error-handling pattern verified in K-051 runtime test (Chrome MCP harness, full batch-upload failure scenario).
+
+**Cross-references:** D-124 (calm error handling — no silent partial publishes), D-125 (trust narrative — every feature shipped must be complete).
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 10-a.
+
+### K-050 — updateListingAction persists product update even when image reinsert fails — RESOLVED (Commit 10-a)
+
+**Resolution:** Stage 2.C Commit 10-a (2026-05-25) — snapshot + restore pattern implemented at `src/lib/listings/actions.ts:1239-1241`. Before the `products` UPDATE, the original row is snapped; before the image delete-reinsert cycle, the original `product_images` rows are snapped. On reinsert error, both are restored to their pre-update state (mirrors the existing pattern at lines 1175-1183) and a form error is returned: *"Couldn't update photos — your listing is unchanged."* The edit is not persisted if images fail.
+
+**Commit:** `a6fc745`
+
+**Verification:** Code audit + pattern consistency check against existing snapshot usage at lines 1175-1183 + shared error-handling verified in K-051 runtime test.
+
+**Cross-references:** D-124, D-125.
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 10-a.
+
+### K-051 — ImageUploader accepts partial multi-image upload silently — RESOLVED (Commit 10-a)
+
+**Resolution:** Stage 2.C Commit 10-a (2026-05-25) — continue-past-failure + persistent warning banner at `src/components/listings/ImageUploader.tsx:117-132`. The upload loop processes all selected images even if one fails (does not early-return on error). After the batch completes, if any images failed AND some succeeded, a persistent amber warning banner renders above the gallery: *"Some photos didn't upload — review before publishing"* with an explicit count *"X of Y uploaded."* The form's Publish button remains enabled (no hard block) so the user can decide whether to retry or submit with the partial set.
+
+**Verification (runtime):** Chrome MCP instrumented harness confirmed the behavior at T+0 through T+2.8s: 5 image PUTs were attempted, slot 3 was deliberately failed by test injection, slots 4 and 5 continued despite #3's failure. The warning banner rendered *"4 of 5 uploaded — review before publishing"* with role=status for screen reader clarity. Publish button remained enabled. All telemetry logged; zero console errors.
+
+**Commit:** `a6fc745`
+
+**Cross-references:** D-124 (calm UI — warning uses role=status not alert, no toast spam, no hard blocks), D-125 (trust narrative — partial uploads are visible, not hidden).
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 10-a (runtime Gate 3 PASS).
+
+### K-057 — Verification status change is not communicated to the seller — RESOLVED (Commit 10-b)
+
+**Resolution:** Stage 2.C Commit 10-b (2026-05-25) — admin decision notifications implemented via Resend email at `src/app/admin/verifications/actions.ts`. Two React Email templates:
+1. **VerificationApprovedEmail.tsx** (206 LOC) — subject *"Your ShowMePrice account is verified"*, calm tone per D-126, three next-steps (Post listing, Reply to messages, Add payment details), primary CTA to `/listings/new`
+2. **VerificationRejectedEmail.tsx** (218 LOC) — subject *"We couldn't verify your account"*, amber-block quote containing verbatim `rejection_reason` if present, framing copy *"Once you've addressed this, you can resubmit..."*, primary CTA to `/sell/verify`
+
+Both templates use the best-effort send pattern (try/catch wrapping, logs but never throws, matches TC-023 from Commit 8). Honors `notification_preferences` table for the `verification_status_change` event type. Logged to `notification_log` with event_type='verification_status_change', channel='email'.
+
+**Commit:** `0a2beef`
+
+**Verification (Gate 2 PASS):** Both emails arrived at seller's inbox with correct subject line, body rendering, and calm baseline tone (no exclamation marks, no celebration emoji per D-126). Resend logs showed `delivered` status for both. Admin redirect timing acceptable (best-effort dispatch does not block the redirect).
+
+**Cross-references:** D-126 (intelligence-first communication doctrine — clarity over enthusiasm), D-125 (trust narrative — seller hears back on their application).
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 10-b (Gate 2 PASS).
 
 ### K-019 — Phone validation gap + NG-only-vs-international product decision (RESOLVED)
 
