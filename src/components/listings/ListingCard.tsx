@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui";
 import { formatNaira } from "@/lib/listings";
+import { ProductImage } from "./ProductImage";
 
 interface ListingCardProps {
   id: string;
@@ -31,8 +32,7 @@ export function ListingCard({
       <Card variant="hover" padding="none" className="overflow-hidden h-full">
         <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300">
           {primaryImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ProductImage
               src={primaryImageUrl}
               alt={title}
               className="w-full h-full object-cover"

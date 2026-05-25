@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ProductImage } from "./ProductImage";
 
 interface GalleryImage {
   storage_path: string;
@@ -87,8 +88,7 @@ export function ListingImageGallery({ images, title }: Props) {
         className="block w-full max-h-[60vh] sm:max-h-[700px] mb-3 rounded-xl overflow-hidden bg-white cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
         aria-label={`View ${title} image ${selectedIndex + 1} of ${images.length} fullscreen`}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ProductImage
           src={current.public_url}
           alt={`${title} — image ${selectedIndex + 1}`}
           className="block w-full max-h-[60vh] sm:max-h-[700px] object-contain"
@@ -111,8 +111,7 @@ export function ListingImageGallery({ images, title }: Props) {
                   : "border-neutral-200 hover:border-neutral-400 opacity-75 hover:opacity-100"
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <ProductImage
                 src={img.public_url}
                 alt=""
                 className="w-full h-full object-cover bg-neutral-100"
@@ -210,8 +209,7 @@ export function ListingImageGallery({ images, title }: Props) {
           )}
 
           {/* Image */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <ProductImage
             src={current.public_url}
             alt={`${title} — image ${selectedIndex + 1}`}
             className="max-w-full max-h-full object-contain"

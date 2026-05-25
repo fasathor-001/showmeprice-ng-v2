@@ -884,6 +884,13 @@ function Composer({
     }
   };
 
+  // K-056: Android keyboard scrollIntoView (200ms delay for keyboard animation)
+  const handleTextareaFocus = () => {
+    setTimeout(() => {
+      textareaRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
+    }, 200);
+  };
+
   const counterClass = isOverLimit
     ? "text-danger-text"
     : content.length >= 1900
@@ -1044,6 +1051,7 @@ function Composer({
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onFocus={handleTextareaFocus}
           placeholder={
             pendingAttachments.length > 0
               ? "Add a note (optional)"

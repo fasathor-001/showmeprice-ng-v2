@@ -656,17 +656,28 @@ Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
-### K-055 — Product images served at full Storage resolution without lazy-loading or responsive sizes (MEDIUM)
+### K-055 — Product images served at full Storage resolution without lazy-loading or responsive sizes (MEDIUM) — PARTIALLY DELIVERED, DEFERRED
 
-All product images on `ListingImageGallery.tsx`, `ListingCard.tsx`, and `MessageSellerModal.tsx` use `<img src={url}>` with no `loading="lazy"`, no `srcset`, and no responsive size negotiation. A listing detail page on mobile downloads full-resolution Storage objects for every gallery item, including thumbs the user may never see. On a Nigerian 3G connection, the detail page can take 8-15 seconds to settle.
+All product images on `ListingImageGallery.tsx`, `ListingCard.tsx`, and `MessageSellerModal.tsx` originally used `<img src={url}>` with no `loading="lazy"`, no `srcset`, and no responsive size negotiation. A listing detail page on mobile downloads full-resolution Storage objects for every gallery item, including thumbs the user may never see. On a Nigerian 3G connection, the detail page can take 8-15 seconds to settle.
 
 **Severity:** MEDIUM. Slow correlates with untrustworthy in user perception. Pre-public-beta recommended.
 
-**Resolution scope (Commit 11):** see TC-014 surface findings — migrate to `next/image` where Cloudflare Pages permits, otherwise add `loading="lazy"` + `srcset` + Supabase Storage image-transform query parameters for size variants. Pairs with K-053 — both use the same `<ProductImage>` wrapper.
+**Status (Commit 11):** 
+- ✅ **PARTIALLY DELIVERED:** ProductImage wrapper component (K-053) now handles `loading="lazy"` across all three surfaces (ListingCard, ListingImageGallery, MessageSellerModal). Lazy-load alone catches the majority of perceived performance benefit at Stage 2.C scale (5-50 invitees).
+- ⏳ **DEFERRED:** Responsive srcset/sizes implementation deferred to dedicated post-Stage-2.C work. Requires architectural decisions on:
+  - Image variant generation pipeline (build-time vs request-time vs Cloudflare Images paid service)
+  - Caching strategy (CDN edge cache vs Supabase Storage cache)
+  - Storage costs (multiple variants × thousands of listings)
+  - Format strategy (webp/jpeg fallback, AVIF consideration)
+  - Migration path for existing images
+  
+  **Why:** next/image is incompatible with Cloudflare Pages free tier (requires images.unoptimized = true, which negates optimization benefit). Manual srcset + sizes work deserves focused architectural thought, not a Stage-2.C bolt-on. Stage 2.C scope is reliability + trust readiness; image-delivery infrastructure is separate territory. Real bandwidth costs and image performance issues surface at hundreds-to-thousands of users — Stage 3+ territory.
 
-**Related:** TC-014 (audit), K-053 (companion broken-icon work), D-125 (mobile-first reality).
+**Architectural principle (banked):** Implementation-path failure does not automatically redefine feature-objective completion. When an approved implementation path (e.g., next/image) proves invalid, the underlying objective (e.g., responsive image optimization) does NOT automatically close via the partial work completed. The path is replaceable; the objective remains open until objectively met or explicitly deferred.
 
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
+**Related:** TC-014 (audit), K-053 (companion broken-icon work, now complete), D-125 (mobile-first reality).
+
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit. Partially delivered and deferred 2026-05-25 per K-055 verification (Commit 11).
 
 ### K-056 — Composer textarea on Android Chrome may be covered by the on-screen keyboard — no scrollIntoView on focus (MEDIUM)
 

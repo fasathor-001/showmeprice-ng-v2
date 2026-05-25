@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { createConversation } from "@/lib/messaging/actions";
 import { formatNaira } from "@/lib/listings";
+import { ProductImage } from "./ProductImage";
 
 // Stage 2.B Commit 7 — first-message composer for new conversations.
 //
@@ -130,6 +131,13 @@ export function MessageSellerModal({
       const tpl = TEMPLATES.find((t) => t.id === selectedTemplate);
       setTemplateEdited(Boolean(tpl && next !== tpl.text));
     }
+  };
+
+  // K-056: Android keyboard scrollIntoView (200ms delay for keyboard animation)
+  const handleTextareaFocus = () => {
+    setTimeout(() => {
+      textareaRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
+    }, 200);
   };
 
   const handleSend = async () => {
@@ -270,12 +278,10 @@ export function MessageSellerModal({
             button from somewhere far down the listing page. */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-neutral-200 bg-neutral-50 shrink-0">
           {listingPrimaryImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ProductImage
               src={listingPrimaryImageUrl}
               alt=""
               className="w-12 h-12 rounded-lg object-cover bg-neutral-200 shrink-0"
-              loading="lazy"
             />
           ) : (
             <ListingPlaceholder />
@@ -322,6 +328,7 @@ export function MessageSellerModal({
             ref={textareaRef}
             value={content}
             onChange={handleChange}
+            onFocus={handleTextareaFocus}
             placeholder="Type your message…"
             rows={4}
             enterKeyHint="send"

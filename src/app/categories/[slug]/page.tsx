@@ -21,74 +21,93 @@ export default async function CategoryPage({
 }) {
   const supabase = createClient();
 
-  const { data: category } = await supabase
-    .from("categories")
-    .select("id, name, parent_id")
-    .eq("slug", params.slug)
-    .maybeSingle();
-
-  if (!category) notFound();
-
-  // Parent (for breadcrumb back-link if this slug is a subcategory).
+  let queryError: string | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let category: any = null;
   let parentCategory: { name: string; slug: string } | null = null;
-  if (category.parent_id) {
-    const { data: parent } = await supabase
-      .from("categories")
-      .select("name, slug")
-      .eq("id", category.parent_id)
-      .maybeSingle();
-    parentCategory = parent;
-  }
-
-  // Direct children for subcategory chip nav. Empty for subcategory pages.
-  const { data: childrenData } = await supabase
-    .from("categories")
-    .select("id, name, slug, sort_order")
-    .eq("parent_id", category.id)
-    .order("sort_order", { ascending: true });
-  const children = childrenData ?? [];
-
-  // States for the filter dropdown (featured-first ordering).
-  const { data: statesData } = await supabase
-    .from("nigerian_states")
-    .select("id, name, slug");
-  const states = sortStatesByFeatured(statesData ?? []);
-
-  // Resolve state filter slug -> id. Unknown slug = no filter (graceful).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let children: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let states: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let items: any[] = [];
   const selectedStateSlug = searchParams.state ?? "";
-  let selectedStateId: string | null = null;
-  if (selectedStateSlug) {
-    const match = states.find((s) => s.slug === selectedStateSlug);
-    selectedStateId = match?.id ?? null;
-  }
 
-  // Build the listings query. If the category is a top-level (has children),
-  // include products in any of its subcategories too — the parent page rolls
-  // up its descendants. Subcategory pages narrow to that category only.
-  const categoryIds = [category.id, ...children.map((c) => c.id)];
+  try {
+    const { data: catData } = await supabase
+      .from("categories")
+      .select("id, name, parent_id")
+      .eq("slug", params.slug)
+      .maybeSingle();
 
-  let query = supabase
-    .from("products")
-    .select(
+    if (!catData) notFound();
+    category = catData;
+
+    // Parent (for breadcrumb back-link if this slug is a subcategory).
+    if (category.parent_id) {
+      const { data: parent } = await supabase
+        .from("categories")
+        .select("name, slug")
+        .eq("id", category.parent_id)
+        .maybeSingle();
+      parentCategory = parent;
+    }
+
+    // Direct children for subcategory chip nav. Empty for subcategory pages.
+    const { data: childrenData } = await supabase
+      .from("categories")
+      .select("id, name, slug, sort_order")
+      .eq("parent_id", category.id)
+      .order("sort_order", { ascending: true });
+    children = childrenData ?? [];
+
+    // States for the filter dropdown (featured-first ordering).
+    const { data: statesData } = await supabase
+      .from("nigerian_states")
+      .select("id, name, slug");
+    states = sortStatesByFeatured(statesData ?? []);
+
+    // Resolve state filter slug -> id. Unknown slug = no filter (graceful).
+    let selectedStateId: string | null = null;
+    if (selectedStateSlug) {
+      const match = states.find((s) => s.slug === selectedStateSlug);
+      selectedStateId = match?.id ?? null;
+    }
+
+    // Build the listings query. If the category is a top-level (has children),
+    // include products in any of its subcategories too — the parent page rolls
+    // up its descendants. Subcategory pages narrow to that category only.
+    const categoryIds = [category.id, ...children.map((c) => c.id)];
+
+    let query = supabase
+      .from("products")
+      .select(
+        `
+        id, title, price_kobo, is_negotiable, created_at,
+        product_images ( storage_path, position ),
+        businesses!inner ( business_name, verification_status ),
+        nigerian_states ( name )
       `
-      id, title, price_kobo, is_negotiable, created_at,
-      product_images ( storage_path, position ),
-      businesses!inner ( business_name, verification_status ),
-      nigerian_states ( name )
-    `
-    )
-    .eq("status", "active")
-    .in("category_id", categoryIds)
-    .eq("businesses.verification_status", "verified")
-    .order("created_at", { ascending: false })
-    .limit(PAGE_SIZE);
+      )
+      .eq("status", "active")
+      .in("category_id", categoryIds)
+      .eq("businesses.verification_status", "verified")
+      .order("created_at", { ascending: false })
+      .limit(PAGE_SIZE);
 
-  if (selectedStateId) {
-    query = query.eq("state_id", selectedStateId);
+    if (selectedStateId) {
+      query = query.eq("state_id", selectedStateId);
+    }
+
+    const { data: listings, error } = await query;
+    if (error) throw error;
+    items = listings ?? [];
+  } catch (err) {
+    console.error("[categories]", err);
+    queryError = "Couldn't load listings. Please refresh to try again.";
+    // Still provide a category name if we got that far
+    if (!category) notFound();
   }
-
-  const { data: listings } = await query;
-  const items = listings ?? [];
 
   return (
     <Container>
@@ -113,6 +132,23 @@ export default async function CategoryPage({
             </>
           )}
         </nav>
+
+        {/* K-052: Error state when Supabase query fails — inline recovery */}
+        {queryError && (
+          <Card className="mb-6 bg-danger-bg border-danger/30">
+            <div className="text-center">
+              <p className="text-sm font-medium text-danger-text mb-3">
+                {queryError}
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
+              >
+                Refresh page
+              </button>
+            </div>
+          </Card>
+        )}
 
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
           <div>

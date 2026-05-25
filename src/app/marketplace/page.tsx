@@ -22,107 +22,110 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
   const supabase = createClient();
 
   // --- Sanitise + normalise query params --------------------------------------
-  // q: strip PostgREST filter special chars so user input can't break the
-  // .or() expression. Wildcard %, separator comma, paren grouping, quotes,
-  // backslash. Whatever's left is treated as a plain substring.
   const rawQ = String(searchParams.q ?? "").trim();
   const q = rawQ.replace(/[%,()'"\\]/g, "").trim();
   const categorySlug = String(searchParams.category ?? "").trim();
   const stateSlug = String(searchParams.state ?? "").trim();
 
-  // --- Resolve slug -> id (and rollup children for parent categories) ---------
+  let queryError: string | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let items: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let states: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let selectedState: any = null;
   let categoryName: string | null = null;
-  let categoryIds: string[] | null = null;
-  if (categorySlug) {
-    const { data: cat } = await supabase
-      .from("categories")
-      .select("id, name")
-      .eq("slug", categorySlug)
-      .maybeSingle();
-    if (cat) {
-      categoryName = cat.name;
-      const { data: children } = await supabase
+
+  // K-052: Wrap Supabase queries in try/catch to render inline error state
+  try {
+    // --- Resolve slug -> id (and rollup children for parent categories) ---------
+    let categoryIds: string[] | null = null;
+    if (categorySlug) {
+      const { data: cat } = await supabase
         .from("categories")
-        .select("id")
-        .eq("parent_id", cat.id);
-      categoryIds = [cat.id, ...(children ?? []).map((c) => c.id)];
-    } else {
-      // Unknown slug -> impossible filter so we return zero results.
-      categoryIds = ["00000000-0000-0000-0000-000000000000"];
+        .select("id, name")
+        .eq("slug", categorySlug)
+        .maybeSingle();
+      if (cat) {
+        categoryName = cat.name;
+        const { data: children } = await supabase
+          .from("categories")
+          .select("id")
+          .eq("parent_id", cat.id);
+        categoryIds = [cat.id, ...(children ?? []).map((c) => c.id)];
+      } else {
+        categoryIds = ["00000000-0000-0000-0000-000000000000"];
+      }
     }
-  }
 
-  // States list (used for the dropdown + resolving the selected slug -> id).
-  const { data: statesData } = await supabase
-    .from("nigerian_states")
-    .select("id, name, slug");
-  const states = sortStatesByFeatured(statesData ?? []);
-  const selectedState = stateSlug
-    ? (states.find((s) => s.slug === stateSlug) ?? null)
-    : null;
+    // States list (used for the dropdown + resolving the selected slug -> id).
+    const { data: statesData } = await supabase
+      .from("nigerian_states")
+      .select("id, name, slug");
+    states = sortStatesByFeatured(statesData ?? []);
+    selectedState = stateSlug
+      ? (states.find((s) => s.slug === stateSlug) ?? null)
+      : null;
 
-  // --- Search resolution (Phase D.7.2) ----------------------------------------
-  // Joined-table filters inside PostgREST .or() proved unreliable (D.7.1 bug —
-  // 'cars' search missed Cars-category listings). Replaced with a two-step
-  // resolution: (1) find matching category ids by name OR JSONB alias, (2)
-  // expand to subcategories of any matched parent. Then the products .or()
-  // does title/description ILIKE + category_id IN (...). Three queries total
-  // in the worst case, well within budget for the current taxonomy (~30 rows).
-  let matchedCategoryIds: string[] = [];
-  if (q) {
-    const lower = q.toLowerCase();
-    const { data: matched } = await supabase
-      .from("categories")
-      .select("id, parent_id")
-      .or(`name.ilike.%${q}%,search_aliases.cs.["${lower}"]`);
-    const directIds = (matched ?? []).map((c) => c.id);
-    if (directIds.length > 0) {
-      const { data: children } = await supabase
+    // --- Search resolution (Phase D.7.2) ----------------------------------------
+    let matchedCategoryIds: string[] = [];
+    if (q) {
+      const lower = q.toLowerCase();
+      const { data: matched } = await supabase
         .from("categories")
-        .select("id")
-        .in("parent_id", directIds);
-      const childIds = (children ?? []).map((c) => c.id);
-      matchedCategoryIds = Array.from(new Set([...directIds, ...childIds]));
+        .select("id, parent_id")
+        .or(`name.ilike.%${q}%,search_aliases.cs.["${lower}"]`);
+      const directIds = (matched ?? []).map((c) => c.id);
+      if (directIds.length > 0) {
+        const { data: children } = await supabase
+          .from("categories")
+          .select("id")
+          .in("parent_id", directIds);
+        const childIds = (children ?? []).map((c) => c.id);
+        matchedCategoryIds = Array.from(new Set([...directIds, ...childIds]));
+      }
     }
-  }
 
-  // --- Build the listings query -----------------------------------------------
-  let query = supabase
-    .from("products")
-    .select(
+    // --- Build the listings query -----------------------------------------------
+    let query = supabase
+      .from("products")
+      .select(
+        `
+        id, title, price_kobo, is_negotiable, created_at,
+        product_images ( storage_path, position ),
+        businesses!inner ( business_name, verification_status ),
+        nigerian_states ( name )
       `
-      id, title, price_kobo, is_negotiable, created_at,
-      product_images ( storage_path, position ),
-      businesses!inner ( business_name, verification_status ),
-      nigerian_states ( name )
-    `
-    )
-    .eq("status", "active")
-    .eq("businesses.verification_status", "verified")
-    .order("created_at", { ascending: false })
-    .limit(PAGE_SIZE);
+      )
+      .eq("status", "active")
+      .eq("businesses.verification_status", "verified")
+      .order("created_at", { ascending: false })
+      .limit(PAGE_SIZE);
 
-  if (q) {
-    const orClauses = [
-      `title.ilike.%${q}%`,
-      `description.ilike.%${q}%`,
-    ];
-    if (matchedCategoryIds.length > 0) {
-      orClauses.push(`category_id.in.(${matchedCategoryIds.join(",")})`);
+    if (q) {
+      const orClauses = [
+        `title.ilike.%${q}%`,
+        `description.ilike.%${q}%`,
+      ];
+      if (matchedCategoryIds.length > 0) {
+        orClauses.push(`category_id.in.(${matchedCategoryIds.join(",")})`);
+      }
+      query = query.or(orClauses.join(","));
     }
-    query = query.or(orClauses.join(","));
-  }
-  if (categoryIds) {
-    query = query.in("category_id", categoryIds);
-  }
-  if (selectedState) {
-    // products.state_id is the listing's location (not the seller's). Matches
-    // Section 4's /categories/[slug] filter behaviour for buyer intent.
-    query = query.eq("state_id", selectedState.id);
-  }
+    if (categoryIds) {
+      query = query.in("category_id", categoryIds);
+    }
+    if (selectedState) {
+      query = query.eq("state_id", selectedState.id);
+    }
 
-  const { data: listings } = await query;
-  const items = listings ?? [];
+    const { data: listings, error } = await query;
+    if (error) throw error;
+    items = listings ?? [];
+  } catch (err) {
+    console.error("[marketplace]", err);
+    queryError = "Couldn't load listings. Please refresh to try again.";
+  }
 
   // --- Heading / chip URL helpers --------------------------------------------
   const heading = buildHeading({
@@ -154,6 +157,23 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
   return (
     <Container>
       <div className="py-8 sm:py-12">
+        {/* K-052: Error state when Supabase query fails — inline recovery */}
+        {queryError && (
+          <Card className="mb-6 bg-danger-bg border-danger/30">
+            <div className="text-center">
+              <p className="text-sm font-medium text-danger-text mb-3">
+                {queryError}
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
+              >
+                Refresh page
+              </button>
+            </div>
+          </Card>
+        )}
+
         {/* Toolbar: heading on the left, state filter on the right.
             Stacks on mobile. Keyword search lives in the global header
             (Phase D.5.1) — no input on this page. */}
