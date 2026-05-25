@@ -618,32 +618,6 @@ Compounds K-047: even if the recipient's mark-as-read fires correctly, the sende
 Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 
-### K-052 — /marketplace and /categories/[slug] Supabase queries have no try/catch — network blip surfaces as Cloudflare "Application error" (HIGH)
-
-`src/app/marketplace/page.tsx` and `src/app/categories/[slug]/page.tsx` are top-level Server Components that `await` Supabase queries with no `try/catch` and no error boundary wrapping them. A network drop mid-SSR or a Supabase transient error throws to Next.js's default error boundary, which renders Cloudflare's generic *"Application error"* page.
-
-**Severity:** HIGH. Discovery is the front door. A blank or "Application error" page on `/marketplace` tells the user the entire platform is down — even when only one query blipped. Pre-public-beta blocker.
-
-**Resolution scope (Commit 11):** see TC-008 surface findings — wrap the Supabase queries in `try/catch`; on failure, render an inline *"Couldn't load listings — refresh to try again"* card with the rest of the page chrome (header, search, filters) intact. ~40 LOC across both routes.
-
-**Related:** TC-008 (audit), K-053 (companion broken-image render), D-124 (calm UI — inline recovery vs full error page).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
-
-### K-053 — Product images use raw `<img>` with no onError handler — Storage 404 renders the browser broken-icon (HIGH)
-
-`ListingImageGallery.tsx`, `ListingCard.tsx`, and `MessageSellerModal.tsx` render product images via vanilla `<img src={url}>` with no `onError` handler. If the Supabase Storage URL 404s (file deleted, RLS-blocked, CDN miss), the browser shows its default broken-image icon — a dotted square with an X.
-
-On a product detail page or marketplace card, broken-icon reads as *"this seller is hiding something"* or *"this is a scam listing."* Single most trust-destroying visual on the platform.
-
-**Severity:** HIGH. Pre-public-beta blocker.
-
-**Resolution scope (Commit 11):** see TC-009 surface findings — small `<ProductImage>` wrapper component with `onError` fallback to the existing SVG placeholder used in the no-images case. Pair with TC-014 (next/image migration / lazy + responsive sizes) for the broader image-pipeline pass. ~50 LOC including all surfaces.
-
-**Related:** TC-009 (audit), TC-014 / K-055 (companion lazy-load + responsive-sizes work), K-010 (Storage orphan that's the upstream cause of some 404s).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
-
 ### K-054 — No email path when message recipient is offline — biggest single uncertainty gap on the platform (HIGH)
 
 `src/lib/messaging/actions.ts` (`sendMessage` and `createConversation`) has no email side-effect. When a buyer messages a seller (or vice versa) and the recipient is offline (tab closed, no active session, browser closed), the only notification path is the in-app Realtime push — which they will not receive. The recipient discovers the message only on their next platform visit, which may be hours or days later.
@@ -656,41 +630,37 @@ Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
 Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
 
-### K-055 — Product images served at full Storage resolution without lazy-loading or responsive sizes (MEDIUM) — PARTIALLY DELIVERED, DEFERRED
+### K-055 — Product images served at full Storage resolution without lazy-loading or responsive sizes (MEDIUM)
 
 All product images on `ListingImageGallery.tsx`, `ListingCard.tsx`, and `MessageSellerModal.tsx` originally used `<img src={url}>` with no `loading="lazy"`, no `srcset`, and no responsive size negotiation. A listing detail page on mobile downloads full-resolution Storage objects for every gallery item, including thumbs the user may never see. On a Nigerian 3G connection, the detail page can take 8-15 seconds to settle.
 
-**Severity:** MEDIUM. Slow correlates with untrustworthy in user perception. Pre-public-beta recommended.
+**Severity:** MEDIUM. Slow correlates with untrustworthy in user perception.
 
-**Status (Commit 11):** 
-- ✅ **PARTIALLY DELIVERED:** ProductImage wrapper component (K-053) now handles `loading="lazy"` across all three surfaces (ListingCard, ListingImageGallery, MessageSellerModal). Lazy-load alone catches the majority of perceived performance benefit at Stage 2.C scale (5-50 invitees).
-- ⏳ **DEFERRED:** Responsive srcset/sizes implementation deferred to dedicated post-Stage-2.C work. Requires architectural decisions on:
-  - Image variant generation pipeline (build-time vs request-time vs Cloudflare Images paid service)
-  - Caching strategy (CDN edge cache vs Supabase Storage cache)
-  - Storage costs (multiple variants × thousands of listings)
-  - Format strategy (webp/jpeg fallback, AVIF consideration)
-  - Migration path for existing images
-  
-  **Why:** next/image is incompatible with Cloudflare Pages free tier (requires images.unoptimized = true, which negates optimization benefit). Manual srcset + sizes work deserves focused architectural thought, not a Stage-2.C bolt-on. Stage 2.C scope is reliability + trust readiness; image-delivery infrastructure is separate territory. Real bandwidth costs and image performance issues surface at hundreds-to-thousands of users — Stage 3+ territory.
+**Status:** OPEN, deferred pending image-delivery architecture decision (Path B per Commit 11 deliberation, 2026-05-25)
 
-**Architectural principle (banked):** Implementation-path failure does not automatically redefine feature-objective completion. When an approved implementation path (e.g., next/image) proves invalid, the underlying objective (e.g., responsive image optimization) does NOT automatically close via the partial work completed. The path is replaceable; the objective remains open until objectively met or explicitly deferred.
+**Current state:**
+- Lazy-load via `loading="lazy"` delivered as part of K-053 ProductImage wrapper
+- Responsive srcset/sizes implementation NOT delivered
 
-**Related:** TC-014 (audit), K-053 (companion broken-icon work, now complete), D-125 (mobile-first reality).
+**Architectural deferral rationale:**
 
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit. Partially delivered and deferred 2026-05-25 per K-055 verification (Commit 11).
+Responsive image delivery for ShowMePrice requires deliberate architecture work, not a Commit 11 bolt-on. Outstanding decisions include:
+- Image variant generation strategy (build-time vs request-time vs Cloudflare Images service)
+- CDN caching strategy
+- Storage cost optimization (multiple variants × thousands of listings)
+- Format strategy (webp/jpeg fallback, AVIF consideration)
+- Upload pipeline integration
+- Cloudflare Images paid addon decision
 
-### K-056 — Composer textarea on Android Chrome may be covered by the on-screen keyboard — no scrollIntoView on focus (MEDIUM)
+Stage 2.C scope is reliability + trust readiness. Image-delivery infrastructure is separate architectural territory deserving dedicated focus.
 
-Neither `src/components/messaging/MessageComposer.tsx` nor `src/components/listings/MessageSellerModal.tsx` calls `scrollIntoView` when the textarea gains focus. Android Chrome shrinks the visual viewport when the keyboard appears but does not always scroll the focused element into the remaining viewport. Result: a buyer types in the textarea without seeing their cursor or their input.
+**Resolution path:** Dedicated post-Stage-2.C architecture decision + implementation, likely Stage 3+ when bandwidth costs become measurable at scale.
 
-**Severity:** MEDIUM. The composer IS the conversion surface. If a buyer can't see what they're typing when reaching out to a seller, they abandon mid-message. Pre-public-beta recommended.
+**Architectural principle banked:** "Implementation-path failure does not automatically redefine feature-objective completion." When an approved implementation path (e.g., next/image) proves invalid, the underlying K-issue objective (e.g., responsive image optimization) does NOT automatically close via partial work completed. The path is replaceable; the objective remains until objectively met or explicitly deferred.
 
-**Resolution scope (Commit 11):** see TC-016 surface findings — `onFocus` handler with `setTimeout 200ms` (lets the keyboard finish opening) then `textareaRef.current.scrollIntoView({block: "center"})`. ~15 LOC across both composers.
+**Related:** D-121 (UX/UI standard), Nigerian mobile-first context (150M+ mobile connections, performance matters at scale).
 
-**Related:** TC-016 (audit), D-124 (Tier 1 surface — messaging entry), Commit 4.1 (sticky-bottom composer that pairs with keyboard behavior).
-
-Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit.
-
+Surfaced 2026-05-24 during Stage 2.C trust-critical surface audit. Deferral decision banked 2026-05-25 (Commit 11).
 
 ### K-058 — Latent Tailwind palette gap: ink-50/100/500/700 used in codebase but not defined in tailwind.config.ts (LOW)
 
@@ -887,6 +857,42 @@ Surfaced 2026-05-25 during D-126/D-127 doctrine drafting.
 Opened 2026-05-25 during Stage 2.C Commit 10-c verification.
 
 ## Resolved or superseded
+
+### K-052 — /marketplace and /categories/[slug] Supabase queries have no try/catch — network blip surfaces as Cloudflare "Application error" — RESOLVED via Stage 2.C Commit 11
+
+**Resolution:** Stage 2.C Commit 11 (2026-05-25) — discovery error resilience implemented across `/marketplace` and `/categories/[slug]` pages. All Supabase queries wrapped in `try/catch` blocks. On query failure, a calm inline error card renders with "Couldn't load listings. Please refresh to try again" message + refresh button. Page chrome (header, search, navigation, state filter) remains fully interactive and visible. Refresh button triggers `window.location.reload()` for inline recovery.
+
+**Commit:** `25ac10d`
+
+**Verification:** Gate 1 (code review + ESLint/TypeScript/build pass) + Gate 2 (live DevTools testing — marketplace + categories pages with offline network simulation, error cards displayed with calm UX, page chrome intact, refresh button successfully restored normal listings)
+
+**Cross-references:** D-121 (calm UI), D-124 (calm restraint — error states preserve trust), D-125 (trust narrative — errors are recoverable, not silence).
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 11 (Gate 2 PASS).
+
+### K-053 — Product images use raw `<img>` with no onError handler — Storage 404 renders the browser broken-icon — RESOLVED via Stage 2.C Commit 11
+
+**Resolution:** Stage 2.C Commit 11 (2026-05-25) — ProductImage wrapper component created at `src/components/listings/ProductImage.tsx` (63 LOC). Integrated across ListingCard, ListingImageGallery (primary view + thumbnail strip + lightbox), and MessageSellerModal context strip. `onError` handler triggers graceful SVG placeholder render (calm gray image icon, matches no-images fallback). No browser broken-image icon. Lazy-load infrastructure via `loading="lazy"` attribute on all `<img>` elements.
+
+**Commit:** `25ac10d`
+
+**Verification:** Gate 1 (code review + build pass) + Gate 2 (live DevTools testing — ListingCard/gallery/modal with request-URL blocking, SVG placeholder rendered calmly at multiple sizes, gallery navigation still functional with placeholders)
+
+**Cross-references:** D-121, D-124, D-125.
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 11 (Gate 2 PASS).
+
+### K-056 — Composer textarea on Android Chrome may be covered by the on-screen keyboard — no scrollIntoView on focus — RESOLVED via Stage 2.C Commit 11
+
+**Resolution:** Stage 2.C Commit 11 (2026-05-25) — Android keyboard scrollIntoView implemented in MessageComposer and MessageSellerModal. `onFocus` handler with `setTimeout(200ms)` before `scrollIntoView({ block: "center", behavior: "auto" })`. 200ms delay allows soft keyboard animation to settle before scroll. Optional chaining (`?.`) prevents ref-null crashes.
+
+**Commit:** `25ac10d`
+
+**Verification:** Gate 1 (code review + build pass) + code-level review (real-Android testing deferred to beta per K-063 testing constraint — same disposition as K-063 welcome email path, pragmatic for private-beta scale)
+
+**Cross-references:** D-121, D-124, K-063 (testing constraint banking).
+
+**Resolved:** 2026-05-25 via Stage 2.C Commit 11 (code-verified, real-Android deferred to beta).
 
 ### K-049 — createListingAction creates product row even when product_images insert fails — RESOLVED (Commit 10-a)
 

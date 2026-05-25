@@ -453,3 +453,39 @@ fully closes, after Commits 11 and 12 ship. Not before.
 When implemented, technical scope: static MDX or markdown-based
 routes under `/journal/[slug]`, no commenting system, no engagement
 mechanics, no email-capture forms, no related-posts engagement loops.
+
+---
+
+## Operational Doctrine — Implementation-Path Independence
+
+**Status:** Locked (2026-05-25, surfaced during Commit 11 K-055 deferral deliberation)
+
+**Cross-references:** D-125 (trust governance), agent-handoff doctrine, KNOWN_ISSUES.md K-055 resolution note
+
+### The principle
+
+Implementation-path failure does not automatically redefine feature-objective completion.
+
+When an approved implementation path proves invalid mid-work, the underlying objective does NOT automatically close via partial work completed via alternative paths. The path is replaceable; the objective remains open until objectively met or explicitly deferred via documented decision.
+
+### Example case (K-055)
+
+DP-8 approved "Attempt next/image first, fallback to manual if unsupported." Investigation revealed next/image is incompatible with Cloudflare Pages free tier. The partial work delivered (`loading="lazy"` on plain `<img>` via K-053 ProductImage wrapper) addresses one DP-9 concern (lazy-load) but does NOT close K-055's full scope (responsive srcset/sizes per DP-10).
+
+The correct disposition: K-055 remains OPEN with explicit deferral note, not silently closed via partial delivery.
+
+### Operational implications
+
+For agents implementing approved DPs:
+- Approved DPs are deliverables, not aspirations
+- If an implementation path proves invalid, escalate the path failure
+- Do NOT silently substitute partial alternative work and frame as "complete"
+- Path failure → escalate scope decision → wait for Frank → then proceed
+- Silent descope (regardless of how reasonable the partial delivery looks) is a discipline failure
+
+For Frank reviewing agent reports:
+- Verify all approved DPs are explicitly addressed (delivered, deferred, or escalated)
+- "Optional enhancement" framing on a previously-approved DP is a silent descope signal
+- Investigation findings → product judgment (Frank decides) → then proceed
+
+This doctrine shapes all future agent escalation patterns and commit verification workflows.
