@@ -825,6 +825,63 @@ src/app/admin/
 
 Surfaced 2026-05-25 during admin-surface review (codebase audit + buyer-session redirect attempt).
 
+### K-062 — Communication surface implementation deferrals (LOW)
+
+**Status:** OPEN, deferred to Stage 3+
+**Cross-references:** D-126, D-127
+
+#### Scope
+
+Two communication surfaces banked architecturally but deferred
+to Stage 3+:
+
+1. **`/journal` trust-education surface** (per D-127)
+2. **Newsletter delivery mechanism** (deferred until journal content
+   velocity justifies it)
+
+#### Trigger conditions for implementation
+
+**Journal (D-127):**
+- Stage 2.C fully closed (Commits 10, 11, 12 shipped)
+- Private beta operations stable
+- Foundational content collection drafted and ready to ship simultaneously
+- Frank has bandwidth for ongoing slow-cadence content
+
+**Newsletter:**
+- Journal stabilized with established cadence
+- Meaningful active user base demonstrated through real beta operations
+- Clear opt-in flow designed
+- NDPR compliance reviewed
+- Editorial rhythm proven via journal pieces
+
+These conditions are strategic judgment calls, not metric thresholds.
+The question is "is the user base meaningful enough that this serves
+real users?" not "have we crossed a specific number?"
+
+#### Anti-pattern guardrails (per D-126)
+
+When implementing either surface, the doctrine prohibits:
+- Promotional content in any form
+- SEO roundup pieces
+- AI-written filler
+- Engagement loops
+- Daily or weekly cadence
+- Newsletter subscription prompts in transactional flows
+- Mixing marketing communications with transactional emails
+
+#### Operational notes
+
+Newsletter, if implemented, is a DELIVERY MECHANISM for journal
+content — not a separate content stream. Newsletter pieces should
+be the monthly digest of journal pieces, never original promotional
+content.
+
+This issue closes when D-127 (journal) ships AND a decision is
+locked about newsletter (either ships as monthly journal digest,
+or formally declines as unnecessary).
+
+Surfaced 2026-05-25 during D-126/D-127 doctrine drafting.
+
 ## Resolved or superseded
 
 ### K-019 — Phone validation gap + NG-only-vs-international product decision (RESOLVED)
