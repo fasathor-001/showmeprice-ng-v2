@@ -2268,3 +2268,521 @@ Quality is now a core operational requirement, not optional polish.
 - **Stage 2.B Commits 4.2 / 5.x / 6 already operated under this discipline in practice** (D-121 + Reaffirmation drove sticky composer, hydration fixes, red counts, read receipts, skeletons, pagination). D-124 codifies the pattern formally so it can't drift in future stages.
 
 ---
+
+## D-125: Launch Strategy — "Simple Internally, Premium Externally"
+
+**Status:** Locked (2026-05-29, banked to canonical DECISIONS.md)
+**Drafted:** Sunday, May 24, 2026
+
+**Intent:** D-125 is not temporary launch guidance. It is enduring product-governance doctrine for ShowMePrice — foundational philosophy intended to outlast Stage 2.C and shape product decisions across all phases of the platform's life.
+
+### Doctrine foundation
+
+> "Trust compounds slowly and breaks quickly."
+
+Every governance principle, phase decision, and scope classification in D-125 derives from this foundation. Trust is the platform's only durable moat; protecting it is the highest-priority product activity.
+
+### Anchor question — permanent governance filter
+
+Apply to every roadmap, design, moderation, onboarding, and monetization decision:
+
+> "Does this reduce user uncertainty and increase transaction confidence?"
+
+If yes: invest. If no: defer or reject. Apply across:
+
+- Roadmap filtering
+- Design review
+- Moderation policy review
+- Onboarding flow review
+- Monetization decisions
+- Feature-request triage
+
+### Core principle
+
+> "Launch quality matters more than launch complexity."
+
+### Governance principles
+
+ShowMePrice operates under eight enduring governance principles. Each closes a specific failure mode common in Nigerian marketplaces.
+
+**1. Trust over novelty**
+
+> Ship features because they reduce friction, confusion, or uncertainty. Do not ship features because they feel innovative. Nigerian marketplaces are already overloaded with gimmicks, clutter, overgrowth, and inconsistent flows. ShowMePrice feels intentional, restrained, and stable.
+
+**2. Consistency over velocity**
+
+> ShowMePrice prioritizes consistency over feature velocity. A slower, coherent platform is preferred over rapid expansion that weakens trust, usability, or product coherence. Post-traction pressure to ship faster than coherence allows is explicitly resisted.
+
+**3. Every trust surface matters**
+
+> Trust is shaped not only by major features, but by every interaction surface — including loading states, retries, notifications, onboarding, moderation messaging, recovery flows, empty states, and mobile responsiveness. These are not minor UX. They ARE trust infrastructure and receive Tier 1 treatment per D-124.
+
+**4. Calm over engagement**
+
+> ShowMePrice prioritizes calm confidence over addictive engagement mechanics. Streaks, feeds, dopamine notifications, infinite scroll, and viral UX patterns are explicitly rejected. Differentiation comes from calmness, not engagement-loop optimization. This protects the platform's positioning against Facebook Marketplace, Instagram commerce, and TikTok commerce patterns.
+
+**5. Real-world reliability over benchmark optimization**
+
+> Real-world reliability under typical Nigerian mobile conditions is prioritized over synthetic benchmark performance. Lighthouse scores and lab metrics matter less than performance under weak MTN signal, Android memory pressure, tab backgrounding, and unstable network or power conditions. Tested on real devices on real carrier networks — not desktop emulation alone.
+
+**6. Human moderation before automation escalation**
+
+> ShowMePrice prefers human-understandable moderation systems before introducing heavier automation or opaque trust scoring. Automation is built on observed patterns from real platform usage (Phase 2), never on speculative heuristics. This protects against opaque moderation, over-automation, and trust-damaging false positives.
+
+**7. Marketplace-native, not social-media-native**
+
+> Features reinforce commerce confidence and transaction clarity rather than imitate social-media engagement patterns. Messaging is calm commerce communication, not generic social chat. Image sharing is product-context-aware (caption-below-grid, hero-image layout, listing chip in viewer), not generic photo sharing. Protects against drift toward stories, feeds, algorithmic distraction, and vanity engagement systems.
+
+**8. Launch quality over launch quantity**
+
+> The moat is calmer, more trustworthy, more coherent commerce UX — not more features, more tabs, or more systems. Startup pressure to "ship more" is explicitly resisted when shipping more weakens any of the above seven principles.
+
+### Strategic risk — what D-125 protects against
+
+> **ShowMePrice should never become noisy.**
+
+This is the biggest long-term strategic risk. Nigerian marketplaces naturally drift toward clutter: sellers demand visibility hacks, monetization pressures create UI pollution, growth pressure creates engagement spam, feature requests pile on. D-125 is the doctrine that protects calmness.
+
+### Phase structure
+
+**Phase 1 — TRUSTABLE MVP (CURRENT)**
+
+Focus: UX polish, listings, messaging, verification, moderation basics, contact reveal flow, mobile polish.
+
+Goal: "This feels safer and more professional than competitors."
+
+NOT: "This has every feature."
+
+**Phase 2 — MARKETPLACE LEARNING (post-launch, after real users arrive)**
+
+Observe: fraud patterns, seller behavior, reveal behavior, negotiation patterns, moderation load.
+
+Real marketplace intelligence starts only after real data exists. **Sequencing note: Phase 2 must complete before Phase 3 begins** — real fraud patterns must be observed before automation logic becomes trustworthy.
+
+**Phase 3 — TRUST INTELLIGENCE (only after Phase 2 yields data)**
+
+Behavioral scoring, trust weighting, sophisticated ranking, moderation intelligence, fraud heuristics.
+
+Requires real observational data from Phase 2 to be meaningful. Automation built on speculation rather than observation is rejected per Principle 6.
+
+**Phase 4 — MARKETPLACE SCALE (only after liquidity exists)**
+
+Advanced promotions (Featured Listings per D-123/D-123b), seller ecosystems, diaspora systems, logistics partnerships, institutional tooling.
+
+### Launch scope classification
+
+**FULLY IMPLEMENT NOW:**
+
+- UX/UI polish (per D-121 + D-124)
+- Messaging quality (Stage 2.B complete; Stage 2.C image sharing in progress)
+- Verification basics (phone verification working; tiers framework ready)
+- Moderation basics (D-119 filter operational)
+- Legal/privacy foundation (Terms + Privacy Policy drafts ready for lawyer review)
+- Mobile-first quality (Nigerian Android-first realities)
+- Trust presentation (verification badges, response signals)
+- Reveal system (D-113 contact reveal)
+- Admin visibility/logging (basic moderation evidence retention)
+
+**PARTIALLY IMPLEMENT NOW (infrastructure stub, intelligence deferred):**
+
+- Boosts infrastructure (per D-123 architecture, activation per D-123b — DO NOT activate at launch)
+- Moderation intelligence (D-119 filter exists; sophistication evolves with observed fraud per Principle 6)
+- Trust-ranking (additive framework per D-123; sophisticated ranking science deferred to Phase 3)
+- Analytics (basic operational metrics only)
+- Seller scoring (basic ratings infrastructure; behavioral scoring deferred to Phase 3)
+
+**DELAY UNTIL DATA OR LIQUIDITY EXISTS:**
+
+- Escrow / fund custody (per D-111 — explicitly NOT a launch feature)
+- Advanced AI moderation (current D-119 filter is enough at launch)
+- Sophisticated ranking science (requires Phase 2 data per Principle 6)
+- Complex automation (manual operational steps acceptable at MVP)
+- Enterprise-scale systems (architecture sized for thousands, not millions)
+
+### The biggest mistake to avoid
+
+> "Imagined scale architecture" — systems optimized for millions of users before validating thousands. This kills many startups. Do not build for scale that hasn't been validated.
+
+### ShowMePrice's moat is
+
+- Trust
+- UX
+- Emotional professionalism (per D-121 + D-124)
+- Structured commerce
+- Calmness (per Principle 4)
+
+NOT:
+
+- Maximum features
+- Enterprise-scale architecture
+- Hyper-automation
+- Engagement-loop optimization
+
+### What "premium externally" actually means
+
+Premium for Nigerian marketplaces means:
+
+- Clear feedback at every interaction
+- Visible trust signals
+- Strong mobile responsiveness
+- Reliable messaging
+- Graceful recovery from errors
+- Emotional stability under stress
+
+Premium does NOT mean:
+
+- Sterile minimalism
+- Empty interfaces
+- Information-deprived screens
+- Cold, distant UX
+
+**Reference products** (for premium quality calibration): Stripe, Linear, Airbnb, Apple, Telegram, premium Nigerian fintech apps. These emphasize clarity, calmness, polish, confidence, and intentionality — not entertainment, virality, or dopamine loops.
+
+### What "world-class" means at launch
+
+| World-class IS | World-class is NOT |
+|----------------|---------------------|
+| Calm | Feature-complete |
+| Polished | Enterprise-scale |
+| Responsive | Hyper-automated |
+| Trustworthy | Engagement-optimized |
+| Coherent | Cluttered |
+| Emotionally stable | Noisy |
+| Intentionally designed | Imitation-driven |
+| Reliable under real conditions | Benchmark-optimized |
+
+### Operational implications
+
+- Surface findings under D-121/D-124 should explicitly classify proposed features by phase (Phase 1 vs Phase 2/3/4 work)
+- Resist "while we're in here, let's also add X" expansions that build for unvalidated scale
+- Stage scoping decisions reference this D-125 phase framework
+- Apply the anchor question to every meaningful product decision
+- Apply the eight governance principles when evaluating feature requests, design choices, monetization options, and roadmap pressure
+- Re-evaluate quarterly as marketplace data accumulates
+- D-125 should be referenced by future agent sessions as foundational doctrine, not temporary MVP guidance
+
+### Related decisions
+
+- **D-111** (No financial custody at MVP) — supports "delay escrow"
+- **D-112** (Trust-first positioning) — defines what "world-class" means for ShowMePrice
+- **D-119** (Phone-number filter for moderation) — concrete application of Principle 6
+- **D-121** (UX/UI quality standard) — defines what "polished" means
+- **D-122** (Advertising posture) — supports "delay advanced promotions" + Principle 4 (no engagement-style ad surfaces)
+- **D-123 / D-123b** (Promotion architecture + activation triggers) — supports "partial implementation now, activation when conditions met"
+- **D-124** (Product quality operational doctrine) — Tier 1/2 classification supports "polished externally, manageable internally" + Principle 3 (every trust surface matters)
+
+---
+
+## D-126 — Communication & Content Doctrine
+
+**Status:** Locked (2026-05-25, banked to canonical DECISIONS.md)
+**Cross-references:** D-124 (Calm UI), D-125 (Trust narrative + governance doctrine)
+
+### The principle
+
+ShowMePrice's moat is product, not content. The platform's communication to users — every email, notification, message, in-app prompt, journal piece, future newsletter — exists to serve trust, never to manufacture engagement.
+
+### Communication posture
+
+Intelligence-first, never promotion-first.
+
+The brand psychology goal: users learn that ShowMePrice only contacts them when there is genuine value to deliver. Over time, this becomes a competitive advantage — attention that Nigerian users have learned to withhold from platforms that have trained them to ignore notifications.
+
+### What this means in practice
+
+**For transactional emails (live now):**
+- One action triggers one email. No follow-up sequences.
+- Calm baseline tone — no exclamation marks, no celebration emoji, no marketing copy bleeding into transactional surfaces.
+- Reference points: Stripe, Linear, Apple — not generic SaaS or Nigerian e-commerce.
+
+**For future communication surfaces (newsletter, journal, etc.):**
+- Content categories that fit: pricing trends, trust insights, scam awareness, category movement, seller standards, buyer safety, verification mechanics, safe-commerce education.
+- Content categories that do NOT fit: promotional roundups, "trending now" engagement loops, FOMO-driven highlights, generic e-commerce content, AI-written filler.
+
+### Cadence boundaries
+
+Monthly maximum for any subscription-based communication. Never daily. ShowMePrice should never train users to expect frequent contact.
+
+### What ShowMePrice does NOT do
+
+- 🎉 emoji or "Welcome aboard!" hustle copy
+- Marketing communications mixed into transactional emails
+- Newsletter subscription prompts in transactional flows
+- Discount offers (impossible by business model — D-125 §2.3 No Custody)
+- Engagement loops or growth-hack tactics in communication
+
+### Why this matters for Nigerian marketplace context
+
+Nigerian users have developed strong skepticism toward promotional marketplace communication due to the noise level of modern commerce platforms. That skepticism is rational given how attention has been treated by mainstream e-commerce.
+
+ShowMePrice's positioning advantage is being recognizably different. A user who receives ShowMePrice email expects it to be useful, because ShowMePrice has demonstrated that it doesn't send anything else.
+
+This doctrine is foundational. It shapes every adjacent decision: journal content shape, future newsletter scope, in-app prompts, moderation tone, even how customer support communicates.
+
+---
+
+## D-127 — Journal Surface (`/journal`)
+
+**Status:** Locked architecturally (2026-05-25, banked to canonical DECISIONS.md); implementation deferred to Stage 3
+**Cross-references:** D-125, D-126
+
+### The principle
+
+ShowMePrice's content surface is a journal — not a blog, not a content marketing channel, not an SEO play.
+
+A journal is reflective, authoritative, and slow. It exists to compound trust through trust intelligence — education about safe commerce, verification mechanics, fraud awareness, and marketplace patterns specific to the Nigerian context.
+
+### URL path
+
+`/journal`
+
+Not `/blog`, not `/learn`, not `/news`, not `/insights`.
+
+Reasoning: "Journal" carries premium tone aligned with calm brand positioning. "Blog" sounds generic. "Learn" sounds tutorial-driven. "News" suggests recency cadence. "Insights" sounds corporate.
+
+### Content shape
+
+Trust intelligence pieces, not content marketing posts.
+
+**Aligned content categories:**
+- Fraud pattern education (e.g., "How fake payment alerts work in Nigeria")
+- Pre-purchase verification guidance (e.g., "What to verify before buying a used iPhone")
+- Platform mechanics transparency (e.g., "How seller verification works on ShowMePrice")
+- Category-specific scam awareness (e.g., "Common generator scam patterns")
+- Marketplace economics (e.g., "Why price transparency matters")
+- Safe inter-state commerce (e.g., "How to safely buy outside your state")
+
+**Anti-patterns explicitly rejected:**
+- SEO roundup content ("10 best phones under ₦200k")
+- AI-written filler
+- "Trending now" engagement-hack pieces
+- Generic e-commerce content
+- Anything that exists to game search rankings rather than serve readers
+
+### Launch shape
+
+Ship 3-5 foundational pieces at once. A single-post journal feels abandoned. The opening collection establishes ShowMePrice as the authority on safe Nigerian commerce from day one.
+
+### Cadence post-launch
+
+Slow and authoritative. No commitment to weekly or even monthly output. A piece ships when there's something genuinely worth saying, not because the editorial calendar demands it.
+
+If/when the journal stabilizes with regular content velocity, a newsletter delivery mechanism may emerge — but the newsletter is a distribution surface for journal content, never a separate content stream.
+
+### Why this comes before a newsletter
+
+Journal content is:
+- Evergreen (vs newsletter which expires after sending)
+- Searchable via Google (compounds organically over time)
+- Referenceable (can be linked from Terms, Privacy, About, transactional emails, customer support replies)
+- Operationally low-pressure (no subscriber list to maintain, no send cadence pressure, no unsubscribe management)
+- Calm (no inbox interruption)
+
+Journal precedes newsletter. Newsletter without journal is promotional. Newsletter as delivery mechanism for journal content is intelligence-first per D-126.
+
+**The journal exists to increase transaction confidence, not platform engagement.** This anchor sentence prevents future drift toward engagement-optimization patterns that would erode trust positioning.
+
+### Implementation timing
+
+Stage 3+. After private beta operations stabilize, after Stage 2.C fully closes, after Commits 11 and 12 ship. Not before.
+
+When implemented, technical scope: static MDX or markdown-based routes under `/journal/[slug]`, no commenting system, no engagement mechanics, no email-capture forms, no related-posts engagement loops.
+
+---
+
+## Operational Doctrine — Implementation-Path Independence
+
+**Status:** Locked (2026-05-25, banked to canonical DECISIONS.md); surfaced during Commit 11 K-055 deferral deliberation
+**Cross-references:** D-125 (trust governance), agent-handoff doctrine, KNOWN_ISSUES.md K-055 resolution note
+
+### The principle
+
+Implementation-path failure does not automatically redefine feature-objective completion.
+
+When an approved implementation path proves invalid mid-work, the underlying objective does NOT automatically close via partial work completed via alternative paths. The path is replaceable; the objective remains open until objectively met or explicitly deferred via documented decision.
+
+### Example case (K-055)
+
+DP-8 approved "Attempt next/image first, fallback to manual if unsupported." Investigation revealed next/image is incompatible with Cloudflare Pages free tier. The partial work delivered (`loading="lazy"` on plain `<img>` via K-053 ProductImage wrapper) addresses one DP-9 concern (lazy-load) but does NOT close K-055's full scope (responsive srcset/sizes per DP-10).
+
+The correct disposition: K-055 remains OPEN with explicit deferral note, not silently closed via partial delivery.
+
+### Operational implications
+
+For agents implementing approved DPs:
+- Approved DPs are deliverables, not aspirations
+- If an implementation path proves invalid, escalate the path failure
+- Do NOT silently substitute partial alternative work and frame as "complete"
+- Path failure → escalate scope decision → wait for Frank → then proceed
+- Silent descope (regardless of how reasonable the partial delivery looks) is a discipline failure
+
+For Frank reviewing agent reports:
+- Verify all approved DPs are explicitly addressed (delivered, deferred, or escalated)
+- "Optional enhancement" framing on a previously-approved DP is a silent descope signal
+- Investigation findings → product judgment (Frank decides) → then proceed
+
+This doctrine shapes all future agent escalation patterns and commit verification workflows.
+
+---
+
+## D-128 — Four-Phase Marketplace Lifecycle
+
+**Status:** Locked (2026-05-29)
+**Cross-references:** D-114 (phone primacy), D-121 (UX/UI standard), D-124 (calm restraint), D-125 (trust governance), D-126 (communication doctrine), D-127 (journal surface)
+
+### The principle
+
+ShowMePrice operates on a four-phase product lifecycle. Each phase has distinct success criteria, distinct mindset, and distinct anti-patterns. Transitions between phases require explicit signal validation, not feature completion or external pressure.
+
+This doctrine exists to prevent premature scaling before behavioral understanding.
+
+### The four phases
+
+**Phase 1 — Private Beta** → **Phase 2 — Marketplace Learning** → **Phase 3 — Trust Intelligence** → **Phase 4 — Marketplace Scale**
+
+Most marketplaces collapse these into a single "launch and grow" mental model. ShowMePrice deliberately separates them because the work, the mindset, and the risks are fundamentally different in each phase.
+
+### Phase 1 — Private Beta
+
+**Goal:** Validate the trust-first marketplace thesis with controlled real-world usage.
+
+**Scope:** Small controlled invite-only cohort. No public announcement. No marketing. No monetization pressure.
+
+**KPI:** Trust recurrence — voluntary repeated trust behavior. NOT DAU, sessions, installs, or signups.
+
+**Active work:** Observation, refinement, validation, trust system tightening.
+
+**Explicit anti-patterns:**
+- Public launch announcements (Twitter, Product Hunt, mass WhatsApp)
+- Growth hacking or virality optimization
+- Feature additions based on user requests
+- Investor-driven scaling pressure
+- Vanity analytics dashboards
+- Aggressive moderation tooling expansion
+- Newsletter or content marketing
+- Influencer campaigns
+
+### Phase 2 — Marketplace Learning
+
+**Goal:** Understand real Nigerian marketplace behavior before scaling systems.
+
+**Mindset:** Marketplace Learning prioritizes observation over optimization.
+
+**Active work:** Behavioral observation, controlled monetization introduction, journal launch, better moderation tooling, lightweight trust scoring beginnings.
+
+**Explicit anti-patterns:**
+- Recommendation engines or algorithmic feeds
+- Growth loops or viral mechanics
+- Aggressive paid advertising
+- Complex subscription tiers
+- Mass marketing campaigns
+- Investor-driven feature roadmap
+- Black-box AI or ML-based trust scoring
+- Premature category expansion
+
+### Phase 3 — Trust Intelligence
+
+**Goal:** Codify learned behavior into ShowMePrice's competitive moat.
+
+**Active work:** Smarter ranking, fraud heuristics, reputation systems, trust weighting, seller quality scoring, category intelligence, pricing intelligence.
+
+**Explicit anti-patterns:**
+- Building intelligence without observed data
+- Copying competitor patterns without local validation
+- Optimizing for engagement over trust
+
+### Phase 4 — Marketplace Scale
+
+**Goal:** Expand trusted marketplace to broader audience and adjacent categories.
+
+**Active work:** Geographic expansion, category expansion, partnership development, infrastructure scale.
+
+**Explicit anti-patterns:**
+- Scaling before trust intelligence is operational
+- International expansion before national maturity
+- Adjacent product expansion before core marketplace stable
+
+### Transition criteria: Beta → Marketplace Learning
+
+ShowMePrice can transition from Private Beta to Marketplace Learning ONLY when all of the following are observable and falsifiable:
+
+**Transaction reality:**
+1. Minimum 10-20 completed real transactions (buyer reached seller, met or arranged delivery, money exchanged, goods received)
+2. At least one organically successful high-value transaction (>₦50K) completed without operational intervention
+
+**Voluntary return behavior:**
+3. ≥30% of beta invitees return within 14 days WITHOUT being prompted by ShowMePrice messaging
+4. At least 3 beta sellers list a second item after their first sold
+
+**Moderation manageability:**
+5. <10 total reports during beta period
+6. All reports map to identifiable patterns (no surprise abuse vectors)
+
+**Trust mechanism validation:**
+7. Verified sellers receive measurably more messages than unverified sellers
+8. Beta users use in-app messaging organically (don't immediately migrate to WhatsApp before sharing details)
+9. Welcome email recipients click through to Browse or Become Verified (not just delete)
+
+**Operational capacity:**
+10. No critical bugs OR rapid fixes when bugs surface
+11. Storage costs track expectedly
+12. Database performance healthy at beta scale
+
+If any are false, beta continues OR the specific gap gets addressed. Phase transition is binary: all-or-nothing, never partial.
+
+### Transition criteria: Marketplace Learning → Trust Intelligence
+
+ShowMePrice can transition from Marketplace Learning to Trust Intelligence ONLY when:
+
+1. Repeat trust behavior is observed (not isolated wins)
+2. Top 5 fraud/abuse patterns are documented and understood (not eliminated — understood)
+3. Reveal credits monetization validated (doesn't kill engagement, serious buyers convert)
+4. Seller quality patterns clearly emerged (who succeeds, churns, scams, converts)
+5. Operational load reaches threshold justifying scale tooling
+
+### The strategic insight
+
+ShowMePrice's competitive moat is NOT features, UI, or even verification alone. The moat is accumulated marketplace trust intelligence about Nigerian commerce behavior — fraud patterns, trust signals, moderation calibration, pricing behavior, seller quality patterns.
+
+Features can be copied in months. Trust intelligence compounds over years and cannot be copied without the same observed reality.
+
+### The mindset shift
+
+Most founders think: "beta → public launch → scale."
+
+ShowMePrice thinks: "beta → learning → intelligence → scale."
+
+This single mental model shift prevents the most expensive marketplace mistakes: premature scaling, over-engineering, growth desperation, and monetization friction before behavioral understanding.
+
+### Why this matters operationally
+
+When investors push for "show me growth," the operational answer is: "We're in [current phase]. Growth comes after [next phase transition criteria]." Not all investors will align with this pacing. Those who do not are not aligned with ShowMePrice's trust-first thesis.
+
+When beta users request features, the phase-appropriate answer is: "We're in observation mode. Feature requests inform Marketplace Learning planning, not Beta scope."
+
+When competitors launch aggressively, the correct response is: "Competitor growth can be copied. Compounded marketplace learning cannot."
+
+### What this doctrine prevents
+
+- Launching publicly before behavioral validation
+- Optimizing monetization before observing trust behavior
+- Building intelligence systems without observed data
+- Scaling infrastructure before learning what to scale
+- Adding features during phases when observation is the active work
+- Treating user feedback as product roadmap during validation phases
+- Letting external pressure (investor, competitor, market) override phase-appropriate work
+- Premature confidence from small-sample positive feedback
+
+### What this doctrine enables
+
+- Honest answers to "when are you launching publicly?"
+- Defensible decision-making against external pressure
+- Compound trust intelligence as competitive moat
+- Calm operational tempo aligned with actual learning needs
+- Clear delegation when team grows ("we're in [phase], here's what matters")
+
+### Core operating principle
+
+**The active phase determines what work is appropriate.**
+
+---
