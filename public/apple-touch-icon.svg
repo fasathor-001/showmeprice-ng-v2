@@ -1,0 +1,21 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient background -->
+  <defs>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#24AA4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1790C4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background with larger corner radius for iOS -->
+  <rect width="180" height="180" rx="40" fill="url(#grad2)"/>
+
+  <!-- Centered icon content -->
+  <g transform="translate(45, 35)">
+    <!-- Naira symbol (₦) - larger -->
+    <path d="M 45 10 L 45 75 M 10 28 L 80 28 M 10 42 L 80 42 M 10 56 L 80 56" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+    <!-- Checkmark overlay (right side) - larger -->
+    <path d="M 70 20 L 85 40 L 105 5" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

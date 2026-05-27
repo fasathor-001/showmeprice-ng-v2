@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: "ShowMePrice.ng — Nigeria's verified marketplace",
   description:
     "Real prices, verified sellers, one tap to chat. Skip the 'DM for price' frustration on Nigeria's marketplace where every listing has a price and every seller is verified.",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/apple-touch-icon.svg",
+    shortcut: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
