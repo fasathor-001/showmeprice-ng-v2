@@ -4,6 +4,39 @@ Tracked issues. Severity: critical, high, medium, low.
 
 When fixing, move from `## Open` to `## Resolved` with commit hash and date.
 
+---
+
+## Stage 2.C Closure — K-issue ledger snapshot (2026-05-27)
+
+### Issues Resolved During Stage 2.C
+
+- **K-045** — Image sharing infrastructure | Commit 9 chain
+- **K-046, K-047, K-048** — Notifications + messaging reliability | Commit 8
+- **K-049, K-050, K-051** — Listings reliability edge cases | Commit 10-a
+- **K-052, K-053, K-056** — Browse resilience + error recovery | Commit 11
+- **K-054** — Offline-recipient email graceful failure | Commit 8
+- **K-057** — Verification status email delivery | Commit 10-b
+- **K-059.6** — Sell CTA prominence (soft teal pill) | Commit 12 `74eafbe`
+- **K-060.4** — Report Listing affordance (modal + submission) | Commit 12 `74eafbe`
+- **K-060.5** — WhatsApp share + Copy link buttons | Commit 12 `74eafbe`
+
+### Issues Open at Stage 2.C Closure — All Intentional Deferrals
+
+**None are private beta launch blockers.** All defer to post-beta polish passes informed by real user behavior:
+
+- **K-055** — Image delivery architecture (responsive srcset/CDN caching) | Deferred Stage 3+ pending Cloudflare Images evaluation
+- **K-058** — Tailwind palette gaps (gradient skeleton shimmer) | LOW severity, post-Stage-2.C utility commit
+- **K-059 partial** — 5 of 6 home-page polish sub-items (hero asymmetry, icon library, city chips, category hierarchy, localized copy) | Deferred post-beta polish
+- **K-060 partial** — 5 of 7 listing-detail polish sub-items (below-fold content, specs redesign, negotiable prominence, CTA width, description echo) | Deferred post-beta polish
+- **K-061** — Admin refactor (sidebar nav, density, audit trail, reports queue, metrics) | Deferred Stage 3+, becomes higher-priority post-beta as workload scales
+- **K-062** — Communication surface implementations (journal + newsletter) | Deferred Stage 3+ pending content readiness
+- **K-063** — Phone-verify testing on real Android | Operational constraint, not defect
+- **K-064** — Paystack merchant integration | Pending external Paystack team contact
+
+**Rationale:** Scope discipline at Stage 2.C closure. Core trust infrastructure (Report Listing), core commerce flow (WhatsApp share), and header discoverability (Sell CTA) shipped in Commit 12. Remaining items benefit from real beta user feedback before redesign investment.
+
+---
+
 ## Open
 
 ### K-001 — admin role visible to all readers (low)
@@ -689,6 +722,8 @@ Surfaced 2026-05-25 during Stage 2.C Commit 9-c.1 post-mortem.
 
 ### K-059 — Home page polish gap: not yet at international-tier standard (LOW)
 
+**Status:** PARTIALLY RESOLVED — sub-item K-059.6 (Sell CTA prominence) addressed via Commit 12 `74eafbe`. Remaining 5 sub-items deferred to post-beta polish pass.
+
 The home page reads as a competent v1 mobile build with the desktop view forgotten about. No embarrassing errors — palette, typography, spacing rhythm, and copy voice are all defensible — but the gap to Stripe / Linear / Airbnb / Hipcamp tier is in five concrete places:
 
 1. **Desktop hero wastes ~60% of the canvas.** At 1568px wide, the hero compresses to a ~500px centered column with vast plain-grey expanses on either side. Reads as a mobile screenshot stretched to a desktop browser. Fix vector: asymmetric hero — copy + CTA on the left half, a curated 2×2 listing grid or a Lagos-skyline / verification-badge illustration on the right.
@@ -696,35 +731,37 @@ The home page reads as a competent v1 mobile build with the desktop view forgott
 3. **City chips below the search are second-class navigation.** Small, identical, no visual weight — read as overflow tags. For a Nigerian marketplace, city pickers are first-class navigation. Try larger tiles with a count (*"Lagos · 12,400 listings"*) or photographs.
 4. **"Browse by category" has no hierarchy.** Power & Generators sits next to Fashion & Apparel with identical visual weight. Either feature 3 hero categories and a small grid for the rest, or add listing counts so the user understands what's hot.
 5. **"How it works" is generic.** *"Browse with real prices / See verified sellers / Chat directly on WhatsApp"* reads like every marketplace explainer. The Nigerian-specific story is stronger: *"No more DM for price" / "ID-verified — not just phone-OTP" / "We never touch your money."* Lead with what differentiates from Jiji/Jumia.
-6. **Sell CTA undersold in header.** Text-only at the same weight as Browse/Categories. Pro tier monetisation lives or dies on seller acquisition; the header should be working harder.
+6. ~~**Sell CTA undersold in header.**~~ **K-059.6 — RESOLVED.** Changed from `text-ink-600 hover:text-ink` gray text link to `bg-teal-50 text-teal-700 px-3 py-1 hover:bg-teal-100` soft teal pill. Option A: subtle findability without aggressive color shift. Desktop only (mobile discoverability deferred to post-beta per scope discipline). Commit `74eafbe`, verification Gate 1 + Gate 2 complete. Cross-ref: D-121, D-124.
 
 **Severity:** LOW. Polish, not functional. NOT a private beta launch blocker. The site works; it just doesn't yet feel São-Paulo-or-Jakarta-tomorrow.
 
-**Resolution path:** absorb into Commit 12 (discovery polish) where appropriate, OR a dedicated post-Stage-2.C home-page polish pass. None of these are weeks of work individually — together maybe a focused 2-week design+build sprint.
+**Resolution path:** K-059.6 addressed in Commit 12. Remaining 5 items deferred to post-beta polish pass informed by real user behavior. None are weeks of work individually; together maybe a focused 2-week design+build sprint post-beta.
 
-**Cross-references:** D-121 (world-class UX/UI standard).
+**Cross-references:** D-121 (world-class UX/UI standard), D-124 (calm restraint).
 
-Surfaced 2026-05-25 during home-page review (Mercedes G 63 thread navigation context).
+Surfaced 2026-05-25 during home-page review (Mercedes G 63 thread navigation context). K-059.6 resolved 2026-05-27.
 
 ### K-060 — Listing detail polish gap: below-fold sparseness + unloved spec block (LOW)
+
+**Status:** PARTIALLY RESOLVED — sub-items K-060.4 (Report Listing) and K-060.5 (WhatsApp share + Copy link) addressed via Commit 12 `74eafbe`. Remaining 5 sub-items deferred to post-beta polish pass.
 
 The listing detail page is the strongest page on the site — hero gallery + price + verified-seller card + WhatsApp CTA. But it stops at MVP and there is clear runway to international tier:
 
 1. **Below the fold = nothing.** After Specifications (2 rows) + Description (one line) the page ends and the footer begins. A ₦210M G-Wagon deserves: more listings from this seller, similar listings, an inline "Safety tips for high-value purchases" strip, an embedded city pin/map for "Lagos", and date-of-listing in absolute form (*"Listed Nov 18, 2026"*) not just *"1 week ago"*.
 2. **Specifications block is unloved.** Two rows in a key/value table with no visual hierarchy. For cars, this is where buyers live — Year, Mileage, Transmission, Fuel, Body color, VIN-last-4, accident history. Compare to Cars45 / AutoTrader / Carro — they all use icon-keyed pill rows.
 3. **"Price negotiable" chip is buried.** Sits in a row of three identical-weight chips next to "Verified seller" and "Lagos". For a Nigerian buyer, "negotiable vs firm" is a primary signal. Pull it out — put it under the price as a softer-coloured pill.
-4. **No "Report listing" affordance surfaced.** Table-stakes for marketplace trust + admin pipeline. May exist behind an overflow menu, but it isn't surfaced.
-5. **No share / save / favourite.** No bookmark, no copy-link, no "send to a friend on WhatsApp". For a ₦210M item, the buyer is going to want to forward this to a partner/spouse before paying. Add a WhatsApp share button right next to "Continue conversation".
+4. ~~**No "Report listing" affordance surfaced.**~~ **K-060.4 — RESOLVED.** New `ReportListingModal` component (mirrors MessageSellerModal per DP-201). 5 Nigerian-context categories: Scam/Fraud, Misleading listing, Stolen item, Prohibited item, Other (DP-202). Signed-in only with redirect to `/sign-in?next=/listings/[id]` for anonymous (DP-203). Dashboard-only admin notifications at MVP (DP-204). Reuses existing `reports` table with `target_type='listing'` via polymorphic schema (DP-10 Option 3). Schema verified pre-implementation; no migration required. Commit `74eafbe`, verification Gate 1 + Gate 2 complete. Cross-ref: D-121, D-124, D-125 (trust narrative).
+5. ~~**No share / save / favourite.**~~ **K-060.5 — RESOLVED.** New `ListingShareBar` component with WhatsApp share + Copy link. WhatsApp share: wa.me pre-filled message using `formatNaira()` for price consistency (DP-205). Copy link: Clipboard API with graceful fallback, "Copied" feedback (no toast per D-124, DP-206). Share buttons placed next to existing actions (DP-207). Commit `74eafbe`, verification Gate 1 + Gate 2 complete. Cross-ref: D-121, D-124, Nigerian commerce context (WhatsApp as default).
 6. **Continue-conversation CTA is over-wide on desktop.** Full content-column width (~600px) — reads as "we don't have anything else to put here" rather than "this is important." Cap at ~360px and right-align or center.
 7. **Description echoes the title.** *"Used 2024 Mercedes Benz G 63 AMG 7G-Tronic with 6 141km"* is the title restated. One-line descriptions should render with a placeholder (*"Seller hasn't added a description — ask on WhatsApp"*) rather than echoing the title.
 
 **Severity:** LOW. Polish, not functional. NOT a private beta launch blocker.
 
-**Resolution path:** absorb into Commit 12 (discovery polish) where appropriate, OR a dedicated post-Stage-2.C listing-detail polish pass. Items 4 (Report listing) and 5 (share / WhatsApp forward) are the highest-leverage as they touch trust + virality.
+**Resolution path:** K-060.4 and K-060.5 (highest-leverage, touch trust + virality) addressed in Commit 12. Remaining 5 items deferred to post-beta polish pass informed by real user behavior.
 
-**Cross-references:** D-121 (world-class UX/UI standard), D-125 (trust narrative — Report-listing is part of "safely").
+**Cross-references:** D-121 (world-class UX/UI standard), D-124 (calm restraint), D-125 (trust narrative), DP-201 through DP-207.
 
-Surfaced 2026-05-25 during listing-detail review (Mercedes G 63 listing).
+Surfaced 2026-05-25 during listing-detail review (Mercedes G 63 listing). K-060.4 and K-060.5 resolved 2026-05-27.
 
 ### K-061 — Admin refactor gap: 305 LOC across 3 files = MVP shape, not production shape (LOW)
 
