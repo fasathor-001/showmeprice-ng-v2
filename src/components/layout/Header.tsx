@@ -59,7 +59,7 @@ export async function Header() {
             <Link href="/categories" className="hover:text-ink transition-colors">
               Categories
             </Link>
-            <Link href="/sell" className="hover:text-ink transition-colors">
+            <Link href="/sell" className="rounded-lg bg-teal-50 text-teal-700 px-3 py-1 hover:bg-teal-100 transition-colors">
               Sell
             </Link>
             {/* Stage 2.B Commit 5: the inline "Messages" text link was DROPPED

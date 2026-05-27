@@ -8,6 +8,8 @@ import { formatNaira, timeAgo } from "@/lib/listings";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { ListingImageGallery } from "@/components/listings/ListingImageGallery";
 import { MessageSellerButton } from "@/components/listings/MessageSellerButton";
+import { ListingShareBar } from "@/components/listings/ListingShareBar";
+import { ListingReportButton } from "@/components/listings/ListingReportButton";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
 import {
   getSpecsForCategory,
@@ -205,6 +207,15 @@ export default async function ListingDetailPage({
 
           {/* Details */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Header with report button */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-ink-600">Details</h2>
+              <ListingReportButton
+                listingId={listing.id}
+                listingTitle={listing.title}
+              />
+            </div>
+
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <Badge
@@ -279,6 +290,17 @@ export default async function ListingDetailPage({
               isPhoneVerified={currentUserPhoneVerified}
               isOwnListing={isOwnListing}
               existingConversationId={existingConversationId}
+            />
+
+            {/* Commit 12 K-060.5 — WhatsApp share + Copy link buttons.
+                DP-207: Share button next to WhatsApp CTA. Uses formatNaira()
+                for Nigerian price format consistency (DP-205). Clipboard API
+                with graceful fallback (DP-206). No success toast per D-124. */}
+            <ListingShareBar
+              listingId={listing.id}
+              listingTitle={listing.title}
+              listingPriceKobo={listing.price_kobo}
+              listingStateName={state?.name ?? null}
             />
 
             {/* Future Phase E: D-113 contact-reveal CTA lands separately —
