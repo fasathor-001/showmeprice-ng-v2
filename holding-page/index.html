@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>ShowMePrice — A trust-first marketplace for Nigerian buyers and sellers</title>
+  <meta name="description" content="ShowMePrice is currently in private early access, onboarding verified Nigerian sellers first." />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="ShowMePrice" />
+  <meta property="og:description" content="A trust-first marketplace for Nigerian buyers and sellers. Currently in private early access." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://showmeprice.ng" />
+
+  <!-- Favicon (inline SVG, no external file needed) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231A1A1A'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='56' font-weight='400' fill='%23FAFAF7' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --ink: #1A1A1A;
+      --ink-soft: #4A4A4A;
+      --ink-faint: #8A8680;
+      --paper: #FAFAF7;
+      --paper-shade: #F2F0EA;
+      --accent: #1F5F5B;     /* deep teal, restrained */
+      --accent-soft: #2A7A75;
+      --rule: rgba(26, 26, 26, 0.12);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      font-family: 'Crimson Pro', Georgia, 'Times New Roman', serif;
+      background: var(--paper);
+      color: var(--ink);
+      font-weight: 400;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+
+      /* Subtle paper-grain texture */
+      background-image:
+        radial-gradient(rgba(26, 26, 26, 0.018) 1px, transparent 1px),
+        radial-gradient(rgba(26, 26, 26, 0.012) 1px, transparent 1px);
+      background-size: 3px 3px, 7px 7px;
+      background-position: 0 0, 1px 1px;
+    }
+
+    .frame {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 2rem;
+    }
+
+    /* ============ HEADER ============ */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.5rem;
+      animation: fade-down 0.8s ease-out 0.1s both;
+    }
+
+    .wordmark {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 1.125rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+
+    .wordmark .dot {
+      color: var(--accent);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.6875rem;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 0 var(--accent);
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(31, 95, 91, 0.4);
+      }
+      50% {
+        opacity: 0.6;
+        box-shadow: 0 0 0 8px rgba(31, 95, 91, 0);
+      }
+    }
+
+    /* ============ MAIN ============ */
+    main {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 4rem 0;
+    }
+
+    .content {
+      max-width: 640px;
+      animation: fade-up 0.9s ease-out 0.3s both;
+    }
+
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.875rem;
+    }
+
+    .eyebrow::before {
+      content: '';
+      display: inline-block;
+      width: 1.75rem;
+      height: 1px;
+      background: var(--ink-faint);
+    }
+
+    h1 {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: clamp(2.25rem, 6vw, 3.75rem);
+      font-weight: 400;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-bottom: 1.75rem;
+    }
+
+    h1 em {
+      font-style: italic;
+      font-weight: 300;
+      color: var(--accent);
+    }
+
+    .lead {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+      font-weight: 400;
+      line-height: 1.55;
+      color: var(--ink-soft);
+      margin-bottom: 1rem;
+      max-width: 32em;
+    }
+
+    .lead + .lead {
+      margin-top: -0.25rem;
+    }
+
+    .actions {
+      margin-top: 2.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .cta {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 1.0625rem;
+      font-weight: 400;
+      color: var(--ink);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.125rem 0;
+      border-bottom: 1px solid var(--ink);
+      transition: color 0.25s ease, border-color 0.25s ease, gap 0.25s ease;
+    }
+
+    .cta:hover {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      gap: 0.9rem;
+    }
+
+    .cta-arrow {
+      display: inline-block;
+      transition: transform 0.25s ease;
+    }
+
+    .cta:hover .cta-arrow {
+      transform: translateX(2px);
+    }
+
+    .cta-url {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.02em;
+      color: var(--ink-faint);
+    }
+
+    /* ============ FOOTER ============ */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-top: 2rem;
+      border-top: 1px solid var(--rule);
+      animation: fade-up 0.8s ease-out 0.6s both;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+
+    .signature {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      color: var(--ink-soft);
+    }
+
+    .signature-name {
+      font-style: italic;
+      color: var(--ink);
+    }
+
+    .signature a {
+      color: var(--ink-soft);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--ink-faint);
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .signature a:hover {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .meta {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.6875rem;
+      letter-spacing: 0.06em;
+      color: var(--ink-faint);
+      text-transform: uppercase;
+      text-align: right;
+    }
+
+    .meta-line {
+      display: block;
+    }
+
+    .meta-line + .meta-line {
+      margin-top: 0.25rem;
+    }
+
+    /* ============ ANIMATIONS ============ */
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fade-down {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ============ RESPONSIVE ============ */
+    @media (max-width: 640px) {
+      .frame {
+        padding: 1.5rem 1.5rem;
+      }
+
+      main {
+        padding: 2.5rem 0;
+      }
+
+      .eyebrow {
+        margin-bottom: 1.5rem;
+      }
+
+      .actions {
+        margin-top: 2rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      footer {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .meta {
+        text-align: left;
+      }
+    }
+
+    /* ============ REDUCED MOTION ============ */
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+
+      .status-dot {
+        animation: none;
+        opacity: 0.85;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="frame">
+
+    <header>
+      <span class="wordmark">ShowMePrice<span class="dot">.</span>ng</span>
+      <span class="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        Private early access
+      </span>
+    </header>
+
+    <main>
+      <div class="content">
+        <p class="eyebrow">A trust-first Nigerian marketplace</p>
+
+        <h1>
+          Buy and sell with <em>verified</em> Nigerians.
+        </h1>
+
+        <p class="lead">
+          ShowMePrice is currently in private early access. We are onboarding verified sellers first &mdash; real prices, clear locations, and safer conversations before buyers meet or pay.
+        </p>
+
+        <p class="lead">
+          Public access will open later.
+        </p>
+
+        <div class="actions">
+          <a href="https://app.showmeprice.ng" class="cta">
+            Already invited? Open the app
+            <span class="cta-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <span class="cta-url">app.showmeprice.ng</span>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="signature">
+        <span class="signature-name">Frank A.</span>
+        &nbsp;&middot;&nbsp;
+        <a href="mailto:admin@showmeprice.ng">admin@showmeprice.ng</a>
+      </div>
+      <div class="meta">
+        <span class="meta-line">Lagos &middot; Abuja &middot; Port Harcourt</span>
+        <span class="meta-line">Edo &middot; Delta</span>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>

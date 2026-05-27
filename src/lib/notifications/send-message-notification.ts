@@ -49,7 +49,7 @@ interface DispatchParams {
 function resolveAppUrl(): string {
   return (
     process.env.NEXT_PUBLIC_SITE_URL ??
-    "https://showmeprice-ng-v2.pages.dev"
+    "https://app.showmeprice.ng"
   );
 }
 

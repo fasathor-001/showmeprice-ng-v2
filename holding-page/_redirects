@@ -1,0 +1,2 @@
+# Redirect www to root
+https://www.showmeprice.ng/* https://showmeprice.ng/:splat 301
