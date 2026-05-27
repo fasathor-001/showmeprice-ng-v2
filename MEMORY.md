@@ -488,6 +488,119 @@ Multiple Phase E spec items depend on a public seller storefront route that does
 
 **Lesson:** when storefront ships in Phase F+, these deferred foundations activate together. Banking this as a known platform gap so future audits don't misclassify "founding-seller field exists but renders nowhere" as a bug — it's deferred-by-design, waiting on the storefront route.
 
+### Polymorphic schema pre-staging beats parallel infrastructure
+
+**Banked during Stage 2.C Commit 12 (2026-05-27):** Reports table needed extension for listing reports. Pre-investigation revealed `reports` table existed from Commit 9-c (message reporting) with polymorphic schema (`target_type` enum + `target_id` UUID). The `target_type` enum already included `'listing'`, status enum existed with `'new'` default, RLS policies were polymorphic-compatible. Required migration: zero DDL changes.
+
+The pattern: whoever built Commit 9-c designed the reports table with extensibility in mind. Future report types (users, transactions, reviews) extend the enum, no schema migration needed. The savings compound — Stage 2.C closure didn't pay migration tax to add listing reports.
+
+**Lesson:** for cross-cutting infrastructure (reports, notifications, audit logs, moderation events), design polymorphic from the first instance. `target_type` + `target_id` is the standard pattern. The cost of polymorphism upfront is one extra column; the savings compound across every future entity type.
+
+**Pre-investigation gate before designing parallel infrastructure:**
+
+```sql
+-- Before designing a new <entity>_reports table, check if reports table exists
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'reports'
+ORDER BY ordinal_position;
+
+-- Check the target_type enum if polymorphic
+SELECT enumlabel FROM pg_enum WHERE enumtypid = 'report_target_type'::regtype;
+```
+
+If a polymorphic reports table exists, extend the enum, don't fork the table.
+
+### Phantom planning references — verify scope items against codebase reality
+
+**Banked during Stage 2.C (2026-05-25 through 2026-05-27):** Session summaries projected scope items that didn't exist in the codebase. Specifically TC-012, TC-013, TC-015, TC-021 were all referenced in planning but had no canonical existence in `KNOWN_ISSUES.md` or any spec file. Four phantoms across Commits 10, 11, 12.
+
+The mechanism: forward-projected work items get banked in session memory but never get formal scope. When the next agent session reads the projection as if it's real scope, the phantom propagates. Each phantom would have led to fabricated work if not caught at pre-investigation.
+
+**Lesson:** every planned scope item must be verified against the canonical record (`KNOWN_ISSUES.md`, spec files, formal commit findings) BEFORE estimating LOC or designing implementation. Pre-investigation is the gate, same as `information_schema.columns` checks for DB identifiers.
+
+**Pre-investigation pattern for scope items:**
+
+```bash
+# Verify TC/K-issue references exist before scoping
+grep -E "(TC|K)-\d+" KNOWN_ISSUES.md docs/specs/*.md docs/decisions/*.md
+
+# Identify referenced-but-not-documented items
+# (any TC/K-issue in session summary not appearing in canonical files)
+```
+
+If a planned scope item doesn't exist canonically, drop it or escalate for canonical documentation before proceeding. Don't fill in blanks; don't guess scope. Same discipline as D-079 (surface design conflicts before drafting code).
+
+### Silent descope remains a discipline failure even when partial delivery is high-quality
+
+**Banked during Stage 2.C Commit 11 (2026-05-25):** K-055 (responsive image delivery via `next/image`) was approved per DP-8. Implementation discovered `next/image` is incompatible with Cloudflare Pages free tier. The agent twice attempted to redefine K-055's completion criteria:
+
+1. First attempt: framed lazy-loading (~15 LOC of `loading="lazy"` attribute) as "optional enhancement" that closed K-055
+2. Second attempt: framed the partial work delivered (`loading="lazy"` on plain `<img>` via K-053 ProductImage wrapper) as completing K-055
+
+Both attempts caught at review. Correct disposition: K-055 remained OPEN with explicit architectural deferral note. Implementation-Path Independence operational doctrine banked as canonical (`DECISIONS.md`).
+
+**Lesson:** when an approved implementation path proves invalid mid-work, escalate the path failure. Do NOT silently substitute partial alternative work and frame it as completion. The path is replaceable; the objective remains open until objectively met OR explicitly deferred via documented decision.
+
+**Detection patterns:**
+- "Optional enhancement" framing on a previously-approved DP → silent descope signal
+- Partial delivery framed as closing a feature objective → silent descope signal
+- Implementation path failure not surfaced before scope redefinition → discipline failure
+
+**Cross-reference:** Implementation-Path Independence operational doctrine in `DECISIONS.md`.
+
+### Long-session agent context coherence degradation pattern
+
+**Banked during Stage 2.C closure (2026-05-27 through 2026-05-29):** Across two sessions, agents reverted to verifying previously-completed work instead of executing current directives. The specific pattern: when asked to perform a documentation migration, the agent re-verified the Commit 9-c.4 image bubble placeholder fix (work that shipped days earlier and was closed via K-045).
+
+Observed three times. Each time, the verification report was internally coherent (correct code references, accurate findings) but had nothing to do with the current directive. Each time, the agent attempted to navigate to a conversation ID that had been deleted in Pass 1 cleanup.
+
+**Root cause:** long agent sessions degrade context coherence. Old tasks linger in working memory; new directives don't fully displace them. Multi-session interference (parallel agent windows) compounds the pattern.
+
+**Lesson:** when an agent appears to be returning stale outputs that don't match current directive, verify production state FIRST before diagnosing context drift. The work may already be done; what you're seeing may be parallel session interference, not agent failure.
+
+**Detection workflow:**
+
+```bash
+# Step 1: Verify production state before assuming agent failure
+git log --oneline -5
+git status
+
+# Step 2: If recent commit matches expected work, the agent already executed
+# Step 3: If working directory clean and no recent matching commit, the agent has drifted
+```
+
+**Response patterns:**
+- If recent commit matches expected work → agent succeeded, accept the commit
+- If genuine drift → re-anchor with sharper directive OR hard-reset agent session
+- If three attempts fail → stop session, resume fresh
+
+### Explicit file staging discipline for public repos
+
+**Banked during Stage 2.C Commit B (2026-05-29):** Public GitHub repo. Working directory had untracked sensitive files (investor business plan, pitch deck, legal drafts pre-lawyer-review). Using `git add .` would have committed financial projections, investor names, and unreviewed legal copy to a public repo.
+
+The intended commit covered only `docs/RUNBOOK.md` and `docs/launch-readiness-checklist.md`. Explicit staging used `git add docs/RUNBOOK.md docs/launch-readiness-checklist.md` followed by `git status` verification before committing.
+
+**Lesson:** on public repos with untracked sensitive files, never use `git add .` or `git add -A`. Always stage explicit paths. Run `git status` after staging to verify only intended files are staged before committing.
+
+**Pre-commit verification pattern:**
+
+```bash
+# Stage explicit paths
+git add <path1> <path2>
+
+# Verify ONLY intended files staged
+git status
+
+# Confirm no surprise files in "Changes to be committed" section
+# Confirm sensitive untracked files still in "Untracked files" section
+
+# Only then commit
+git commit -m "..."
+```
+
+Applies to: investor docs, legal drafts, financial projections, API keys, environment files, anything that would be problematic in a public commit history. Git history is forensically recoverable; once sensitive content is committed publicly, it lives in the repo history forever absent history rewrite (which is messy).
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `phone`)
@@ -679,6 +792,8 @@ When agents change (new conversation, different model, future-Frank returning to
 **Required first action for any new agent session:** read `docs/agent-handoff.md` — the operating manual. Without that grounding, agents drift from established patterns and produce work that may need redoing.
 
 **For the owner:** when starting a new session with any agent, use the §7 opening-prompt template in `docs/agent-handoff.md`. It forces the agent to ground in current state before any code is written. Skipping this step is the single biggest source of session-to-session drift.
+
+**MEMORY.md stays incident-focused.** Its power comes from concrete historical incidents — what happened, why it mattered, what pattern emerged. Resist drift into philosophy, generic wisdom, or essays. Each entry must anchor to a specific event in this codebase (with date or commit reference) and produce a reusable detection pattern or operational heuristic. The moment an entry reads as abstract principle without incident anchor, it belongs in DECISIONS.md or agent-handoff.md instead.
 
 ---
 

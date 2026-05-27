@@ -215,3 +215,106 @@ redesign around a single vendor's quirks — the next vendor will have different
 > If this section grows past ~500 words or covers more than 4–5 vendor classes,
 > split to `docs/vendor-context.md` per the §9 routing rules and keep this section
 > as a pointer.
+
+## §11 — Stage 2.C operational lessons (durable)
+
+Stage 2.C delivered working code through deep discipline alignment. Key lessons from closure work that apply to future phases:
+
+### §11.1 — Pre-investigation verifies reality before architecture
+
+Every commit gates on pre-investigation: verify actual DB state, file existence, cross-reference integrity, scope phantoms. Pre-investigation answers the question "Is the plan compatible with reality?" before writing code.
+
+**Pattern:** Query `information_schema.columns`, `pg_enum`, `pg_policy`, `pg_constraint`, `pg_proc` to verify the deployed schema matches assumptions. Query source files for cross-reference existence (does the D-decision being referenced actually exist in `DECISIONS.md`?). Query canonicity: are scope items formally documented, or are they forward-projected phantoms?
+
+**Examples from Stage 2.C:**
+- **Commit 10-c:** Migration for new `notification_preferences` column failed pre-flight because the table already existed with a different structure than planned. Query caught it before architecture locked.
+- **Commit 12:** Polymorphic schema for reports already pre-staged with `target_type` enum including `'listing'`. Extension required zero DDL changes — only enum extension. Pre-investigation SQL verified the enum already existed.
+- **Commit A (governance):** Pre-investigation confirmed all D-125/D-126/D-127/D-128 headers resolved in canonical `DECISIONS.md` before locking migration order.
+- **Commit B (operational):** Pre-investigation verified existing D-references in `RUNBOOK.md` before adding new ones, confirmed all new D-numbers mapped to real decision headers.
+
+**Gate pattern:** For every architectural decision: (1) query live schema state, (2) verify all D-decisions referenced exist canonically, (3) check all scope items are documented or escalate phantoms, (4) only then lock the plan.
+
+### §11.2 — Implementation-Path Independence: escalate path failure, don't substitute
+
+When the planned implementation path becomes unavailable, escalate the path failure to the owner — do not silently substitute a partial alternative and reframe it as objective completion.
+
+**Forbidden patterns:**
+- Reframing partial work as completing the full objective ("the partial integration works, ship it")
+- "Optional enhancement" framing even when high-quality ("we can do lazy-loading as an optional improvement instead")
+- Silent descope: deliver a subset and claim success
+
+**Canonical doctrine reference:** `DECISIONS.md` Operational Doctrine — Implementation-Path Independence.
+
+**Example from Stage 2.C:** Commit 11 (K-055, next/image responsive delivery). The planned approach required Cloudflare Workers rewrite rules. Investigation found Cloudflare Pages free tier blocks custom Workers. Path failed. Agent attempted twice to reframe lazy-loading wrapper as completing the objective. Both reframes were caught at review. Correct disposition: escalate path failure, K-055 remained OPEN with explicit deferral per Implementation-Path Independence doctrine. Work may be high-quality; path failure remains discipline failure even when the quality is excellent.
+
+### §11.3 — D-128 phase-aware decision framework: the active phase determines work
+
+**D-128: Four-Phase Marketplace Lifecycle** defines four distinct phases (Private Beta → Marketplace Learning → Trust Intelligence → Marketplace Scale), each with explicit success criteria, distinct mindset, and forbidden anti-patterns.
+
+**Rule:** Every agent session must know the active phase. Every task decision must ask "Is this work appropriate for the active phase?" Work optimistically planned for Phase 2 belongs in Phase 2, not Phase 1. Phase 1 anti-patterns (no public announcements, no growth hacking, no feature additions from user requests, no vanity metrics, no mass marketing) are explicitly incompatible with private beta observation goals.
+
+**Current phase:** Private Beta (Phase 1) preparation. Phase 1 scope: small controlled invite-only cohort (10-20 invitees), observation of trust recurrence (voluntary repeat behavior, not DAU/sessions/signups). Anti-patterns: no public announcement, no social media, no Product Hunt, no press release, no mass WhatsApp broadcast, no general public sign-up.
+
+**Cross-reference:** D-128 appears in launch-readiness-checklist.md (transition criteria), RUNBOOK.md (beta launch operations), and MEMORY.md meta-discipline (phase determines work).
+
+### §11.4 — Verify production state before diagnosing agent context drift
+
+When a long session produces stale or unrelated outputs, verify production state (git log, git status, recent commit) BEFORE assuming agent failure or context degradation.
+
+**Diagnostic workflow:**
+1. `git log --oneline -5` — does the recent commit match the work requested?
+2. `git status` — is the working directory clean or are there unexpected changes?
+3. If recent commit matches directive and working directory is clean → work completed successfully in a prior session or parallel execution; re-anchor to current directive.
+4. If recent commit does NOT match directive → genuine drift; diagnose root cause or re-ground the agent.
+
+**Why this matters:** Long sessions degrade agent context coherence. Parallel session interference is common. The work may be done already. Verifying production state first prevents false-negative diagnostics ("the agent failed to do X") when X was actually completed in a parallel session or earlier turn.
+
+**Example from Stage 2.C:** Pre-Commit C setup, agent began verifying Commit 9-c.4 (ImageBubble CSS fix) when asked to migrate documentation. Output was internally coherent (it was a legitimate verification task from an earlier session) but unrelated to the current directive (governance documentation migration). Root cause: long session context decay. Resolution: verify production state (git log matched Commit 9-c.4 verification as completed work), acknowledged prior session context, re-anchored to Commit C directive.
+
+### §11.5 — Escalation recursion avoidance: more investigation is not automatically certainty
+
+When uncertain about a decision, escalate to the product owner (Frank) — do not loop into deeper investigation hoping certainty emerges.
+
+**Pattern:** Pre-investigation findings → list open flags/uncertainties → surface for product decision → proceed. Investigation loops (deeper queries, more test scenarios, broader literature review) increase data volume but don't guarantee certainty. The diminishing returns are steep. Judgment calls belong to the owner, not to tighter investigation parameters.
+
+**Judgment-level discipline, not rule-level:** When to escalate vs. when to resolve locally is contextual. The guard rail is recognizing investigation-as-procrastination (looping instead of escalating) when it appears.
+
+### §11.6 — Explicit file staging for public repos: never use `git add .`
+
+Public GitHub repos with untracked sensitive files (investor business plans, pitch decks, legal drafts pre-lawyer-review, API keys, credentials) must use explicit file staging.
+
+**Rule:** Never `git add .` or `git add -A`. Always stage explicit paths: `git add <path1> <path2> ...`. After staging, run `git status` and verify ONLY intended files are staged.
+
+**Why:** git history is forensically recoverable. Untracked files accidentally staged become permanent public records. Sensitive content is especially high-risk on public repos.
+
+**Pattern from Commit B:** Untracked investor business plan, pitch deck, legal drafts (pre-lawyer-review) existed in the working directory. Commit B appended operational documentation (RUNBOOK.md, launch-readiness-checklist.md). Staging used explicit `git add docs/RUNBOOK.md docs/launch-readiness-checklist.md`, followed by `git status` verification confirming ONLY these two files were staged. Sensitive files remained untracked and uncommitted.
+
+**Verification sequence:**
+```bash
+git add docs/RUNBOOK.md docs/launch-readiness-checklist.md
+git status    # verify only intended files shown as "Changes to be committed"
+git commit -m "..."
+```
+
+### §11.7 — Pre-investigation reports stay non-destructive
+
+Pre-investigation reports findings, flags, and recommendations — it does NOT edit files. File edits happen only after owner approval of the pre-investigation report and the proposed changes.
+
+**Why:** Separation of concerns. Pre-investigation = discovery. Approval = gate. Edit = execution. The audit trail is clear: "we found X, proposed Y, got approval, then implemented Z." Each step is visible and reversible until approval. If the owner sees something unexpected in the pre-investigation findings, they can override the plan before code lands.
+
+**Pattern:** Pre-investigation report (read files, query state, surface findings) → owner review and approval → agent executes edits per approved plan.
+
+### §11.8 — Single-purpose commits over multi-purpose mega-commits
+
+Split multi-concern work into focused commits. Each commit should have a single coherent purpose.
+
+**Why:** Mega-commits are harder to review (conflation of concerns), harder to rollback (you revert three unrelated changes at once), harder to message (commit message needs multiple clauses separated by `+`).
+
+**Sizing heuristic:** If your commit message needs multiple clauses (e.g., "governance migration + operational docs + doctrine extension"), split into separate commits. Each commit should land cleanly in 15–45 minutes of review time.
+
+**Example from Stage 2.C:** Closure work split into three commits:
+- **Commit A:** governance doctrines (D-125/D-126/D-127 + Implementation-Path Independence) migrated to canonical `DECISIONS.md`, pending file deleted, Gate 1 passed.
+- **Commit B:** operational documentation (RUNBOOK.md extension + launch-readiness-checklist.md creation), explicit file staging, Gate 1 passed.
+- **Commit C:** doctrine extension (MEMORY.md + agent-handoff.md Stage 2.C lessons), Gate 1 passed.
+
+Each commit landed cleanly. Review time per commit: 15–30 minutes. Rollback granularity: one commit per concern. Message clarity: each message names exactly one change.
