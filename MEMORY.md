@@ -601,6 +601,18 @@ git commit -m "..."
 
 Applies to: investor docs, legal drafts, financial projections, API keys, environment files, anything that would be problematic in a public commit history. Git history is forensically recoverable; once sensitive content is committed publicly, it lives in the repo history forever absent history rewrite (which is messy).
 
+### Vendor integration response validates architectural restraint
+
+**Banked during Stage 2.C closure (2026-05-29):** Paystack Developer Relations responded to integration inquiry with explicit confirmation that ShowMePrice's marketplace model requires no additional compliance requirements beyond standard KYB. The model — ShowMePrice as merchant collecting payment for own services, no escrow, no splits, no custody — aligns cleanly with Paystack's Acceptable Use Policy.
+
+The strategic signal: vendor compliance assessments validate architectural decisions made months earlier. D-125 §2.3 (No Custody) and the deliberate avoidance of escrow/splits at v2 produced an operational advantage — fast vendor approval, clean compliance posture, simpler integration.
+
+**Lesson:** when designing infrastructure that will eventually interact with regulated vendors (payments, KYC, identity, communications), bias toward architectural restraint. The simpler model integrates faster, faces less compliance friction, and preserves more optionality.
+
+**Detection pattern:** when a vendor's response includes "no additional requirements apply for this model" or equivalent phrasing, the architectural decision that produced that posture is paying its first operational dividend. Bank the confirmation; resist the temptation to add complexity that would have triggered additional requirements.
+
+**Cross-reference:** D-125 §2.3 (No Custody), D-129 (Payment Integration Sequencing).
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `phone`)

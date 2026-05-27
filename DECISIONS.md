@@ -2786,3 +2786,110 @@ When competitors launch aggressively, the correct response is: "Competitor growt
 **The active phase determines what work is appropriate.**
 
 ---
+
+## D-129 — Payment Integration Sequencing
+
+**Status:** Locked (2026-05-29)
+**Cross-references:** D-125 (Launch Strategy — Simple Internally), 
+D-128 (Four-Phase Marketplace Lifecycle), K-064 (Paystack merchant integration)
+
+### The principle
+
+Payment integration follows the four-phase marketplace lifecycle. 
+Each phase enables only the payment infrastructure appropriate to its 
+observation goals. Premature payment complexity creates operational 
+debt that compounds against trust validation.
+
+This doctrine prevents over-engineering payment architecture before 
+behavioral understanding justifies it.
+
+### The sequencing
+
+**Phase 1 (Private Beta):** Payment infrastructure dormant.
+- Reveal credits feature exists in UI
+- Credits manually granted free to beta invitees
+- No live Paystack transactions
+- Goal: observe whether users notice credit mechanism, how they assign 
+  value to reveals, whether UX is intuitive
+
+**Phase 2 (Marketplace Learning):** One-time payments enabled.
+- Paystack KYB complete (target: before phase transition)
+- Initialize Transaction API for reveal credits + listing boosts
+- Webhook verification fully implemented
+- No subscriptions yet
+- Goal: validate reveal credits monetization (does friction kill 
+  engagement, do serious buyers convert)
+
+**Phase 3 (Trust Intelligence):** Subscriptions enabled.
+- Subscription API for Buyer Pro / Seller Pro
+- Subscription lifecycle management (cancellation, failed-renewal, 
+  upgrades, downgrades)
+- Trust scoring data informs subscription tiers
+- Goal: codify learned monetization behavior into sustainable revenue
+
+**Phase 4 (Marketplace Scale):** Advanced payment patterns.
+- Geographic expansion may introduce new payment providers
+- Category-specific pricing models
+- Partnership integrations
+
+### Non-negotiable rules at every phase
+
+**1. Webhook verification is mandatory.** Never trust frontend payment 
+success state. All credit grants, subscription state changes, and 
+payment confirmations route through server-side webhook handlers with 
+Paystack signature verification.
+
+**2. Stay transaction-simple.** Do not implement:
+- Internal wallet systems
+- Balance/ledger systems
+- Marketplace payouts
+- Escrow accounting
+- Split settlement
+
+ShowMePrice is the merchant collecting payment for ShowMePrice services. 
+Buyer-seller transactions happen directly between parties per D-125 §2.3 
+(No Custody).
+
+**3. Idempotent webhook handlers.** Paystack webhooks may fire multiple 
+times for the same event. Credit grants must be idempotent — duplicate 
+webhook delivery never grants duplicate credits.
+
+**4. Compliance posture preserved.** "ShowMePrice is the merchant" is 
+the standard answer to "are you a payment processor?" questions. Do 
+not drift into escrow or marketplace splits without explicit doctrine 
+revision.
+
+### Explicit anti-patterns
+
+- Implementing subscriptions during Private Beta (no behavioral data yet)
+- Building wallet UI before reveal credits are live and validated
+- Trusting frontend payment confirmation as authoritative
+- Adding new payment providers before primary integration is mature
+- Premature subscription tier complexity (start with one tier; expand 
+  based on data)
+
+### Why this matters operationally
+
+When investors ask "what's your monetization model?" — the answer is 
+reveal credits + subscriptions, in that sequence, validated against 
+observed trust behavior. Not: "we have everything ready to enable."
+
+When future agents implement payment features, the question isn't "can 
+we build X?" but "is X appropriate to the current phase?"
+
+When competitors launch complex payment systems, the disciplined response 
+is: "Complex payment infrastructure without trust validation is fragility, 
+not capability."
+
+### The strategic insight
+
+Payment simplicity at v2 is operational advantage, not limitation. 
+Paystack's response confirmed the marketplace model is compliance-clean 
+because we deliberately avoid escrow, splits, and custody. That clarity 
+took architectural restraint to preserve. Maintain it through Phase 3 
+minimum.
+
+### Core operating principle
+
+**Implement only the payment infrastructure that current phase observation 
+requires. Defer everything else.**

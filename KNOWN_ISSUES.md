@@ -893,6 +893,61 @@ Surfaced 2026-05-25 during D-126/D-127 doctrine drafting.
 
 Opened 2026-05-25 during Stage 2.C Commit 10-c verification.
 
+## K-064 — Paystack merchant integration tracking
+
+**Severity:** MEDIUM  
+**Status:** OPEN, Paystack Developer Relations confirmed integration approach (2026-05-27). KYB submission pending.  
+**Cross-references:** D-125 §2.3 (No Custody), D-128 (Four-Phase Marketplace Lifecycle), D-129 (Payment Integration Sequencing)
+
+### Scope
+
+Standard merchant integration with Paystack for ShowMePrice's own services:
+- Contact reveal credits (deferred to Phase 2 Marketplace Learning per D-129)
+- Future: Buyer Pro subscriptions, listing fees, Seller Pro subscriptions, boost packages (Phase 3 Trust Intelligence)
+
+ShowMePrice is the merchant collecting payment for its own services. Not escrow, not marketplace splits, not custody of buyer-seller funds (per D-125 §2.3).
+
+### Paystack Developer Relations response (2026-05-27)
+
+Favour (Developer Relations) confirmed integration approach for ShowMePrice's marketplace model.
+
+**KYB documentation requirements (Nigerian businesses):**
+- CAC registration documents (ShowMePrice has this — CAC-registered)
+- BVN of director/signatory (Frank's BVN)
+- Valid means of identification (passport, driver's license, or National ID)
+- Proof of address
+- Business description + supporting documents
+
+Reference: https://support.paystack.com/en/articles/2123970
+
+**Timeline:** 24-48 business hours from complete documentation submission to live transaction approval.
+
+**Configuration approach (matches D-129 sequencing):**
+- One-time payments (reveal credits, listing boosts): Initialize Transaction API
+- Recurring subscriptions (Buyer Pro, Seller Pro): Subscription API
+- Both work in same integration
+
+**Webhook setup:** Standard configuration with signature verification mandatory.
+
+**Marketplace-specific:** "No additional requirements apply" for ShowMePrice's merchant model (own services, not escrow/splits). Confirms D-125 §2.3 (No Custody) framing aligns with Paystack's compliance approach.
+
+### Resolution path
+
+1. **KYB documentation submission** (1-2 weeks): Frank assembles documents, submits via Paystack onboarding
+2. **KYB approval** (24-48 hours after submission): Account activated for live transactions
+3. **One-time payment integration** (Phase 2 / Marketplace Learning entry per D-129): Initialize Transaction API + webhook handlers
+4. **Subscription integration** (Phase 3 / Trust Intelligence per D-129): Deferred
+
+### Severity rationale
+
+MEDIUM. Paystack is operationally feasible within 24-48 hours of KYB submission. NOT a private beta launch blocker — beta launches with reveal credits feature in UI but credits manually granted free per D-129 Phase 1 sequencing.
+
+### Strategic positioning preserved
+
+Paystack confirmed marketplace model is compliance-clean because ShowMePrice deliberately avoids escrow, splits, and custody. The "simple internally" architecture (D-125) is operational advantage at v2 scale.
+
+Opened 2026-05-25; updated 2026-05-29 with Paystack Developer Relations response.
+
 ## Resolved or superseded
 
 ### K-052 — /marketplace and /categories/[slug] Supabase queries have no try/catch — network blip surfaces as Cloudflare "Application error" — RESOLVED via Stage 2.C Commit 11
