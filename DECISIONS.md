@@ -2984,3 +2984,150 @@ Private beta stays **free-with-limit.** This is consistent with D-129 — paymen
 
 **Operational consequence:** the reveal-action code (when built) must implement both the counter decrement AND the per-seller dedup check. Naive "decrement on every reveal" violates this decision.
 
+## D-134 — Seller eligibility: informal/unregistered sellers welcome; trust via verification stack, not CAC
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-032 (Verification hard gate), D-074 (Vendor selection — Korapay deferred), D-077 (Manual fallback during Korapay delay), D-088 (Founding Seller offer), D-112 (Trust-first positioning), D-114 (Anti-abuse operating policy), D-128 (Four-Phase Marketplace Lifecycle), D-131 (Seller WhatsApp OTP-proven before revealable), K-061 (Admin queue deferred Stage 3+)
+**Investigation provenance:** the LIVE / PARTIAL / NOT-PRESENT status of each mechanism below was verified against the codebase via two read-only investigations in this session (verification-stack inventory + listing-moderation / buyer-reporting status check) — not assumed from documentation.
+
+### The principle
+
+ShowMePrice is a Nigerian C2C marketplace serving informal and unregistered sellers as a **core market, not an edge case.** Most Nigerian small businesses operate without CAC registration; requiring it would exclude the very sellers we built the platform to serve.
+
+**CAC registration is NOT required to:**
+- Create a buyer account
+- Create a seller account
+- Publish listings
+- Receive buyer messages
+- Reveal contact details to buyers
+
+Trust between buyers and sellers is established via the layered verification stack below, not via registry membership.
+
+### Platform's own CAC registration (distinct concern)
+
+**SHOWMEPRICE-NG LIMITED is CAC-registered** — this is the **platform's** credibility to its sellers (and to regulated vendors like Paystack, per D-074 + Stage 2.C closure), not a credential demanded of individual sellers. The platform's compliance posture (legal entity, business bank, vendor KYB) exists so that we can stand behind sellers who don't have those resources themselves.
+
+### Verification stack — current state by mechanism
+
+Status reflects what is actually built and reachable in code today, per the investigations referenced above:
+
+| # | Mechanism | Status | Where it lives | Role in the trust stack |
+|---|---|---|---|---|
+| 1 | **Profile phone OTP** (Mocean SMS, signup gate) | **LIVE** | `otp-actions.ts` + `mark_phone_verified` RPC + `/verify-phone` UI. Production-verified to real Nigerian MTN number 2026-05-28 (K-066 RESOLVED). | First-tier trust signal: every account holder has a Nigerian phone number we can deliver to. |
+| 2 | **Manual seller identity verification** (NIN string + ID document + selfie + address, admin-reviewed) | **LIVE — PRIMARY HARD GATE** | `/sell/verify` (seller) + `/admin/verifications` (admin) + `seller_verifications` table + `verification.ts` state machine. Phase C.5 hard gate (D-032). | The load-bearing live trust mechanism today: until a seller passes manual review, their listings are RLS-hidden from public marketplace. This is the actual buyer-facing "verified seller" promise. |
+| 3 | **Seller WhatsApp OTP** (alternate-number verify for buyer reveal) | **LIVE** (as of Stage C) | `seller-otp-actions.ts` + `mark_seller_whatsapp_verified` RPC + `BecomeSellerForm` toggle + `SellerWhatsappRecoveryBanner`. Commits `18a6702` (Stage A schema/RPC), `419cef2` (Stage B actions), `eba2497` (Stage C form/orchestration), `1e8d217` (recovery banner closing degraded-state dead-end). D-131 invariant: no unverified WhatsApp may ever be revealable. | Ensures the contact-reveal target is a number the seller provably controls — preventing the "revealed but wrong number" failure mode at network scale beyond Frank's first-circle. |
+| 4 | **Public-listing visibility gating via RLS** | **LIVE** | RLS policy on `products`: rows where the seller's `businesses.verification_status != 'verified'` are filtered out of all public marketplace / category / search queries. D-032 hard gate. | Per-seller, not per-listing. Approval flips ALL the seller's listings public simultaneously; rejection hides them all. |
+| 5 | **Buyer reporting / abuse flagging** | **PARTIAL** | Submission LIVE for `target_type='listing'` (`ListingReportButton` on listing detail) + `target_type='message'` (`reportMessage` action + `ReportImageSheet`). `reports` table polymorphic. User-as-target submission NOT BUILT. Admin triage queue NOT BUILT (K-061 — deferred Stage 3+). | Self-serve buyer recourse exists at submission time for two of three target types; admin triage is the gap the next build will close. |
+| 6 | **Per-listing admin moderation** (approve/reject/hide individual listings) | **NOT PRESENT** | No admin route, no admin code touching `products`, no `hidden`/`flagged` values in `product_status` enum, no action exists. The `admin_action_log` enum vocabulary includes `'hide_listing'` but no code path invokes it. | The next build closes this gap. Until then, moderation operates at the seller level (mechanism #4) — admin can suspend a whole seller via `/admin/verifications`, but cannot hide a single listing belonging to an otherwise-verified seller. |
+| 7 | **Automated NIN verification (Korapay Identity API)** | **PLANNED-NOT-BUILT** | `src/lib/identity/` interface + `KorapayNinVerifier` skeleton; `verifyNin` throws `NotImplementedError`; zero production callers; `kyc_documents` table empty. Gated on Korapay Live Mode approval per D-077; the manual flow (mechanism #2) is the live fallback. | Future automation of the manual NIN review. Not blocking; manual is the live path. |
+| 8 | **Email verification flag in `profiles.verification_status` array** | **PARTIAL / NOT REFLECTED IN APP STATE** | Supabase Auth email-confirmation is ON (D-023) — confirmation is enforced via `auth.users.email_confirmed_at` (Supabase-managed). The string `'email_verified'` exists in `profiles.verification_status` vocabulary as a planned value (single comment reference), but **no code writes it** into the array. Any app-level check `verification_status.includes('email_verified')` would always be false today. | Functionally adequate (Supabase enforces confirmation), but the app-level array is not the source of truth for email-verified status. Not a trust-signal surface today. |
+| 9 | **BVN verification** | **PLANNED-NOT-BUILT** | Per D-076: deferred to Phase F+. No interface, no implementation, no destination beyond a planned string in `verification_status` vocabulary. | Higher-trust tier for future high-value flows. Not in Phase E scope. |
+| 10 | **Google / Facebook OAuth verification** | **PLANNED-NOT-BUILT** | Per D-022. `auth_providers` array allows the future values but no integration. | Phase F+ convenience, not a trust mechanism per se. |
+
+### CAC as an optional FUTURE Pro/premium feature (recorded, not built)
+
+If a seller wants to display a "CAC verified" badge as a status signal — for example, to differentiate themselves as a formal business — that may ship at a future date as a Pro/premium feature with the following invariants:
+
+1. **Optional, never required.** Sellers who choose not to register stay first-class on the platform.
+2. **Verified against the live CAC registry**, never self-declared. A seller types in their RC number; the platform queries the CAC registry (or an authorized intermediary) and confirms the number resolves to an active registration whose director/signatory matches the seller's identity-verified name (mechanism #2).
+3. **Distinct UI badge** from the existing "Verified" badge (which corresponds to mechanism #2, identity verification). The two are independent trust signals; a seller can be identity-verified without being CAC-registered.
+4. **Build is deferred.** No schema, no API integration, no UI surface in Phase E. Will require its own banked design when the time comes (CAC registry access vendor, RC-number → director matching rules, badge UX, pricing if Pro-gated).
+
+### Why the layered stack works in place of CAC
+
+- The manual identity review (mechanism #2) catches the same harm CAC is sometimes proposed to address: ensuring a real Nigerian human is accountable for the listings. NIN + government ID + selfie + address establish that more directly than CAC does.
+- The seller-WhatsApp OTP (mechanism #3) ensures the revealed contact is reachable.
+- The RLS gate (mechanism #4) means unverified sellers are not visible to buyers — the trust promise to buyers is preserved without filtering on company-registration status.
+- Per-listing moderation (mechanism #6, planned) + buyer reporting triage (mechanism #5 completion, planned) close the remaining loop: a verified seller behaving badly on a specific listing can be addressed at listing level, not just at account level.
+
+### Operational consequences
+
+- **Marketing/copy must not imply CAC registration is expected of sellers.** "Verified sellers" refers to mechanism #2, not CAC.
+- **Onboarding flows do not collect CAC numbers.** No field, no schema column. (Confirmed via investigation: no `cac_number`/`rc_number`/`business_registration` column anywhere in the codebase.)
+- **Investor/founder communications** should distinguish the platform's own CAC registration (SHOWMEPRICE-NG LIMITED) from sellers' status. The platform is registered so it can stand behind unregistered sellers, not so it can require them to register.
+- **When pre-launch listings include a small number of formal businesses, that's fine** — they coexist with informal sellers, and the marketplace surface treats them identically (both subject to the same verification stack).
+
+### Anti-pattern
+
+> "We require sellers to be CAC-registered for trust."
+
+This excludes the core Nigerian C2C market. It also confuses **registry membership** with **identity accountability** — the latter is what trust actually demands, and the manual verification flow already delivers it.
+
+## D-135 — Referral / incentive approach: relational now, structured later
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-088 (Founding Seller offer — first-100 perks already exist), D-114 (Anti-abuse operating policy), D-128 (Four-Phase Marketplace Lifecycle — Phase 1 Private Beta observation goals), D-129 (Payment Integration Sequencing — payment infrastructure dormant in Phase 1)
+
+### Private beta (current phase per D-128) — no formal program
+
+Phase 1 Private Beta operates on **relational incentives, not a structured referral mechanism.** Specifically:
+
+- **Personal thank-yous** from Frank to early invitees who refer further invitees. No system mediates this — it's a relationship, not a feature.
+- **Optional surprise airtime gifts** when an invitee meaningfully helps the platform (referring a successful seller, surfacing a useful bug, etc.). Surprise = deliberately not promised; the asymmetry is the point. No automation, no schedule, no entitlement.
+- **Founding-seller status** as the early-join incentive: the first 100 verified sellers receive permanent founding badge + 6 months free Pro Seller (period starts at Phase F launch) + grandfathered ₦7,500/mo Pro Seller pricing for life. **This already exists in schema** — `businesses.is_founding_seller`, `founding_seller_granted_at`, `grandfathered_pro_price_kobo` (per D-088). Grants run at Phase F launch, not Phase E.
+
+**Why no formal program now:** Phase 1's goal is **trust-recurrence observation**, not growth-hacking (per D-128's explicit Phase 1 anti-patterns). A structured referral program in this phase would:
+- Optimize for referral throughput before we know whether the underlying experience is worth recommending.
+- Create incentive structures we'd then have to maintain or unwind.
+- Pull onboarding away from the small, controlled invitee cohort the phase requires.
+
+### Post-beta — structured double-sided airtime referral (recorded as future design, not built)
+
+When the platform transitions past Phase 1 (per D-128's transition criteria, observed not date-driven), a **structured referral program** ships with these shape constraints:
+
+1. **Double-sided airtime reward.** Both the referrer and the new seller receive airtime when the referral genuinely activates. The amount is **left open** at banking — calibration depends on observed cost-per-quality-seller from Phase 1; sized later. Airtime (not cash, not credits) keeps the reward outside the payment infrastructure (per D-129 — payment integration sequencing) and within Nigerian network operator rails that all sellers can use.
+
+2. **Activation-gated, not signup-gated.** Reward triggers only when the referred seller (a) phone-verifies, (b) passes manual identity verification (mechanism #2 from D-134), AND (c) lists their first product. Signup alone earns nothing — prevents fake-seller harvesting against the airtime budget.
+
+3. **Anti-abuse — one reward per phone-verified seller.** Tied to the seller's verified Nigerian phone, not to email or device. A single phone number can be the *new seller* side exactly once across the platform's lifetime. The referrer side is also one-per-pair (no referring the same person twice across multiple devices). Anti-abuse posture per D-114.
+
+4. **Build deferred.** No schema, no UI, no action code in Phase E. The first build needs its own banked design — referral codes / shareable links UX, airtime vendor (likely the same SMS provider rails or a dedicated airtime API), reward issuance lifecycle, abuse-monitoring queue, attribution model (last-click vs first-click), edge cases (refund / chargeback / suspended seller).
+
+### Operational consequences
+
+- During Private Beta, **resist** building referral infrastructure even when invitees ask for it. The right answer is "we'll send airtime when something meaningful happens; that's all we're promising right now." This preserves D-128's observation-not-growth posture.
+- When designing the future structured program, **start with the activation gate** (mechanism #2 manual verification + first listing) and work backward into the UX — the gate is the load-bearing constraint, not the airtime amount or the share UI.
+- The platform's existing `businesses.is_founding_seller` field is the only seller-incentive piece in schema. The future referral program will need new tables/columns; this is acknowledged future work.
+
+### Anti-patterns
+
+- "Refer 5 friends, get ₦5,000 airtime" — pre-launch growth-hacking, violates D-128 Phase 1.
+- Referral rewards on signup completion alone — fake-seller harvesting attack vector, violates D-114 / D-114 anti-abuse model.
+- Building a points/credits referral economy — pulls into payment infrastructure D-129 forbids in Phase 1.
+
+## D-136 — City/area required at seller setup as a trust signal
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** Sprint 3 / Gap D (original optional `businesses.city_area` introduction), ACTUAL_SCHEMA businesses notes (app-strict/DB-permissive split precedent on `products.city_area`), D-134 (Trust stack — supplements the verification mechanisms with an operational-location signal)
+**Implementation:** Shipped in Stage C, commit `eba2497` — `becomeSellerAction` rejects empty `cityArea`; `BecomeSellerForm` drops "(optional)" label and adds the `required` attribute.
+
+### The decision
+
+The `city_area` field on the seller-setup form is **required** at onboarding. A seller cannot create their business without specifying where they operate from.
+
+### Rationale
+
+Buyer-facing trust is partly about reachability — "is this seller in my city / a city I can travel to / a delivery range that makes sense for the item." An unspecified `city_area` is a friction signal that contradicts the trust stack D-134 establishes. We collect it because buyers ask the question; the seller answers it once at onboarding rather than the platform leaving it blank.
+
+This refines the Sprint 3 / Gap D framing where `city_area` was introduced as optional on `businesses` (with a "no banked requirement" comment in code). That framing is now superseded: the column stays nullable in the DB for legacy tolerance, but the seller-setup app path enforces it.
+
+### App-strict / DB-permissive split
+
+This decision deliberately uses the **app-strict / DB-permissive** pattern consistent with how `products.city_area` is handled in this codebase:
+
+- **DB column:** `businesses.city_area` remains **nullable** (no NOT NULL constraint added). Legacy rows from before this decision are NULL and unaffected; backfill happens organically as those sellers re-edit their business.
+- **App layer (`becomeSellerAction`):** required at onboarding. Empty → reject with field-level error before any DB write.
+- **App layer (`BecomeSellerForm.tsx`):** `<Input required>` on the field. Label drops the "(optional)" suffix.
+- **Future:** `updateBusinessAction` (manage-business view, where existing sellers edit their business) is **NOT yet aligned with this requirement** — it currently permits empty/blank `city_area` updates because the column is optional in that path. A small follow-up commit should tighten that to match the create-flow requirement, so existing sellers can't blank it back out. **Flagged as a follow-up**, not blocking.
+
+### Why DB column stays nullable
+
+- **Legacy tolerance.** Sellers from before this decision exist in production with `city_area IS NULL`. Adding NOT NULL would require a backfill migration with no good default value.
+- **Operational reality.** Some seller types may legitimately not have a single "city / area" (multi-state distributors, etc.). The current product is Nigerian C2C focused; if such edge cases emerge, app-layer policy can flex without a schema change.
+- **Same precedent.** `products.city_area` follows the same pattern per ACTUAL_SCHEMA — app-required on create/edit, DB nullable. Consistency reduces cognitive load for future readers.
+
+### Anti-pattern
+
+- Adding NOT NULL to `businesses.city_area` without a backfill plan — would error on the migration against legacy rows.
+- Letting `updateBusinessAction` permit blank `city_area` indefinitely — undermines the create-flow requirement; **flagged as a follow-up to tighten**.
+
