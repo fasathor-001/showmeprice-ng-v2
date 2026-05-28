@@ -14,6 +14,8 @@
 >
 > **Phase E — Stage 2.D profile protected-columns lockdown applied (E.2.14.0, D-017 + D-133), V-verified end-to-end 2026-05-28:** new SECURITY DEFINER trigger function `freeze_profile_protected_columns()` (`search_path=public`-pinned, `REVOKE EXECUTE FROM PUBLIC`) + `profiles_freeze_protected` BEFORE UPDATE trigger that blocks owner/admin writes to eight columns (`display_name`, `phone`, `tier`, `tier_started_at`, `tier_expires_at`, `signup_free_reveals_remaining`, `pro_activated_at`, `is_disabled`) unless the LOCAL GUC `app.profile_system_write_authorized = 'true'` is set (mirrors the E.2.2.0 `app.role_change_authorized` precedent for legit SECURITY DEFINER bypasses). `profiles.signup_free_reveals_remaining` default changed from `1` → `3` (D-133 — beta lifetime grant; existing rows unaffected, applies to new INSERTs). The existing `freeze_profile_role` trigger is untouched (still carries the E.2.2.0 admin-bootstrap GUC). `verification_status` + `auth_providers` deliberately excluded from this lockdown — they're written by the live `mark_phone_verified` RPC which doesn't set the bypass GUC; freezing them would break production phone verification (K-066). Table count unchanged at **43**.
 >
+> **Phase E — Stage 1 admin tools Step 1 applied (E.2.15.0), 2026-05-28:** new `profile_admin_changes` audit table (id, target_user_id RESTRICT-FK → profiles, granter_id SET-NULL-FK → profiles, action text CHECK in `{'phone_changed','location_changed'}` — extensible via ALTER for future `'email_changed'`/`'account_suspended'`/`'account_deleted'`, previous_value/new_value text nullable, reason text NOT NULL, created_at) + index `profile_admin_changes_target_idx` on (target_user_id, created_at DESC); RLS enabled with single SELECT policy `profile_admin_changes_admin_read` using `public.is_admin(auth.uid())` — no INSERT/UPDATE/DELETE policy (writes happen only via the Step 2 SECURITY DEFINER RPCs `admin_change_user_phone` / `admin_change_user_location`, which ship separately, or via service_role). Mirrors `admin_role_changes` (E.2.2.0) shape — separate purpose-specific table to avoid the `admins`-table dependency that D-081 admin-model unification defers. Applied via Supabase SQL Editor as `postgres` after `RESET ROLE`. Table count 43 → **44**.
+>
 > If you change the schema (new tables, new columns, new policies, new triggers, new enums), update this file in the same commit.
 
 ---
@@ -622,6 +624,34 @@ Append-only price-change log on `products`. Written by AFTER UPDATE OF `price_ko
 
 **Trigger source:** `products_price_change_log` (AFTER UPDATE OF price_kobo) — writes one row per actual price change. Per D-071, `changed_by` is populated from `NEW.seller_id` (best-effort attribution; admin overrides captured separately in `admin_action_log`).
 
+### `profile_admin_changes`
+
+Append-only audit of admin actions on profile fields (Phase E Stage 2 / Stage 1 admin tools Step 1 / E.2.15.0). Mirrors `admin_role_changes` shape — separate purpose-specific table to avoid the `admins`-table dependency that admin-model unification (D-081) defers. Written ONLY by SECURITY DEFINER RPCs (`admin_change_user_phone` / `admin_change_user_location` — Step 2, ships separately) or service_role; there is no API-level INSERT/UPDATE/DELETE policy. RLS enabled with an admin-only SELECT policy.
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| id | uuid | NO | gen_random_uuid() |
+| target_user_id | uuid → profiles(id) RESTRICT | NO | — |
+| granter_id | uuid → profiles(id) SET NULL | YES | — (NULL if the acting admin's profile is later removed) |
+| action | text | NO | — (CHECK `IN ('phone_changed', 'location_changed')` — Step 1 enum; future stages extend to add `'email_changed'`, `'account_suspended'`, `'account_deleted'`) |
+| previous_value | text | YES | — (free-form; phone = canonical E.164 sans `+`; location = state slug or name. NULL for future no-value actions) |
+| new_value | text | YES | — (same shape as `previous_value`) |
+| reason | text | NO | — (admin-supplied justification; length checks live in RPC bodies, mirroring E.2.2.0) |
+| created_at | timestamptz | NO | now() |
+
+**Constraints:**
+- `profile_admin_changes_target_user_id_fkey` (→ profiles, ON DELETE RESTRICT)
+- `profile_admin_changes_granter_id_fkey` (→ profiles, ON DELETE SET NULL)
+- `profile_admin_changes_action_check` CHECK (action IN ('phone_changed', 'location_changed'))
+
+**Indexes:**
+- `profile_admin_changes_target_idx` btree on (target_user_id, created_at DESC) — per-user history fetch for the admin user-detail page
+
+**Notes:**
+- Drizzle mirror at `src/db/schema/profile_admin_changes.ts` (the CHECK lives in SQL only, per mirror convention).
+- Future CHECK extension is purely an `ALTER TABLE ... DROP CONSTRAINT ... ADD CONSTRAINT ...` (text values; no data migration needed).
+- RESTRICT on `target_user_id` is forward-compatible with the deferred K-004 account-deletion flow — that flow will need to explicitly archive these rows before allowing the delete to proceed.
+
 ### `product_images`
 
 Image references for product listings. Stored as `storage_path` strings pointing at Supabase Storage.
@@ -1061,6 +1091,10 @@ Policy bodies below cover the Phase A/C.5 tables + `conversations` + `messages`.
 - `nigerian_states_admin_write` (ALL): admin only
 - `nigerian_states_public_read` (SELECT): everyone
 
+### `profile_admin_changes` (Phase E.2.15.0 / Stage 1 admin tools Step 1)
+- `profile_admin_changes_admin_read` (SELECT): `public.is_admin(auth.uid())` — admins read the audit trail
+- No INSERT/UPDATE/DELETE policy — append-only from the API's perspective; writes happen only via the `admin_change_user_phone`/`admin_change_user_location` SECURITY DEFINER functions (Step 2) or service_role.
+
 ### `product_images`
 - `product_images_admin_all` (ALL): admin only
 - `product_images_public_read` (SELECT): EXISTS product with `status = 'active'`
@@ -1407,6 +1441,7 @@ All Phase E.1.x SQL blocks shipped with pre-flight diagnostics, BEGIN/COMMIT-wra
 | E.2.7.0 | D-120 registered payment details: `seller_payout_accounts` table (one row per seller, encrypted account number via Web Crypto AES-256-GCM, key in `PAYMENT_DETAILS_ENCRYPTION_KEY`) + `payment_detail_shares` table (per-conversation share events with jsonb snapshot + supersession). 5 RLS policies on shares (seller/buyer SELECT, seller INSERT, buyer/seller UPDATE) + 3 on payout accounts. Closes K-009 (the legacy `seller_verifications.bank_*` placeholders are now dead-code-in-data). | §0 + §1 DO-block assertions + §2 paste-back (2026-05-23) |
 | E.2.11.0 | Stage A — seller-WhatsApp inline OTP foundation. `phone_verifications.purpose` (text, NOT NULL DEFAULT `'profile_phone'`, CHECK in `{'profile_phone','seller_whatsapp'}`; existing rows backfilled via DEFAULT) + partial index `phone_verifications_user_purpose_unconsumed_idx` on `(user_id, purpose, created_at DESC) WHERE consumed_at IS NULL`. `businesses.seller_whatsapp` (text, nullable, CHECK NULL-or-`^234\d{10}$`) + `businesses.seller_whatsapp_verified_at` (timestamptz, nullable). SECURITY DEFINER fn `mark_seller_whatsapp_verified(uuid, uuid)`: validates row+user+purpose+unconsumed, looks up business via UNIQUE `owner_id`, writes `seller_whatsapp = v_row.phone` (number read from the verified row, never a parameter) + `seller_whatsapp_verified_at = now()`, consumes the OTP row. Does NOT touch `profiles.*`. Triple-REVOKE'd to `service_role` only. The existing `mark_phone_verified` flow is unchanged. **Applied 2026-05-28** via Supabase SQL Editor running as `postgres` (after `RESET ROLE`) — verified §2a–§2h paste-back: purpose column live, partial index present, businesses columns + CHECK present, function `prosecdef=true` + `proconfig={search_path=public}`, ACL `{postgres=X/postgres, service_role=X/postgres}`. Migration file written + committed in the same commit as this entry — file-vs-applied-state reconciled. | §0 + §1 BEGIN/COMMIT + §2 paste-back (2026-05-28) |
 | E.2.13.0 | Stage 2 listing-moderation foundation. `products.hidden_at timestamptz` (nullable) + RLS policy updates (`products_public_read_active` + `product_images_public_read` both now require `hidden_at IS NULL`) + new SECURITY DEFINER trigger function `freeze_product_hidden_at` + `products_freeze_hidden_at` BEFORE UPDATE trigger (admin-only writes; non-admin attempts raise 42501). Modern Pattern B shape: `SET search_path = public`, `REVOKE EXECUTE FROM PUBLIC`, schema-qualified `public.is_admin()`. Applied 2026-05-28 via Supabase SQL Editor as `postgres` after `RESET ROLE`. | §0 + §1 BEGIN/COMMIT + §2 paste-back (2026-05-28) |
+| E.2.15.0 | Stage 1 admin tools Step 1 — `profile_admin_changes` audit table (id, target_user_id RESTRICT-FK, granter_id SET-NULL-FK, action text CHECK in `{'phone_changed','location_changed'}`, previous_value/new_value text nullable, reason text NOT NULL, created_at) + `profile_admin_changes_target_idx` on (target_user_id, created_at DESC) + RLS enabled with single SELECT policy `profile_admin_changes_admin_read` using `public.is_admin(auth.uid())` — no INSERT/UPDATE/DELETE policy. Mirrors `admin_role_changes` (E.2.2.0) shape; avoids the `admins`-table dependency that D-081 admin-model unification defers. Step 2 (SECURITY DEFINER RPCs `admin_change_user_phone` / `admin_change_user_location`) ships separately. Applied 2026-05-28 via Supabase SQL Editor as `postgres` after `RESET ROLE`. Table count 43 → **44**. | §0 + §1 BEGIN/COMMIT + §2 structural paste-back (columns, CHECK, FKs, index, RLS enabled+count, policy details, admin_role_changes sanity); positive/negative INSERT-attempt controls dropped from the saved file — under the deployed RLS every direct write hits 42501 before the CHECK runs, which is the design intent (writes go through Step 2's SECURITY DEFINER RPCs) (2026-05-28) |
 | E.2.14.0 | Profile protected-columns lockdown + D-133 default fix. New SECURITY DEFINER trigger function `freeze_profile_protected_columns` + `profiles_freeze_protected` BEFORE UPDATE trigger blocking owner/admin writes to 8 columns (`display_name`, `phone`, `tier`, `tier_started_at`, `tier_expires_at`, `signup_free_reveals_remaining`, `pro_activated_at`, `is_disabled`) unless LOCAL GUC `app.profile_system_write_authorized = 'true'` is set (mirrors E.2.2.0 admin-bootstrap GUC pattern). Pattern B trigger shape (search_path pinned, REVOKE FROM PUBLIC, ERRCODE 42501). `profiles.signup_free_reveals_remaining` default 1 → 3 (D-133 — beta lifetime grant; existing rows unaffected). `freeze_profile_role` untouched (K-021 still deferred). `verification_status` + `auth_providers` deliberately excluded — `mark_phone_verified` (K-066 live path) doesn't set the bypass GUC; their hardening is a deferred follow-up. Applied 2026-05-28 via Supabase SQL Editor as `postgres` after `RESET ROLE`. | §0 + §1 BEGIN/COMMIT + §2 with positive/negative/bypass live-fire controls (ROLLBACK-wrapped) (2026-05-28) |
 
 ---
