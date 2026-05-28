@@ -16,6 +16,12 @@ import { Resend } from "resend";
 export const NOTIFICATIONS_FROM = "ShowMePrice <notifications@showmeprice.ng>";
 export const NOTIFICATIONS_REPLY_TO = "support@showmeprice.ng";
 
+// Destination inbox for admin-direction notifications (user submission →
+// admin alert). Brand-tied, not deploy-tied — matches the precedent of
+// NOTIFICATIONS_FROM / NOTIFICATIONS_REPLY_TO being module constants
+// rather than env vars. First consumer: dispatchAdminVerificationSubmissionEmail.
+export const SUPPORT_NOTIFICATIONS_TO = "support@showmeprice.ng";
+
 let cachedClient: Resend | null = null;
 
 /**

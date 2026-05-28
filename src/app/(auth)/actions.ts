@@ -29,6 +29,7 @@ import {
 } from "@/lib/categorySpecs";
 import { isLaunchCategory } from "@/lib/categories";
 import { dispatchVerificationDecisionEmail } from "@/lib/notifications/send-verification-decision-notification";
+import { dispatchAdminVerificationSubmissionEmail } from "@/lib/notifications/send-admin-verification-submission-notification";
 
 export interface ActionResult {
   errors?: ValidationErrors & {
@@ -901,7 +902,11 @@ export async function submitVerificationAction(
     // Banking columns are NOT NULL from Phase A's banking-focused design
     // (K-009 tracks the technical debt). Insert placeholders for now;
     // Phase G will collect real banking info during Pro upgrade.
-    const { error: insertError } = await supabase
+    //
+    // .select("id").single() captures the just-inserted submission id so
+    // the admin-alert dispatcher can construct the /admin/verifications/{id}
+    // deep-link in the email body.
+    const { data: inserted, error: insertError } = await supabase
       .from("seller_verifications")
       .insert({
         business_id: business.id,
@@ -924,11 +929,30 @@ export async function submitVerificationAction(
         selfie_path: selfiePath,
 
         status: "pending",
-      });
+      })
+      .select("id")
+      .single();
 
-    if (insertError) {
-      return { errors: { _form: insertError.message } };
+    if (insertError || !inserted) {
+      return {
+        errors: {
+          _form: insertError?.message ?? "Couldn't record verification",
+        },
+      };
     }
+
+    // Best-effort admin alert. Fire-and-forget: the dispatcher is wrapped
+    // in try/catch/swallow and never throws; the seller's submission
+    // succeeds even if the email path fails. The /admin/verifications
+    // queue is the source of truth — this email is just a ping so the
+    // admin doesn't have to poll.
+    await dispatchAdminVerificationSubmissionEmail({
+      submissionId: inserted.id as string,
+      ownerId: user.id,
+      businessId: business.id,
+      businessName: business.business_name as string,
+      isResubmission,
+    });
   } catch (e) {
     if (
       e &&
@@ -952,8 +976,8 @@ export async function submitVerificationAction(
   // Pages edge with 530. Server components re-render on navigation anyway.
   // First-vs-resubmission is determined by the destination page reading the
   // seller_verifications row count, so no toast key needed in the URL.
-  // (isResubmission is computed above only for potential future use / logs.)
-  void isResubmission;
+  // (isResubmission is also consumed by the admin-alert dispatcher above —
+  // used in the subject prefix + body framing.)
   redirect("/sell/verify/submitted");
 }
 
