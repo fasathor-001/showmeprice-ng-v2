@@ -46,22 +46,15 @@ export default function CookiePolicyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-slate-900 mb-4">Preference Cookies</h2>
             <p className="text-slate-700 leading-relaxed">
-              We may use cookies to remember your preferences, such as your preferred language or notification
-              settings. You can disable these cookies, but some features may not work as smoothly.
+              We do not currently use preference cookies. If this changes in the future, we will update this policy.
             </p>
           </section>
 
           {/* Analytics */}
           <section>
             <h2 className="text-2xl font-semibold text-slate-900 mb-4">Analytics Cookies</h2>
-            <p className="text-slate-700 leading-relaxed mb-4">
-              We use basic analytics to understand how many people use ShowMePrice and which pages are visited most.
-              This helps us fix bugs and improve the experience. Analytics data does not identify you personally—we
-              only see statistics like page views and device type.
-            </p>
             <p className="text-slate-700 leading-relaxed">
-              If you prefer not to be counted in analytics, you can disable analytics cookies in your browser settings
-              or use a &quot;do not track&quot; browser feature (if supported).
+              We do not currently use analytics cookies. If this changes in the future, we will update this policy.
             </p>
           </section>
 

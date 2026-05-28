@@ -33,7 +33,9 @@ export function Footer() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-start">
             {/* Brand */}
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">ShowMePrice.ng</h2>
+              <h2 className="text-lg font-bold text-white mb-2">
+                ShowMePrice<span className="text-teal-400">.ng</span>
+              </h2>
               <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wide">
                 Nigeria&apos;s trust-first marketplace.
               </p>

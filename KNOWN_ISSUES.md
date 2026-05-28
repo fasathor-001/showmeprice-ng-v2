@@ -282,6 +282,32 @@ Phase 1 ships in D-119 / Stage 2.B Commit 1.6: data-driven `filter_rules` additi
 - **Phase 3 (post-private-beta)** — heuristic risk scoring for ambiguous cases (e.g. a message with 3+ WARN flags should escalate even if no single rule blocks).
 - **Phase 4 (Year 2+)** — ML classification trained on the real message corpus accumulated during private/public beta.
 
+### K-065 — Legal pages pending Nigerian lawyer review (medium)
+
+**Severity:** medium. Private beta launch blocker status: **placeholder content live, lawyer review pending**.
+
+**Scope:** The `/terms` and `/privacy` pages contain fresh minimal private-beta placeholder content written in plain language. The content is **honest and accurate to current platform behavior** (no escrow, no payment processing, real verification signals, etc.) but has NOT been reviewed by a Nigerian lawyer.
+
+**Why this matters:** ShowMePrice is a Nigerian platform serving Nigerian buyers and sellers. Terms and privacy policies that comply with Nigerian law + NDPR expectations are a fiduciary responsibility before public launch (post-private-beta).
+
+**Current state (Commit e3bd07e + this commit):**
+- `/terms` — 10 sections covering what ShowMePrice is, no-escrow model, verification meaning (not guarantee), acceptable use, buyer judgment, reporting, availability, limitation of liability, change notice, contact. Plain language, early-access appropriate.
+- `/privacy` — 9 sections covering account info (phone + email required), seller verification details, listing info, messages, technical info, usage (no sell), payment non-involvement, visibility (public profiles + service providers), protection, choices, data location, changes, contact. Plain language, reflects actual collection.
+- `/cookie-policy` — corrected to accurately state: essential cookies (auth/session, real), preference cookies (NOT currently used), analytics (NOT currently used), third-party (Google Fonts, real).
+- Footer links to `/terms` and `/privacy` are now live.
+
+**Resolution (post-private-beta, pre-public launch):** Engage a Nigerian lawyer to:
+1. Audit both pages for NDPR compliance (NDPA / Data Protection Regulation 2019)
+2. Add/expand sections if required by Nigerian law (e.g., data controller/processor declaration, legal basis, third-country transfer language, rights of data subjects, DPA contact)
+3. Expand warranty disclaimers and liability limitations to Nigerian legal standards
+4. Validate "verification does not guarantee quality/honesty" language against consumer protection liability
+
+The placeholder content shipped in private beta is acceptable for early sellers who are personally known to Frank. It is not ready for 1000+ anonymous sellers/buyers.
+
+**Related:** D-126 (communication doctrine — plain language for Nigerian users), private beta launch checklist.
+
+**Surfaced:** 2026-05-28 during production legal-pages audit (K-issue generated to track lawyer review before public launch).
+
 **Severity:** medium. Phase 1 (D-119) raises the filter bar significantly but does not close determined-adversary bypass paths. Public beta cannot ship without Phase 2.
 
 **Resolution scope (Phase 2):** new `src/lib/messaging/normalize.ts` module invoked from `runMessageFilter` BEFORE regex matching. Unit-test coverage for the obfuscation patterns the regex rules don't catch. Re-run vitest with normalization on the existing ~40 D-119 cases to confirm no regressions.
