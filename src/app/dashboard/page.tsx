@@ -67,7 +67,7 @@ export default async function DashboardPage() {
             <p className="text-xs text-ink-600 mb-3">{user.email}</p>
             {profile?.phone && (
               <div className="flex items-center gap-2 flex-wrap text-xs text-ink-600">
-                <span>WhatsApp: +{profile.phone}</span>
+                <span>Phone: +{profile.phone}</span>
                 {isPhoneVerified(profile.verification_status) ? (
                   <Badge variant="verified">Verified</Badge>
                 ) : (
