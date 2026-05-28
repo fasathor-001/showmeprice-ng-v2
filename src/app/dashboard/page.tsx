@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { getVerificationState } from "@/lib/verification";
-import { isPhoneVerified } from "@/lib/auth";
+import { formatNigerianPhone, isPhoneVerified } from "@/lib/auth";
 import { SignOutButton } from "./SignOutButton";
 
 export const runtime = "edge";
@@ -67,7 +67,7 @@ export default async function DashboardPage() {
             <p className="text-xs text-ink-600 mb-3">{user.email}</p>
             {profile?.phone && (
               <div className="flex items-center gap-2 flex-wrap text-xs text-ink-600">
-                <span>Phone: +{profile.phone}</span>
+                <span className="tabular-nums">Phone: {formatNigerianPhone(profile.phone)}</span>
                 {isPhoneVerified(profile.verification_status) ? (
                   <Badge variant="verified">Verified</Badge>
                 ) : (

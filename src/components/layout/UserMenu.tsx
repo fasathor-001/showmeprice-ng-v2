@@ -115,6 +115,14 @@ export function UserMenu({ displayName, email, isAdmin = false }: UserMenuProps)
               </span>
             )}
           </Link>
+          <Link
+            href="/settings"
+            className="block px-4 py-3 text-sm text-ink-600 hover:bg-neutral-50 hover:text-ink"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            Settings
+          </Link>
           {isAdmin && (
             <Link
               href="/admin"
