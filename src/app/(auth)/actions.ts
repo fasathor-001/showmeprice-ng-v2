@@ -670,7 +670,12 @@ export async function updateBusinessAction(
     formData.get("businessDescription") ?? ""
   ).trim();
   const stateId = String(formData.get("stateId") ?? "");
-  // Sprint 3 / Gap D.6: business operating location (optional, max 100).
+  // D-136 follow-up (bundled with verification-sequencing): city / area is
+  // REQUIRED on update, matching the create-time requirement in
+  // becomeSellerAction. Without this tightening, an existing seller could
+  // blank city_area via the manage form — which would then trip the
+  // verification-sequencing gate ("complete your business details first")
+  // and create an incoherent loop where saving doesn't unstick them.
   const cityArea = String(formData.get("cityArea") ?? "").trim();
 
   const errors: UpdateBusinessErrors = {};
@@ -685,7 +690,8 @@ export async function updateBusinessAction(
 
   if (!stateId) errors.stateId = "State is required";
 
-  if (cityArea && cityArea.length > 100)
+  if (!cityArea) errors.cityArea = "City / area is required";
+  else if (cityArea.length > 100)
     errors.cityArea = "City / area is too long (max 100 characters)";
 
   if (Object.values(errors).some((v) => v)) return { errors };
@@ -706,7 +712,7 @@ export async function updateBusinessAction(
         business_name: businessName,
         description: businessDescription || null,
         state_id: stateId,
-        city_area: cityArea || null, // Sprint 3 / Gap D.6 (optional → NULL when empty)
+        city_area: cityArea, // D-136 follow-up: now required (validation above rejects empty).
       })
       .eq("owner_id", user.id);
 
@@ -830,7 +836,9 @@ export async function submitVerificationAction(
 
     const { data: business } = await supabase
       .from("businesses")
-      .select("id, verification_status")
+      .select(
+        "id, business_name, state_id, city_area, verification_status, seller_whatsapp_verified_at"
+      )
       .eq("owner_id", user.id)
       .maybeSingle();
 
@@ -838,6 +846,33 @@ export async function submitVerificationAction(
       return { errors: { _form: "You need a seller account first" } };
     if (business.verification_status === "verified") {
       return { errors: { _form: "Your account is already verified" } };
+    }
+
+    // Verification-sequencing gates (defense in depth — Layer C). The /sell
+    // page UI guides the seller through prerequisites (Layer A); the
+    // /sell/verify page redirects on incomplete state (Layer B); this guard
+    // catches a crafted POST against this action directly. All three layers
+    // fail closed.
+    const businessDetailsComplete =
+      business.state_id !== null &&
+      business.city_area !== null &&
+      typeof business.business_name === "string" &&
+      business.business_name.trim().length >= 2;
+    if (!businessDetailsComplete) {
+      return {
+        errors: {
+          _form:
+            "Complete your business details (city / area, state, business name) before starting verification.",
+        },
+      };
+    }
+    if (!business.seller_whatsapp_verified_at) {
+      return {
+        errors: {
+          _form:
+            "Verify your WhatsApp number before starting verification — buyers need a reachable contact.",
+        },
+      };
     }
 
     // Defense in depth: storage RLS already enforces folder-scoping via the

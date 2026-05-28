@@ -108,6 +108,23 @@ export default async function SellPage() {
   const recoveryVerifiedPhone =
     isPhoneVerifiedNow && profile?.phone ? profile.phone : null;
 
+  // Verification-sequencing prerequisite booleans (Layer A — guides the
+  // seller through what's missing before the "Start verification" /
+  // "Resubmit" button becomes available). Computed alongside
+  // verificationState (NOT inside it — D-134 stack + flagged scope: don't
+  // ripple changes through the 4 other call sites of getVerificationState).
+  // Layer B (/sell/verify redirect) and Layer C (submitVerificationAction
+  // guard) re-check the same conditions; this UI layer is the friendly
+  // surface where most sellers self-correct.
+  const businessDetailsComplete =
+    business.state_id !== null &&
+    business.city_area !== null &&
+    typeof business.business_name === "string" &&
+    business.business_name.trim().length >= 2;
+  const whatsappVerified = business.seller_whatsapp_verified_at !== null;
+  const verificationPrerequisitesMet =
+    businessDetailsComplete && whatsappVerified;
+
   return (
     <Container size="narrow">
       <ToastFromSearchParams />
@@ -141,22 +158,63 @@ export default async function SellPage() {
 
         {verificationState === "unsubmitted" && (
           <Card className="mb-4 bg-warning-bg border-warning/30">
-            <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-warning-text mb-1">
-                  Verify your account to publish listings
+            {verificationPrerequisitesMet ? (
+              <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warning-text mb-1">
+                    Verify your account to publish listings
+                  </p>
+                  <p className="text-xs text-warning-text">
+                    Listings stay hidden from buyers until your account is
+                    verified.
+                  </p>
+                </div>
+                <Link
+                  href="/sell/verify"
+                  className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
+                >
+                  Start verification
+                </Link>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-medium text-warning-text mb-2">
+                  Before you start verification
                 </p>
-                <p className="text-xs text-warning-text">
-                  Listings stay hidden from buyers until your account is verified.
+                <ul className="space-y-1.5 text-sm text-warning-text">
+                  {!business.state_id && (
+                    <li className="flex items-start gap-2">
+                      <span aria-hidden="true" className="select-none">
+                        ☐
+                      </span>
+                      <span>Set your business state in the form below.</span>
+                    </li>
+                  )}
+                  {!business.city_area && (
+                    <li className="flex items-start gap-2">
+                      <span aria-hidden="true" className="select-none">
+                        ☐
+                      </span>
+                      <span>Add your city / area in the form below.</span>
+                    </li>
+                  )}
+                  {!whatsappVerified && (
+                    <li className="flex items-start gap-2">
+                      <span aria-hidden="true" className="select-none">
+                        ☐
+                      </span>
+                      <span>
+                        Verify your WhatsApp number so buyers can reach you.
+                      </span>
+                    </li>
+                  )}
+                </ul>
+                <p className="text-xs text-warning-text mt-3">
+                  Once these are done, the &quot;Start verification&quot; button
+                  will appear here.
                 </p>
               </div>
-              <Link
-                href="/sell/verify"
-                className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
-              >
-                Start verification
-              </Link>
-            </div>
+            )}
           </Card>
         )}
 
@@ -173,24 +231,72 @@ export default async function SellPage() {
 
         {verificationState === "rejected" && (
           <Card className="mb-4 bg-danger-bg border-danger/30">
-            <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
-              <div className="flex-1">
+            {verificationPrerequisitesMet ? (
+              <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-danger-text mb-1">
+                    Verification rejected — please resubmit
+                  </p>
+                  {rejectionReason && (
+                    <p className="text-xs text-danger-text">
+                      Reason: {rejectionReason}
+                    </p>
+                  )}
+                </div>
+                <Link
+                  href="/sell/verify"
+                  className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
+                >
+                  Resubmit
+                </Link>
+              </div>
+            ) : (
+              <div>
                 <p className="text-sm font-medium text-danger-text mb-1">
-                  Verification rejected — please resubmit
+                  Verification rejected
                 </p>
                 {rejectionReason && (
-                  <p className="text-xs text-danger-text">
+                  <p className="text-xs text-danger-text mb-3">
                     Reason: {rejectionReason}
                   </p>
                 )}
+                <p className="text-sm font-medium text-danger-text mb-2">
+                  Before you resubmit
+                </p>
+                <ul className="space-y-1.5 text-sm text-danger-text">
+                  {!business.state_id && (
+                    <li className="flex items-start gap-2">
+                      <span aria-hidden="true" className="select-none">
+                        ☐
+                      </span>
+                      <span>Set your business state in the form below.</span>
+                    </li>
+                  )}
+                  {!business.city_area && (
+                    <li className="flex items-start gap-2">
+                      <span aria-hidden="true" className="select-none">
+                        ☐
+                      </span>
+                      <span>Add your city / area in the form below.</span>
+                    </li>
+                  )}
+                  {!whatsappVerified && (
+                    <li className="flex items-start gap-2">
+                      <span aria-hidden="true" className="select-none">
+                        ☐
+                      </span>
+                      <span>
+                        Verify your WhatsApp number so buyers can reach you.
+                      </span>
+                    </li>
+                  )}
+                </ul>
+                <p className="text-xs text-danger-text mt-3">
+                  Once these are done, the &quot;Resubmit&quot; button will
+                  appear here.
+                </p>
               </div>
-              <Link
-                href="/sell/verify"
-                className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
-              >
-                Resubmit
-              </Link>
-            </div>
+            )}
           </Card>
         )}
 

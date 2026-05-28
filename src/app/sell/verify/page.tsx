@@ -16,13 +16,32 @@ export default async function VerifyPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, verification_status")
+    .select(
+      "id, business_name, state_id, city_area, verification_status, seller_whatsapp_verified_at"
+    )
     .eq("owner_id", user.id)
     .maybeSingle();
 
   if (!business) redirect("/sell");
   if (business.verification_status === "verified") {
     redirect("/dashboard/listings");
+  }
+
+  // Verification-sequencing gates (Layer B — catches direct navigation to
+  // /sell/verify when prerequisites aren't met; /sell renders a guidance
+  // checklist for the same conditions). Order matters: business details
+  // first (the WhatsApp banner on /sell needs the business to be coherent
+  // first anyway), then WhatsApp.
+  const businessDetailsComplete =
+    business.state_id !== null &&
+    business.city_area !== null &&
+    typeof business.business_name === "string" &&
+    business.business_name.trim().length >= 2;
+  if (!businessDetailsComplete) {
+    redirect("/sell?toast=verify-needs-business-details");
+  }
+  if (!business.seller_whatsapp_verified_at) {
+    redirect("/sell?toast=verify-needs-whatsapp");
   }
 
   // Banner state derives from the latest seller_verifications row (D-035).

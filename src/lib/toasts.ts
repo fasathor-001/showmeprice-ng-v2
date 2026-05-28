@@ -89,6 +89,16 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Listing restored to public view.",
   },
+  "verify-needs-business-details": {
+    variant: "warning",
+    message:
+      "Before you can verify your account, complete your business details below (city / area, state).",
+  },
+  "verify-needs-whatsapp": {
+    variant: "warning",
+    message:
+      "Before you can verify your account, verify your WhatsApp number using the banner above.",
+  },
 };
 
 export function getToastMessage(
