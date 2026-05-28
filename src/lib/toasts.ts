@@ -23,6 +23,11 @@ export const toastMessages: Record<string, ToastMessage> = {
     message:
       "Your seller account is ready. Verify your business below to start listing.",
   },
+  "seller-account-created-whatsapp-pending": {
+    variant: "warning",
+    message:
+      "Your seller account is ready, but we couldn't verify your WhatsApp number. Buyers can't reach you on it until verification completes — you can finish that step later.",
+  },
   "listing-created": {
     variant: "success",
     message: "Your listing is live.",

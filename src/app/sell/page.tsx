@@ -16,21 +16,37 @@ export default async function SellPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in?next=/sell");
 
-  const [{ data: business }, { data: states }] = await Promise.all([
-    supabase
-      .from("businesses")
-      .select(
-        "id, business_name, description, state_id, city_area, verification_status, rejection_reason"
-      )
-      .eq("owner_id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("nigerian_states")
-      .select("id, name")
-      .order("name", { ascending: true }),
-  ]);
+  const [{ data: business }, { data: states }, { data: profile }] =
+    await Promise.all([
+      supabase
+        .from("businesses")
+        .select(
+          "id, business_name, description, state_id, city_area, verification_status, rejection_reason"
+        )
+        .eq("owner_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("nigerian_states")
+        .select("id, name")
+        .order("name", { ascending: true }),
+      // E.2.11 / Stage C: read the user's phone + verification_status so the
+      // BecomeSellerForm can pre-fill the "Use my verified number" option.
+      // verifiedPhone is non-null ONLY when verification_status includes
+      // 'phone_verified' — otherwise the form hides that option and forces
+      // the different-number path.
+      supabase
+        .from("profiles")
+        .select("phone, verification_status")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]);
 
   if (!business) {
+    const isPhoneVerified = (profile?.verification_status ?? []).includes(
+      "phone_verified"
+    );
+    const verifiedPhone =
+      isPhoneVerified && profile?.phone ? profile.phone : null;
     return (
       <Container size="narrow">
         <ToastFromSearchParams />
@@ -48,7 +64,10 @@ export default async function SellPage() {
             next so buyers know you&apos;re real.
           </p>
           <Card>
-            <BecomeSellerForm states={states ?? []} />
+            <BecomeSellerForm
+              states={states ?? []}
+              verifiedPhone={verifiedPhone}
+            />
           </Card>
           <p className="mt-6 text-xs text-ink-400 text-center">
             By creating a seller account, you agree to honour the prices you post

@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import {
   normalizeNigerianWhatsApp,
+  isPlausibleNigerianMobile,
   validateSignUpForm,
   hasErrors,
   phoneGateDest,
@@ -13,6 +14,7 @@ import {
   maybeBootstrapAdmin,
   type ValidationErrors,
 } from "@/lib/auth";
+import { verifySellerPhoneOtpAction } from "./seller-otp-actions";
 import {
   parseNairaInputToKobo,
   validateListingForm,
@@ -292,6 +294,9 @@ interface BecomeSellerErrors {
   businessDescription?: string;
   stateId?: string;
   cityArea?: string;
+  // E.2.11 / Stage C: seller-WhatsApp fields.
+  sellerWhatsapp?: string;
+  code?: string;
   _form?: string;
 }
 
@@ -309,10 +314,17 @@ export async function becomeSellerAction(
     formData.get("businessDescription") ?? ""
   ).trim();
   const stateId = String(formData.get("stateId") ?? "");
-  // Sprint 3 / Gap D.6: business operating location. Optional (nullable
-  // column, no banked requirement) — validated inline, max 100 only when
-  // present. Distinct from the listing-level required validateCityArea().
+  // Stage C: city/area is REQUIRED (banked alongside this stage as a trust
+  // signal — an unspecified seller location is a friction signal in the
+  // Nigerian C2C context). Matches the listing-level required validateCityArea.
   const cityArea = String(formData.get("cityArea") ?? "").trim();
+  // E.2.11 / Stage C: seller-WhatsApp inputs.
+  // whatsappChoice = "verified" → reuse profiles.phone (already OTP-proven).
+  // whatsappChoice = "different" → seller typed an alternate number + entered
+  // an OTP code; verifySellerPhoneOtpAction handles the consume + RPC after
+  // the business is created (D-131: no unverified WhatsApp may be revealable).
+  const whatsappChoice = String(formData.get("whatsappChoice") ?? "");
+  const sellerWhatsappRaw = String(formData.get("sellerWhatsapp") ?? "").trim();
 
   const errors: BecomeSellerErrors = {};
   if (!businessName) errors.businessName = "Business name is required";
@@ -329,11 +341,23 @@ export async function becomeSellerAction(
 
   if (!stateId) errors.stateId = "State is required";
 
-  if (cityArea && cityArea.length > 100)
+  if (!cityArea) errors.cityArea = "City / area is required";
+  else if (cityArea.length > 100)
     errors.cityArea = "City / area is too long (max 100 characters)";
+
+  if (whatsappChoice !== "verified" && whatsappChoice !== "different") {
+    errors._form =
+      "Choose a WhatsApp number option (verified or different).";
+  }
+
+  const normalizedWhatsapp = normalizeNigerianWhatsApp(sellerWhatsappRaw);
+  if (!normalizedWhatsapp || !isPlausibleNigerianMobile(normalizedWhatsapp)) {
+    errors.sellerWhatsapp = "Enter a valid Nigerian mobile number.";
+  }
 
   if (Object.values(errors).some((v) => v)) return { errors };
 
+  let redirectTo = "/sell/verify?toast=seller-account-created";
   let shouldRedirect = false;
   try {
     const supabase = createClient();
@@ -342,6 +366,71 @@ export async function becomeSellerAction(
     } = await supabase.auth.getUser();
     if (!user) {
       return { errors: { _form: "You must be signed in to become a seller" } };
+    }
+
+    // Read the user's authoritative profile state — needed to enforce the
+    // "verified" path's equality check (the client's hidden input is just
+    // a UX affordance; the server is the trust authority per D-131).
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("phone, verification_status")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!profile?.phone) {
+      return {
+        errors: {
+          _form:
+            "No phone number on file. Verify your profile phone before setting up a seller account.",
+        },
+      };
+    }
+    const profilePhone =
+      normalizeNigerianWhatsApp(profile.phone) ?? profile.phone;
+    const profileIsPhoneVerified = isPhoneVerified(profile.verification_status);
+
+    // Path-specific guards. normalizedWhatsapp is non-null here (post-validation).
+    if (whatsappChoice === "verified") {
+      // The chosen number MUST match the user's already-verified profile phone.
+      // If a tampered client submits a different number with whatsappChoice='verified',
+      // reject — never trust a "verified" claim without server-side equality proof.
+      if (normalizedWhatsapp !== profilePhone) {
+        return {
+          errors: {
+            _form:
+              "Verified-number choice doesn't match your profile phone. Please reload and try again.",
+          },
+        };
+      }
+      if (!profileIsPhoneVerified) {
+        return {
+          errors: {
+            _form:
+              "Your profile phone isn't verified yet. Verify it first, or choose 'Use a different number' and verify it now.",
+          },
+        };
+      }
+    } else {
+      // whatsappChoice === "different". Reject same-as-profile-phone here too —
+      // would be inconsistent UX (the form should have routed them to the
+      // verified path) and would risk an unnecessary OTP send to a verified number.
+      if (normalizedWhatsapp === profilePhone) {
+        return {
+          errors: {
+            sellerWhatsapp:
+              "This is your verified profile number — choose 'Use my verified number' instead.",
+          },
+        };
+      }
+      // Code presence + shape (verifySellerPhoneOtpAction also checks; defense
+      // in depth + clearer error before we create the business).
+      const code = String(formData.get("code") ?? "").trim();
+      if (!/^\d{6}$/.test(code)) {
+        return {
+          errors: {
+            code: "Enter the 6-digit code we sent to your WhatsApp number.",
+          },
+        };
+      }
     }
 
     // Defense in depth: page also checks this and redirects.
@@ -354,17 +443,32 @@ export async function becomeSellerAction(
       return { errors: { _form: "You already have a seller account" } };
     }
 
-    // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md (post P.1).
-    // Setting it to 'pending' here was wrong: 'pending' means "we have a submission
-    // under review," but a brand-new business has no submission yet. The seller's
-    // /sell/verify flow flips both businesses.verification_status and
-    // seller_verifications.status through the admin approval path.
+    // Build the insert payload. seller_whatsapp + seller_whatsapp_verified_at
+    // are populated INLINE only on the verified path (the value is already
+    // OTP-proven via the profile-phone lane). On the different-number path
+    // both stay NULL — they're written by mark_seller_whatsapp_verified
+    // once the OTP for purpose='seller_whatsapp' is consumed.
+    //
+    // CRITICAL invariant (D-131): seller_whatsapp must NEVER be non-null
+    // unless seller_whatsapp_verified_at is also non-null and the value was
+    // OTP-proven. The "verified" branch satisfies this because the value
+    // IS the user's already-OTP-proven profile phone; we're transferring an
+    // existing proof, not bypassing one.
+    //
+    // verification_status defaults to 'unsubmitted' per ACTUAL_SCHEMA.md
+    // (post P.1). 'pending' would be wrong here — that's set when a
+    // submission exists.
+    const nowIso = new Date().toISOString();
     const { error: insertError } = await supabase.from("businesses").insert({
       owner_id: user.id,
       business_name: businessName,
       description: businessDescription,
       state_id: stateId,
-      city_area: cityArea || null, // Sprint 3 / Gap D.6 (optional → NULL when empty)
+      city_area: cityArea,
+      seller_whatsapp:
+        whatsappChoice === "verified" ? profilePhone : null,
+      seller_whatsapp_verified_at:
+        whatsappChoice === "verified" ? nowIso : null,
     });
 
     if (insertError) {
@@ -385,6 +489,33 @@ export async function becomeSellerAction(
           _form: `Seller upgrade failed: ${profileError.message}`,
         },
       };
+    }
+
+    // Different-number path: now that the business exists, run the Stage B
+    // verify action. It reads `code` from the same formData, looks up the
+    // newest unconsumed purpose='seller_whatsapp' OTP for this user,
+    // validates expiry/attempts/hash, and calls mark_seller_whatsapp_verified.
+    // The RPC writes seller_whatsapp = v_row.phone + seller_whatsapp_verified_at
+    // = now() to the just-created business (found via UNIQUE owner_id).
+    //
+    // ABANDONED-OTP / FAILED-VERIFY SAFETY (D-131 + directive):
+    //   If the verify fails (wrong code / expired / hash mismatch / RPC false),
+    //   the business already exists with NULL seller_whatsapp. This is a
+    //   DEGRADED state — acceptable per the Stage C directive. The seller
+    //   has an account but no revealable WhatsApp until verification completes.
+    //   Redirect to /sell with a clear toast so the seller knows.
+    //
+    //   FOLLOW-UP (NOT BUILT in Stage C): surface a "complete your WhatsApp
+    //   verification" prompt + re-verification UX when business.seller_whatsapp
+    //   IS NULL on the /sell management view and the /dashboard. The future
+    //   buyer-reveal feature MUST check seller_whatsapp_verified_at IS NOT NULL
+    //   (not just seller_whatsapp IS NOT NULL) — they move together via the
+    //   RPC, but the verified_at column is the authoritative flag.
+    if (whatsappChoice === "different") {
+      const verifyResult = await verifySellerPhoneOtpAction(null, formData);
+      if (!verifyResult.ok) {
+        redirectTo = "/sell?toast=seller-account-created-whatsapp-pending";
+      }
     }
 
     shouldRedirect = true;
@@ -414,7 +545,14 @@ export async function becomeSellerAction(
   if (shouldRedirect) {
     // revalidatePath removed (Phase C.5.6.0): fails silently on Cloudflare
     // Pages edge with 530. Server components re-render on navigation anyway.
-    redirect("/sell/verify?toast=seller-account-created");
+    //
+    // redirectTo is set above based on the WhatsApp path outcome:
+    //   - verified path or different-number-verify-success → /sell/verify
+    //     (existing onboarding next-step: business identity verification)
+    //   - different-number-verify-failure → /sell with the
+    //     'seller-account-created-whatsapp-pending' toast surfacing the
+    //     degraded state
+    redirect(redirectTo);
   }
   return {};
 }
