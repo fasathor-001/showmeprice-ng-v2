@@ -22,12 +22,17 @@ export async function Hero() {
     <section className="bg-neutral-50 border-b border-neutral-200">
       <Container>
         <div className="py-12 sm:py-20 text-center max-w-2xl mx-auto">
+          <div className="inline-flex items-center justify-center mb-4 sm:mb-6">
+            <span className="text-xs sm:text-sm font-semibold tracking-wider text-teal-700 uppercase">
+              Real prices from verified sellers
+            </span>
+          </div>
           <h1 className="text-3xl sm:text-4xl font-medium text-ink leading-tight tracking-tight">
-            Nigeria&apos;s verified marketplace.
+            Find real prices from verified Nigerian sellers.
           </h1>
           <p className="mt-4 text-base text-ink-600 max-w-md mx-auto">
-            Buy from sellers verified with NIN, address, and ID. Real prices,
-            no scams, one tap to chat on WhatsApp.
+            No more &quot;DM for price.&quot; See clear prices, verified seller
+            signals, and safer conversations before you meet or pay.
           </p>
 
           {/* State picker — global search lives in the header (D.5.1). */}
