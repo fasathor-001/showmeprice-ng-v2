@@ -6,6 +6,7 @@ import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { getVerificationState } from "@/lib/verification";
 import { BecomeSellerForm } from "./BecomeSellerForm";
 import { ManageBusinessForm } from "./ManageBusinessForm";
+import { SellerWhatsappRecoveryBanner } from "./SellerWhatsappRecoveryBanner";
 
 export const runtime = "edge";
 
@@ -21,7 +22,7 @@ export default async function SellPage() {
       supabase
         .from("businesses")
         .select(
-          "id, business_name, description, state_id, city_area, verification_status, rejection_reason"
+          "id, business_name, description, state_id, city_area, verification_status, rejection_reason, seller_whatsapp_verified_at"
         )
         .eq("owner_id", user.id)
         .maybeSingle(),
@@ -94,6 +95,18 @@ export default async function SellPage() {
   const verificationState = getVerificationState({ business, latestSubmission });
   const rejectionReason =
     latestSubmission?.rejection_reason ?? business.rejection_reason;
+
+  // Stage C follow-up: surface the WhatsApp-recovery banner when the seller
+  // landed in the degraded state (business exists, seller_whatsapp_verified_at
+  // IS NULL — typically because the different-number OTP at signup failed
+  // or was abandoned). The banner offers both recovery paths (verified
+  // shortcut + different-number OTP) so this isn't a dead-end.
+  const needsWhatsappRecovery = business.seller_whatsapp_verified_at === null;
+  const isPhoneVerifiedNow = (profile?.verification_status ?? []).includes(
+    "phone_verified"
+  );
+  const recoveryVerifiedPhone =
+    isPhoneVerifiedNow && profile?.phone ? profile.phone : null;
 
   return (
     <Container size="narrow">
@@ -179,6 +192,10 @@ export default async function SellPage() {
               </Link>
             </div>
           </Card>
+        )}
+
+        {needsWhatsappRecovery && (
+          <SellerWhatsappRecoveryBanner verifiedPhone={recoveryVerifiedPhone} />
         )}
 
         <Card>

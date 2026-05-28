@@ -557,6 +557,98 @@ export async function becomeSellerAction(
   return {};
 }
 
+// ============================================================================
+// Stage C follow-up: seller-WhatsApp recovery action
+// ============================================================================
+//
+// Closes the dead-end created by the abandoned-OTP / failed-verify path in
+// becomeSellerAction. When that path lands the seller in the degraded state
+// (business exists with seller_whatsapp = NULL, seller_whatsapp_verified_at
+// = NULL), this action is the recovery: a one-click confirmation that writes
+// the user's already-OTP-proven profile.phone into the business as the
+// seller WhatsApp.
+//
+// Safety / D-131 invariant: the value written IS the user's verified profile
+// phone — the proof was established by mark_phone_verified on the
+// profile-phone OTP lane. We're transferring an existing OTP proof to a new
+// column, not bypassing the OTP discipline. This mirrors becomeSellerAction's
+// verified-path inline write (insert payload), now applied as an UPDATE.
+//
+// The companion different-number recovery path is the existing Stage B
+// sendSellerPhoneOtpAction → verifySellerPhoneOtpAction pair — those work
+// out of the box now that the business exists (the mark_seller_whatsapp_verified
+// RPC's owner-id lookup will resolve).
+//
+// Schema notes:
+//   - UPDATE writes only seller_whatsapp + seller_whatsapp_verified_at; does
+//     NOT touch verification_status, so businesses_freeze_verification trigger
+//     does not raise.
+//   - RLS: businesses_owner_update allows the owner to UPDATE their own row.
+
+interface SetSellerWhatsappFromProfileResult {
+  ok?: boolean;
+  error?: string;
+}
+
+export async function setSellerWhatsappFromProfileAction(
+  _prev: SetSellerWhatsappFromProfileResult | null,
+  _formData: FormData
+): Promise<SetSellerWhatsappFromProfileResult> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Please sign in." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("phone, verification_status")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!profile?.phone) {
+      return { error: "No phone number on file." };
+    }
+    // Defense in depth: the OTP-proof precondition. Without this check, an
+    // unverified-profile user could shortcut into "verified" seller WhatsApp.
+    if (!isPhoneVerified(profile.verification_status)) {
+      return {
+        error:
+          "Your profile phone isn't verified yet. Verify it first, then come back here.",
+      };
+    }
+    const profilePhone =
+      normalizeNigerianWhatsApp(profile.phone) ?? profile.phone;
+
+    const { data: business } = await supabase
+      .from("businesses")
+      .select("id")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (!business) {
+      return { error: "You don't have a seller account yet." };
+    }
+
+    const { error: updateError } = await supabase
+      .from("businesses")
+      .update({
+        seller_whatsapp: profilePhone,
+        seller_whatsapp_verified_at: new Date().toISOString(),
+      })
+      .eq("id", business.id);
+    if (updateError) {
+      return { error: updateError.message };
+    }
+
+    return { ok: true };
+  } catch (e) {
+    return {
+      error:
+        e instanceof Error ? e.message : "Couldn't update your WhatsApp.",
+    };
+  }
+}
+
 interface UpdateBusinessErrors {
   businessName?: string;
   businessDescription?: string;
