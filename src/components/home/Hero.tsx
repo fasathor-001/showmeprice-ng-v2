@@ -28,7 +28,8 @@ export async function Hero() {
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-medium text-ink leading-tight tracking-tight">
-            Find real prices from verified Nigerian sellers.
+            Find real prices from<br />
+            verified Nigerian sellers.
           </h1>
           <p className="mt-4 text-base text-ink-600 max-w-md mx-auto">
             No more &quot;DM for price.&quot; See clear prices, verified seller

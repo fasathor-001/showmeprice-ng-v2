@@ -23,7 +23,7 @@ export function Footer() {
     { label: "Cookie Policy", href: "/cookie-policy" },
   ];
 
-  const cities = ["Lagos", "Abuja", "Port Harcourt", "Edo", "Delta"];
+  const cities = ["Lagos", "Abuja", "Port Harcourt", "Delta and More"];
 
   return (
     <footer className="bg-slate-900 text-white mt-24">
