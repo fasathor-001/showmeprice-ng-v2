@@ -69,6 +69,18 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Submission rejected with feedback to seller.",
   },
+  "report-resolved": {
+    variant: "success",
+    message: "Report resolved.",
+  },
+  "report-dismissed": {
+    variant: "info",
+    message: "Report dismissed.",
+  },
+  "report-in-review": {
+    variant: "info",
+    message: "Report marked under review.",
+  },
 };
 
 export function getToastMessage(

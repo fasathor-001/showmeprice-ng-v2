@@ -35,6 +35,11 @@ export default async function AdminLandingPage() {
       title: "Business Verifications",
       description: "Review and approve seller verification submissions.",
     },
+    {
+      href: "/admin/reports",
+      title: "Reports",
+      description: "Triage user-filed reports against listings and messages.",
+    },
   ];
 
   return (
