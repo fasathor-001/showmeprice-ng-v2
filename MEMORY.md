@@ -613,6 +613,60 @@ The strategic signal: vendor compliance assessments validate architectural decis
 
 **Cross-reference:** D-125 §2.3 (No Custody), D-129 (Payment Integration Sequencing).
 
+### Cloudflare Pages edge runtime: omission fails SILENTLY — the previous build stays live
+
+**Banked 2026-05-28 (Wave 1A.1).** Every non-static page on this codebase MUST include `export const runtime = 'edge';`. Omitting it does NOT produce a visible error — the Cloudflare Pages build fails the new deployment, the **previous build stays live**, and the dashboard shows no obvious red signal unless you go looking at the build log.
+
+**Why both gates miss it:**
+- `tsc --noEmit` / lint don't know about Cloudflare's adapter rule (it's runtime, not type).
+- Local `pnpm build` on this Windows env **hangs** (banked separately — pnpm + Next on Windows + `.next/trace` EPERM lock), so we can't rely on local build as the gate.
+
+**The authoritative gate is the Cloudflare deploy itself.** After pushing any commit that adds a server-rendered route — or any change to a system route (`not-found.tsx`, `error.tsx`, `global-error.tsx`) — verify the Cloudflare Pages deploy went green before claiming the change shipped. If the dashboard shows the latest commit hash deployed (not just present) you're good.
+
+**Watch-pattern:** any new top-level route group, any new `page.tsx` that's not statically generated, any system route. D-025 banks the original lesson; this entry reinforces that the failure mode is *invisible*, not loud — and that production state ("does the live site reflect this commit?") is the only proof.
+
+### Completeness signals trust in the Nigerian market — refines D-125
+
+**Banked 2026-05-28 (Wave 1A.1 — post-legal-pages audit).** In a trust-deficit market like Nigerian C2C, **completeness signals legitimacy** — a site with footer links, terms, privacy, cookie policy, FAQ, contact, real-looking copy reads as "real business" by default. Bare-bones reads as "another scam."
+
+**But: only ACCURATE completeness signals trust.** A broken legal link, a falsely-claimed feature, a stub page behind a polished label is **worse than minimalism** — it's the visible signal that something here doesn't withstand scrutiny, and an alert buyer will generalize from that one defect to the whole platform.
+
+**Operational rule:** every visible detail (footer link, badge, copy claim, status indicator) must withstand scrutiny. Either it's real and accurate, or it's not shown at all. "Coming soon" / "placeholder" is acceptable inside-app; it is NOT acceptable on the marketing surface or in legal pages.
+
+**Refines D-125** ("Simple Internally, Premium Externally"): "premium externally" doesn't mean "more surface." It means "every visible surface withstands inspection." The bar isn't completeness for its own sake; it's the absence of broken-looking detail.
+
+**Detection pattern:** before adding a visible affordance (link, badge, claim), ask "if a skeptical Nigerian buyer clicks/tests this, does it deliver?" If no, don't ship the affordance until it does. The K-065 legal placeholder work is the textbook example — plain language but accurate to actual platform behavior, no false claims, even though it's pre-lawyer-review.
+
+### Verify actual state with own eyes / raw output — not agent summaries
+
+**Banked 2026-05-28 (Wave 1A.1).** Repeatedly during Wave 1A, agents claimed state that did not match reality: diffs "shown" that weren't applied; tasks reported "done" that surfaced bugs on real test; "build complete" that masked the silent Cloudflare deploy failure (above); SMS "configured" while real Nigerian numbers received nothing.
+
+**Discipline:** verify with your own eyes, on the real surface.
+- For production state — open the deployed URL; complete the actual flow; confirm with **a real artifact** (a real Nigerian phone receiving the OTP, not a "test passed" log line).
+- For code changes — demand raw `git diff` / `cat` / `git log` output; don't accept a paraphrased summary as proof the edit applied.
+- For "build complete" — look at the Cloudflare Pages deployments tab and confirm the commit hash is deployed, not just pushed.
+- For "migration applied" — query `information_schema` paste-back, not "the SQL ran successfully."
+
+**Why this lesson, again, after we already have several adjacent ones in this file:**
+- "Rendered output is never authoritative for schema state" (banked earlier) is about Supabase SQL Editor specifically.
+- "Verify production state before diagnosing agent context drift" (Stage 2.C) is about long-session drift specifically.
+- This entry is the broader pattern under both: **agent summaries are not evidence; production artifacts are.** When the gap between "status 0" and "the user got the SMS" is days of debugging, the cheap way out is to test the real end-to-end immediately and stop trusting intermediate signals.
+
+**Trigger phrase:** if the next sentence in your head is "the agent said it worked" — stop, find the live artifact instead.
+
+### Agent context-drift: restart fresh when an agent loops
+
+**Banked 2026-05-28 (Wave 1A.1) — generalizes the Stage 2.C long-session lesson.** An agent in this session repeatedly drifted to an unrelated stale task (image-bubble verification from a prior session) across multiple directives, even after re-prompting. The Stage 2.C lesson (above) describes the symptom; this entry banks the **escalation rule**.
+
+**Rule:** if an agent reverts to old work or ignores the current directive **more than once**, re-prompting will not fix it. Start a **fresh agent session** (new conversation context) with the standard grounding protocol. Context pollution from earlier turns is sticky in ways that further prompts can't dislodge.
+
+**Decision tree:**
+1. **First drift** — re-anchor with a sharper directive that names the current task explicitly + states what should NOT be touched.
+2. **Second drift** — stop. Open a fresh agent session. Re-run the grounding protocol (`docs/_coding_agent_session_open.md` or the equivalent). Re-issue the task cold.
+3. **Don't burn three turns debating with a drifting agent.** The cost of restarting is one grounding pass (~10 min); the cost of continuing is unbounded.
+
+**Pairs with the Stage 2.C lesson** ("verify production state FIRST before diagnosing context drift") — that one prevents false-negative diagnostics when the work is already done; this one handles the genuine-drift case once you've ruled that out.
+
 ## Naming conventions
 
 - Database columns: `snake_case` (e.g. `user_type`, `verification_status`, `phone`)

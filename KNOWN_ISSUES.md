@@ -884,7 +884,9 @@ Surfaced 2026-05-25 during D-126/D-127 doctrine drafting.
 
 ### K-063 — Phone-verify testing constraint: Nigerian-only flow (LOW)
 
-**Status:** OPEN, operational constraint (not a defect)
+**Status:** OPEN, PARTIALLY SATISFIED (2026-05-28) — phone verification confirmed working end-to-end to a real Nigerian MTN number (`+2348143850265`) through the live app `app.showmeprice.ng` via the new Mocean provider (commit `f479f4d`). The blind spot specific to Frank's solo testing capability remains for any future flows that require *repeated* Nigerian-number verification on demand (Frank's environment is still South African), but the **production path itself is now proven**. See K-066 (RESOLVED) for the SMS-blocker resolution that enabled this.
+
+**Original status:** OPEN, operational constraint (not a defect)
 
 **Summary:** ShowMePrice's phone-verification flow is correctly locked to Nigerian numbers per D-114. Frank's testing environment (South Africa) cannot complete Nigerian phone verifications, creating a blind spot for any flows triggered by phone-verify success.
 
@@ -974,7 +976,42 @@ Paystack confirmed marketplace model is compliance-clean because ShowMePrice del
 
 Opened 2026-05-25; updated 2026-05-29 with Paystack Developer Relations response.
 
+### K-067 — `phone_verifications_provider_check` updated via raw SQL, not a committed migration (low)
+
+**Severity:** low. Production schema and committed migration history are out of sync — not a runtime bug, but a discipline violation of DB-first / code-second.
+
+**What happened (2026-05-28, Wave 1A.1):** integrating Mocean as the third OTP provider (D-130, commit `f479f4d`) revealed that `phone_verifications_provider_check` only accepted `'termii'` / `'arkesel'`. The constraint was extended live via raw `ALTER TABLE ... DROP CONSTRAINT / ADD CONSTRAINT` against Supabase to add `'mocean'`, unblocking signup verification end-to-end. The matching migration file was not authored at the time.
+
+**Why it matters:** the live DB now diverges from what `migrations/` documents. Any future agent who reads the committed schema will see `IN ('termii', 'arkesel')` and conclude `'mocean'` is invalid — when production accepts it. Standard "verify live `information_schema`, not the migrations folder" applies, but committed schema should still catch up.
+
+**Resolution scope:** author a small migration file (e.g., `migrations/E.2.11.0-phone-verifications-mocean.sql`) following the §0 / §1 / §2 pattern: pre-flight check showing the current constraint definition, the `ALTER TABLE` DROP+ADD, and a verification SELECT confirming `'mocean'` is in the accepted set. Apply locally is a no-op (production already has the new constraint); the file's purpose is the committed audit trail.
+
+**Surfaced:** 2026-05-28 during Wave 1A.1 Mocean integration. Banked alongside D-130.
+
 ## Resolved or superseded
+
+### K-066 — SMS phone-verification blocker (Wave 1A.1) — RESOLVED via Mocean integration
+
+**Severity:** was HIGH (launch blocker for Wave 1A.1 private beta).
+**Status:** RESOLVED 2026-05-28.
+
+**Symptom:** real Nigerian phones were not receiving OTP SMS through the live production app. The phone-verify flow appeared to complete successfully on the server (server actions returned without error; `phone_verifications` rows were created and hashed) but no message arrived on the destination handset.
+
+**Root cause:** `OTP_PROVIDER_VENDOR=arkesel`, but the configured Arkesel account delivers to South African numbers only — not Nigerian. Network/sender-ID approvals had been completed against ZA. Nigerian destinations silently failed at the carrier hop.
+
+**Resolution:** integrated **Mocean** as the third OTP provider (commit `f479f4d`), implementing the existing `OtpProvider` interface (D-094) via Mocean's plain Send SMS endpoint (`rest/2/sms`) — NOT the Verify API, the app continues to own the OTP lifecycle. `OTP_PROVIDER_VENDOR` switched to `mocean`. End-to-end verification on live production (`app.showmeprice.ng`) to `+2348143850265` (real Nigerian MTN number) succeeded — OTP delivered, code verified, profile marked `phone_verified`, signup flow completed.
+
+**Decision banked:** D-130 (Mocean active for private beta; Termii + Arkesel switchable fallbacks).
+
+**Residual (non-blocking):**
+- Mocean sender-ID `"ShowMePrice"` registration LOA + CAC certificate submitted; **operator approval pending** (a few weeks to ~1 month). Until then: on **€0.317/SMS bridge rate** with randomized sender. Acceptable for private-beta volume.
+- On sender-ID approval: rate drops to **€0.008/SMS** with branded sender. No code change needed.
+
+**Side-effects / follow-ups:**
+- K-067 (DB constraint added live via raw SQL; matching migration file owed).
+- K-063 partially satisfied — production Nigerian phone-verify path now proven (Frank's solo-testing capability gap remains).
+
+**Resolved:** 2026-05-28 via commit `f479f4d` + the `phone_verifications_provider_check` raw ALTER. Verified end-to-end on live production.
 
 ### K-052 — /marketplace and /categories/[slug] Supabase queries have no try/catch — network blip surfaces as Cloudflare "Application error" — RESOLVED via Stage 2.C Commit 11
 

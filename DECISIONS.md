@@ -2893,3 +2893,94 @@ minimum.
 
 **Implement only the payment infrastructure that current phase observation 
 requires. Defer everything else.**
+
+## D-130 — Mocean is the active OTP provider for private beta
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-094 (OTP provider abstraction), D-060 (Termii fallback sender ID), D-062 (Supabase Pro for phone auth)
+
+**Context:** Wave 1A.1 launch was blocked by SMS non-delivery. Root cause: `OTP_PROVIDER_VENDOR=arkesel`, but the Arkesel account is configured for South African delivery only — not Nigerian. End-to-end verification on `app.showmeprice.ng` to a real Nigerian MTN number (`+2348143850265`) via Mocean completed signup successfully and cleared the gate.
+
+**Decision:** **Mocean** is the active OTP provider for private beta via `OTP_PROVIDER_VENDOR=mocean`. **Termii** and **Arkesel** remain implemented as switchable fallbacks behind the same `OtpProvider` interface (D-094 holds — vendor swap is a one-line env-var change).
+
+**Implementation:** Mocean integrated via the plain Send SMS endpoint (`rest/2/sms`), NOT the Verify API. The app continues to own the OTP lifecycle — generate code, salted SHA-256 hash, store in `phone_verifications`, verify against user input, mark consumed. The provider is delivery-only.
+
+**Active account state (as of banking):**
+- €20 topped up.
+- **€0.317/SMS bridge rate** with **randomized sender** (until sender-ID is approved).
+- Sender-ID `"ShowMePrice"` registration LOA + CAC certificate submitted; **operator approval pending** (a few weeks to ~1 month). On approval: unlocks **€0.008/SMS** rate + branded sender across all networks.
+
+**Provider roadmap:**
+- **Arkesel** — needs a Nigerian account + KYB submission. Do this when back in Nigeria. Re-evaluate once active.
+- **Termii** — activates when fully launched (per D-060 / D-061 / D-094 — Termii was the original Phase E choice).
+- **Mocean** — primary for private beta; reassess against Termii at public launch based on cost (post sender-ID approval) and delivery reliability.
+
+**Why this matters operationally:** the provider abstraction (D-094) paid its first real dividend — Mocean dropped in without touching any application code beyond the new provider module. Vendor friction is real (sender-ID approvals are weeks-long across all NG providers); the abstraction lets us keep moving rather than waiting on any one vendor.
+
+**DB note:** `phone_verifications_provider_check` was extended via raw SQL to accept `'mocean'` (in addition to `'termii'` / `'arkesel'`). A migration file matching this change is owed — see K-067.
+
+## D-131 — Seller WhatsApp number must be OTP-verified before it is revealable
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-009 (WhatsApp number format), D-093 (Phone-verification gate reaches contact-reveal), D-113 (Trust ladder), D-114 (Anti-abuse policy)
+
+**Context:** Phase E reveals seller contact details to Pro / credit-using buyers. The reveal target has historically been `profiles.phone` — the seller's verified primary phone. Sellers have legitimate reasons to want a **separate** WhatsApp number revealed (business line, partner's phone, etc.). A prior implementation attempt added `businesses.seller_whatsapp` and stored the value **without OTP verification** (a TODO instead of a verify step). That is rejected.
+
+**Decision:** Seller WhatsApp number is **required at seller setup**. Two paths:
+
+1. **Default path (no extra OTP):** use the seller's already-verified `profiles.phone`. Zero added friction. This is the common case.
+2. **Alternate-number path:** if a seller enters a **different** number, that number MUST be OTP-verified inline (Option A — verify before the seller account is created/finalized). The unverified value is never stored as revealable.
+
+**Hard rule:** **No unverified seller WhatsApp number may ever be revealable to buyers.** Reveals must point at a number that has demonstrably received and acknowledged a code from us.
+
+**Why the strict bar:** sellers refer other sellers who are not personally vetted by Frank. Once the network grows beyond his first-circle, the revealed contact must be reliable on its own — without depending on social-graph trust to back-stop it. A revealed but wrong-number is a worse buyer experience than no reveal at all, and erodes the "verified seller" promise (D-112).
+
+**Operational consequences:**
+- The rejected uncommitted attempt (`migrations/E.2.10.0-seller-whatsapp.sql` + matching code) must be discarded before the corrected build.
+- Before building, surface a read-only finding: can `verifyPhoneOtpAction` verify a phone that is NOT the actor's `profile.phone`, without granting account-level phone-verified status or overwriting `profile.phone`? Either the existing flow supports it (cheap path) or a parallel `seller_phone_verifications` mechanism is needed. Decide before implementing.
+- The seller-setup flow needs a one-time gate for the alternate-number path; the default-path remains a single checkbox / pre-filled field.
+
+## D-132 — Messaging and contact-reveal coexist; neither replaces the other
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-095 (Messaging MVP scope), D-113 (Trust ladder), D-095 (in-app messaging shipped Stage 2.B)
+
+**Context:** With in-app messaging shipped (Stage 2.B), there is internal pressure to treat messaging as the primary buyer→seller channel and downgrade contact-reveal to a niche fallback. That would collapse the trust ladder and over-trust the in-app chat surface.
+
+**Decision:** Messaging and contact-reveal are **complementary**, not substitutes. The D-113 trust ladder remains:
+
+**browse → message → reveal contact → share payment details**
+
+Each rung is a real step a buyer chooses to take. Messaging is the low-cost ask; revealed contact is the elevated, paid (post-beta) step that signals serious intent. Sellers reading their inbox can tell the difference. Neither feature is built or rationalized in a way that subsumes the other.
+
+**Operational consequences:**
+- Don't add UI that nudges buyers from "message" to "reveal" prematurely (e.g., never auto-trigger reveal after N messages).
+- Don't surface reveal as the headline CTA on listing pages — message remains the lowest-friction first step.
+- Reveal-credit pricing (post-beta) is calibrated assuming buyers have already messaged; the credit purchase isn't a substitute for engagement.
+
+## D-133 — Private beta reveal mechanics: 3 free lifetime reveals per buyer, per-seller dedup
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-084 (signup_free_reveals_remaining counter), D-085 (Credit pack structure — locked but deferred), D-113 + D-113 Clarification (Free-reveal mechanics), D-129 (Payment integration sequencing), D-128 (Four-Phase Marketplace Lifecycle — Phase 1 Private Beta)
+
+**Context:** D-084 established a 1-free-reveal-at-signup counter. D-113 Clarification refined to a configurable lifetime grant at phone verification. Private beta needs an explicit number — small enough to observe value-assignment behavior, large enough to let invitees experience the full happy path without paywalling them.
+
+**Decision:** Private beta grants **3 free contact reveals per buyer, lifetime, granted at phone verification.** Reveals are **per-seller dedup'd** — re-revealing the **same seller** does not consume another credit (the buyer already paid the trust cost for that connection).
+
+**Storage:** reuse the existing `profiles.signup_free_reveals_remaining` counter (D-084's column). **Note:** a live test profile showed value `1` — the beta default must be **3** per this decision. Fix where the counter is set / backfilled before beta launch.
+
+**Per-seller dedup:** the existing `contact_reveals` table already records `(buyer_id, seller_id, listing_id, revealed_at, credit_used, payment_id)`. The reveal action must check for an existing `contact_reveals` row on `(buyer_id, seller_id)` (across all listings — not just the same listing) before decrementing the counter. First-time-for-this-seller reveals consume; repeat-seller reveals are free regardless of listing.
+
+**Deferred to public launch (per D-129 Phase 2 Marketplace Learning):**
+- Paid reveal packs (target prices: ₦300 / ₦1,200 / ₦3,000 — superseding D-085's earlier ₦1,500/₦3,500/₦7,000 framing for the post-beta pricing audit).
+- Full credit / billing system + Paystack integration.
+
+Private beta stays **free-with-limit.** This is consistent with D-129 — payment infrastructure is dormant in Phase 1; the goal of private beta is to observe trust behavior, not validate monetization.
+
+**Why 3, not 1:**
+- 1 is too tight to let an invitee experience the value proposition without immediately hitting a wall — destroys the observation goal.
+- 3 lets a buyer reveal across a few sellers and form a meaningful behavior signal (do they actually contact the sellers they reveal? do they re-reveal anyone?).
+- Per-seller dedup means a buyer who returns to the same seller multiple times doesn't burn their grant on a duplicate.
+
+**Operational consequence:** the reveal-action code (when built) must implement both the counter decrement AND the per-seller dedup check. Naive "decrement on every reveal" violates this decision.
+
