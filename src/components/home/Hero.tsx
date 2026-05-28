@@ -32,8 +32,8 @@ export async function Hero() {
             verified Nigerian sellers.
           </h1>
           <p className="mt-4 text-base text-ink-600 max-w-md mx-auto">
-            No more &quot;DM for price.&quot; See clear prices, verified seller
-            signals, and safer conversations before you meet or pay.
+            No more &quot;DM for price&quot;. See actual prices, message
+            verified sellers directly, and shop with confidence.
           </p>
 
           {/* State picker — global search lives in the header (D.5.1). */}
