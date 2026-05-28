@@ -219,7 +219,7 @@ export function SellerWhatsappRecoveryBanner({ verifiedPhone }: Props) {
         </div>
       ) : (
         <p className="text-xs text-warning-text mb-3">
-          We&apos;ll send a 6-digit code to confirm the number is yours.
+          We&apos;ll send a 6-digit code by SMS to confirm the number is yours.
         </p>
       )}
 
@@ -263,7 +263,9 @@ export function SellerWhatsappRecoveryBanner({ verifiedPhone }: Props) {
               placeholder="e.g. 08012345678"
             />
             <p className="text-xs text-ink-600 mt-1.5">
-              Nigerian mobile, any common format (080…, +234…).
+              Nigerian mobile, any common format (080…, +234…). We&apos;ll
+              send an SMS code to confirm you control it — this number must
+              be able to receive SMS.
             </p>
           </div>
 
@@ -294,8 +296,14 @@ export function SellerWhatsappRecoveryBanner({ verifiedPhone }: Props) {
             )}
             {codeSentTo && (
               <p className="text-xs text-verified-text mt-1.5">
-                Code sent to{" "}
+                SMS code sent to{" "}
                 <span className="font-medium tabular-nums">{codeSentTo}</span>
+              </p>
+            )}
+            {codeSentTo && verifiedPhone && (
+              <p className="text-xs text-ink-600 mt-1.5">
+                Didn&apos;t get the code? If this number can&apos;t receive
+                SMS, pick &quot;Use my verified number&quot; above instead.
               </p>
             )}
           </div>
