@@ -1,4 +1,11 @@
-import { pgTable, uuid, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  boolean,
+  integer,
+} from "drizzle-orm/pg-core";
 import { userTypeEnum, userRoleEnum } from "./enums";
 import { nigerianStates } from "./nigerian_states";
 
@@ -50,6 +57,26 @@ export const profiles = pgTable("profiles", {
   tier: text("tier").notNull().default("free"),
   tier_started_at: timestamp("tier_started_at", { withTimezone: true }),
   tier_expires_at: timestamp("tier_expires_at", { withTimezone: true }),
+
+  // E.2.0.0 / D-084: 1 free contact reveal granted at signup, beta default
+  // updated to 3 by E.2.14.0 (D-133 — private beta = 3 lifetime free reveals).
+  // System-only writes — `profiles_freeze_protected` trigger (E.2.14.0) blocks
+  // owner self-write; legit decrement happens via a future reveal-action
+  // SECURITY DEFINER fn that sets the `app.profile_system_write_authorized`
+  // GUC bypass.
+  // (Mirror added in E.2.14.0 — the column was deployed since E.2.0.0 but
+  // had never been added to this Drizzle file. Closing the drift here.)
+  signup_free_reveals_remaining: integer("signup_free_reveals_remaining")
+    .notNull()
+    .default(3),
+
+  // E.2.0.1 / D-083: timestamp of first Pro activation. NULL = never
+  // activated Pro. Drives the new (<30d) / established (≥30d) Pro
+  // reveal-cap tenure check in get_buyer_reveal_cap(). System-only writes —
+  // protected by `profiles_freeze_protected` trigger (E.2.14.0).
+  // (Mirror added in E.2.14.0 alongside signup_free_reveals_remaining;
+  // closes the same pre-existing drift.)
+  pro_activated_at: timestamp("pro_activated_at", { withTimezone: true }),
 
   // Stage 2.B / D-109 (migration E.2.5.0). Persistent last-seen signal,
   // written by messaging actions on send / open-thread / open-list. Nullable;
