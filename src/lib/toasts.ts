@@ -81,6 +81,14 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Report marked under review.",
   },
+  "listing-hidden": {
+    variant: "warning",
+    message: "Listing hidden from public view.",
+  },
+  "listing-unhidden": {
+    variant: "info",
+    message: "Listing restored to public view.",
+  },
 };
 
 export function getToastMessage(

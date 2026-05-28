@@ -44,6 +44,15 @@ export const products = pgTable("products", {
   // src/lib/categorySpecs.ts; this column holds the per-listing values.
   category_specs: jsonb("category_specs"),
   published_at: timestamp("published_at", { withTimezone: true }),
+  // E.2.13.0 (Stage 2): admin moderation timestamp. Non-null = listing
+  // hidden by admin at this timestamp. NULL = not admin-hidden.
+  // Written ONLY by admin via products_admin_all RLS + protected by the
+  // products_freeze_hidden_at trigger (D-017 column-freeze pattern) — even
+  // a service-role write fails because auth.uid() is NULL under service_role
+  // so is_admin(auth.uid()) returns false and the trigger raises.
+  // Orthogonal to `status` (admin-hidden is independent of the seller's
+  // draft/active/sold/archived lifecycle).
+  hidden_at: timestamp("hidden_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

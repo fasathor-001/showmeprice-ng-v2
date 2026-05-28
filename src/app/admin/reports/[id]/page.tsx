@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { ReportTriageActions } from "./ReportTriageActions";
+import { ListingModerationActions } from "./ListingModerationActions";
 import { formatNigerianPhone } from "@/lib/auth";
 
 // Stage 1 admin report detail (D-134 buyer-reporting completion).
@@ -43,6 +44,8 @@ type ListingTarget = {
   price_kobo: number | null;
   status: string;
   seller_id: string;
+  /** E.2.13.0 — non-null = admin-hidden at this timestamp. */
+  hidden_at: string | null;
 };
 type MessageTarget = {
   kind: "message";
@@ -147,7 +150,7 @@ export default async function ReportDetailPage({
   if (report.target_type === "listing") {
     const { data } = await admin
       .from("products")
-      .select("id, title, slug, price_kobo, status, seller_id")
+      .select("id, title, slug, price_kobo, status, seller_id, hidden_at")
       .eq("id", report.target_id)
       .maybeSingle();
     targetContext = data
@@ -159,6 +162,7 @@ export default async function ReportDetailPage({
           price_kobo: (data.price_kobo as number) ?? null,
           status: data.status as string,
           seller_id: data.seller_id as string,
+          hidden_at: (data.hidden_at as string) ?? null,
         }
       : { kind: "missing", target_type: "listing" };
   } else if (report.target_type === "message") {
@@ -275,7 +279,12 @@ export default async function ReportDetailPage({
               </div>
               <div>
                 <dt className="text-ink-600 text-xs">Listing status</dt>
-                <dd className="text-ink">{targetContext.status}</dd>
+                <dd className="flex items-center gap-2 flex-wrap">
+                  <span className="text-ink">{targetContext.status}</span>
+                  {targetContext.hidden_at && (
+                    <Badge variant="warning">Admin-hidden</Badge>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-ink-600 text-xs">Open listing</dt>
@@ -353,6 +362,22 @@ export default async function ReportDetailPage({
             </dl>
           )}
         </Card>
+
+        {/* Stage 2 listing-moderation affordance — only for listing targets
+            that exist (target may have been deleted between report-filing and
+            review). */}
+        {targetContext.kind === "listing" && (
+          <Card className="mb-4">
+            <h2 className="text-sm font-medium text-ink mb-3">
+              Moderation
+            </h2>
+            <ListingModerationActions
+              listingId={targetContext.id}
+              reportId={report.id}
+              hiddenAt={targetContext.hidden_at}
+            />
+          </Card>
+        )}
 
         {/* Lifecycle (minimal — useful for audit, not actionable here) */}
         <Card className="mb-8">
