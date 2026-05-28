@@ -990,6 +990,35 @@ Opened 2026-05-25; updated 2026-05-29 with Paystack Developer Relations response
 
 **Related (NOT a new instance of this issue):** E.2.11.0 (Stage A seller-WhatsApp foundation, applied 2026-05-28) was applied via the same Supabase SQL Editor running as `postgres` (after `RESET ROLE`) — the same execution pattern as the K-067 raw ALTER. For E.2.11.0 the file-vs-applied-state IS reconciled because the migration file (`migrations/E.2.11.0-seller-whatsapp-verification.sql`) is committed in the same commit that updates ACTUAL_SCHEMA. K-067 remains the only open instance of the "applied without a committed migration file" pattern.
 
+### K-068 — Homepage category marquee (deferred to full launch) (low, enhancement)
+
+**Severity:** low. **Status:** deferred / not built. Pure presentation enhancement; no correctness or security concern.
+
+**Idea:** on the homepage, display the category list (`<PopularCategories>` at [src/components/home/PopularCategories.tsx](src/components/home/PopularCategories.tsx)) as a slowly-scrolling horizontal marquee (animated strip) instead of the current static grid, for a more dynamic, alive-feeling home surface.
+
+**Why deferred, not now:**
+1. **Empty-supply optics.** The marketplace currently has supply concentrated in ~1-2 categories during private beta. Animating an empty strip across the screen draws attention to the empty categories rather than helping discovery — it amplifies the "nothing's here" signal at exactly the wrong time.
+2. **Polish value lives at full launch.** The marquee's payoff is when there are real buyers arriving, populated supply across multiple categories, and a homepage that should feel kinetic. None of those conditions hold during private beta (per D-128 Phase 1 — observation, not impression-management).
+3. **Wave 1B traffic doesn't browse the homepage.** Wave 1B buyers arrive via direct WhatsApp listing shares (deep-links to `/listings/[id]`), not via homepage browsing. Homepage category presentation is genuinely low-stakes pre-launch — even a perfect marquee wouldn't move buyer-engagement metrics during this phase.
+4. **The current static treatment is correct for now.** The recent `feat(home): mobile homepage shows first 3 categories only` change (`PopularCategories.tsx` conditional `hidden sm:block` on items beyond index 2) is the right treatment for a near-empty beta — small, honest, low-noise. The marquee is the eventual upgrade once content density justifies kinetic UI.
+
+**Anti-pattern this defers against:** building "looks alive" UI before there's anything alive to show. The kinetic feel is a function of population density × visit frequency. Building the chrome before the substance produces the uncanny-empty-mall effect.
+
+**Resolution criteria (when to revisit):**
+- Full-launch readiness criteria hit (per D-128 Phase 2/3 transition signals — meaningful supply across multiple Tier-1 categories, sustained buyer-visit volume).
+- Listings populated across at least 5 of the 7 Tier-1 categories with non-trivial counts (each so the scrolling strip isn't dominated by 1-2 names repeating).
+- A homepage that's already proven to convert at the current static density (i.e., not a "fix homepage by adding motion" reflex, but an "upgrade a proven surface" deliberate choice).
+
+**Implementation sketch (for future reference, not now):**
+- Likely a `marquee` CSS animation on a horizontally-flowing `<ul>` of category cards, doubled-up for seamless loop. Tailwind has no built-in marquee; either author a custom `@keyframes` in `globals.css` or pull in a small dependency.
+- Pause-on-hover (and `prefers-reduced-motion: reduce` honoring) are non-optional — accessibility and friction-respect both.
+- Mobile treatment likely stays the static 3-card grid (the marquee design optimum is desktop-width); reuse the existing `hidden sm:block` discriminator.
+- Server-rendered list, client-side motion only — no hydration cost beyond the marquee container.
+
+**Cross-references:** D-128 (Four-Phase Marketplace Lifecycle — Phase 1 anti-patterns include premature "impression management"), D-121 / D-124 (world-class UX standard, applied at the *right* phase), the static-mobile-3-categories homepage change.
+
+**Surfaced:** 2026-05-28 during a discussion of "enterprise-grade refactor" scope for admin surfaces; idea banked here so it isn't lost while the project focuses on private-beta substance over chrome.
+
 ## Resolved or superseded
 
 ### K-066 — SMS phone-verification blocker (Wave 1A.1) — RESOLVED via Mocean integration
