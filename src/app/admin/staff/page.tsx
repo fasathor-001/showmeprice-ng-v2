@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -75,6 +76,11 @@ export default async function AdminStaffPage() {
     <Container>
       <ToastFromSearchParams />
       <div className="py-8 sm:py-12">
+        <div className="mb-4 text-sm text-ink-600">
+          <Link href="/admin" className="hover:text-ink">
+            ← Admin
+          </Link>
+        </div>
         <h1 className="text-2xl sm:text-3xl font-medium text-ink mb-2">Staff</h1>
         <p className="text-sm text-ink-600 mb-6">
           {rows.length} {rows.length === 1 ? "admin" : "admins"}

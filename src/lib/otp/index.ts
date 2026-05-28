@@ -10,19 +10,21 @@
 import type { OtpProvider } from "./otp-provider";
 import { TermiiProvider } from "./termii-provider";
 import { ArkeselProvider } from "./arkesel-provider";
+import { MoceanProvider } from "./mocean-provider";
 
 export * from "./types";
 export type { OtpProvider } from "./otp-provider";
 export { TermiiProvider } from "./termii-provider";
 export { ArkeselProvider } from "./arkesel-provider";
+export { MoceanProvider } from "./mocean-provider";
 
-type SupportedVendor = "termii" | "arkesel";
+type SupportedVendor = "termii" | "arkesel" | "mocean";
 
 function readVendor(): SupportedVendor {
   const raw = process.env.OTP_PROVIDER_VENDOR?.toLowerCase() ?? "termii";
-  if (raw === "termii" || raw === "arkesel") return raw;
+  if (raw === "termii" || raw === "arkesel" || raw === "mocean") return raw;
   throw new Error(
-    `Invalid OTP_PROVIDER_VENDOR='${raw}' — must be 'termii' or 'arkesel'`,
+    `Invalid OTP_PROVIDER_VENDOR='${raw}' — must be 'termii', 'arkesel', or 'mocean'`,
   );
 }
 
@@ -53,11 +55,17 @@ export function getOtpProvider(): OtpProvider {
       senderId: readRequired("TERMII_SENDER_ID"),
       apiBaseUrl: process.env.TERMII_API_BASE_URL,
     });
-  } else {
+  } else if (vendor === "arkesel") {
     _instance = new ArkeselProvider({
       apiKey: readRequired("ARKESEL_API_KEY"),
       senderId: readRequired("ARKESEL_SENDER_ID"),
       apiBaseUrl: process.env.ARKESEL_API_BASE_URL,
+    });
+  } else {
+    _instance = new MoceanProvider({
+      apiToken: readRequired("MOCEAN_API_TOKEN"),
+      senderId: readRequired("MOCEAN_SENDER_ID"),
+      apiBaseUrl: process.env.MOCEAN_API_BASE_URL,
     });
   }
 
