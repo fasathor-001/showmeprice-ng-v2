@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 
+export const runtime = 'edge';
+
 export default function CookiePolicyPage() {
   return (
     <main className="min-h-screen bg-slate-50">
