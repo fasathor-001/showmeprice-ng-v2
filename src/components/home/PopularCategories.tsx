@@ -37,11 +37,18 @@ export async function PopularCategories() {
           </Link>
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3">
-          {items.map((cat) => (
+          {/* On mobile (<sm) show only the first 3 — desktop unchanged. The
+              remaining items stay in the DOM but are display:none on mobile
+              via Tailwind's `hidden sm:block`. Mobile users still reach the
+              rest via the "All categories →" link above. Display:none also
+              removes the hidden items from the accessibility tree, so this
+              isn't a screen-reader regression. K-068 tracks the eventual
+              marquee upgrade at full launch. */}
+          {items.map((cat, idx) => (
             <Link
               key={cat.id}
               href={`/categories/${cat.slug}`}
-              className="block"
+              className={`block ${idx >= 3 ? "hidden sm:block" : ""}`}
             >
               <Card variant="hover" className="h-full text-center">
                 <div className="text-3xl mb-1.5">
