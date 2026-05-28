@@ -17,35 +17,18 @@ import { getOtpProvider, OtpRateLimitedError } from "@/lib/otp";
 import { sha256Hex } from "@/lib/otp/hash";
 import { generateOtpCode } from "@/lib/otp/code";
 import { renderOtpMessage } from "@/lib/otp/message";
+import {
+  OTP_TTL_MS,
+  MAX_VERIFY_ATTEMPTS,
+  getSalt,
+  getClientIp,
+  checkOtpRateLimits,
+} from "@/lib/otp/server-internals";
 import { dispatchWelcomeEmail } from "@/lib/notifications/send-welcome-notification";
 
 export interface OtpActionState {
   ok?: boolean;
   error?: string;
-}
-
-const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const MAX_SENDS_PER_PHONE_PER_HOUR = 3;
-const MAX_SENDS_PER_IP_PER_HOUR = 10;
-const MAX_VERIFY_ATTEMPTS = 5;
-
-function getSalt(): string {
-  const s = process.env.OTP_HASH_SALT;
-  if (!s) throw new Error("Missing required env var: OTP_HASH_SALT");
-  return s;
-}
-
-/** Cloudflare-canonical client IP, falling back to the first x-forwarded-for hop. */
-function getClientIp(h: Headers): string | null {
-  const cf = h.get("cf-connecting-ip");
-  if (cf) return cf.trim();
-  const xff = h.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return null;
 }
 
 /**
@@ -79,37 +62,14 @@ export async function sendPhoneOtpAction(
   const phone = normalizeNigerianWhatsApp(profile.phone) ?? profile.phone;
   const admin = createAdminClient();
   const salt = getSalt();
-  const windowStartIso = new Date(Date.now() - RATE_WINDOW_MS).toISOString();
 
-  // Per-phone rate limit.
-  const { count: phoneCount } = await admin
-    .from("phone_verifications")
-    .select("id", { count: "exact", head: true })
-    .eq("phone", phone)
-    .gte("created_at", windowStartIso);
-  if ((phoneCount ?? 0) >= MAX_SENDS_PER_PHONE_PER_HOUR) {
-    return {
-      error:
-        "You've requested too many codes for this number. Please wait an hour and try again.",
-    };
-  }
-
-  // Per-IP rate limit (skipped when no client IP is resolvable).
+  // Per-phone (3/hr) + per-IP (10/hr) rate limits — phone- and IP-keyed,
+  // purpose-independent (the physical number / network can only legitimately
+  // receive N codes/hr regardless of why).
   const rawIp = getClientIp(headers());
   const ipHash = rawIp ? await sha256Hex(`${salt}:${rawIp}`) : null;
-  if (ipHash) {
-    const { count: ipCount } = await admin
-      .from("phone_verifications")
-      .select("id", { count: "exact", head: true })
-      .eq("request_ip_hash", ipHash)
-      .gte("created_at", windowStartIso);
-    if ((ipCount ?? 0) >= MAX_SENDS_PER_IP_PER_HOUR) {
-      return {
-        error:
-          "Too many verification attempts from your network. Please wait a while and try again.",
-      };
-    }
-  }
+  const rl = await checkOtpRateLimits({ admin, phone, ipHash });
+  if (!rl.ok) return { error: rl.error };
 
   // Generate, hash, persist.
   const code = generateOtpCode();
@@ -126,6 +86,7 @@ export async function sendPhoneOtpAction(
       request_ip_hash: ipHash,
       expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
       provider: provider.vendor,
+      purpose: "profile_phone", // E.2.11.0: explicit lane stamp (DB default also covers this).
     })
     .select("id")
     .single();
@@ -196,6 +157,7 @@ export async function verifyPhoneOtpAction(
     .from("phone_verifications")
     .select("id, code_hash, expires_at, attempts_made, provider")
     .eq("user_id", user.id)
+    .eq("purpose", "profile_phone") // E.2.11.0: never resolve a seller_whatsapp row here.
     .is("consumed_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
