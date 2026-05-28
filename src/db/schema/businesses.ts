@@ -44,6 +44,23 @@ export const businesses = pgTable("businesses", {
   // tracking only). Phase F+ enforces per tier.
   seller_reply_quota: integer("seller_reply_quota"),
 
+  // E.2.11.0: seller WhatsApp number for buyer contact reveal.
+  // E.164 without '+' (e.g. 2348012345678). Nullable: NULL = seller chose
+  // "use my verified profile phone" (fallback at reveal time is profile.phone).
+  // CHECK constraint enforces NULL-or-E.164 format at the DB layer.
+  // Written ONLY by the mark_seller_whatsapp_verified RPC (paired with
+  // seller_whatsapp_verified_at) — never via direct UPDATE from application
+  // code, so the invariant "verified_at non-null IFF current seller_whatsapp
+  // was the value that was OTP-proven" is preserved atomically.
+  seller_whatsapp: text("seller_whatsapp"),
+
+  // E.2.11.0: when seller_whatsapp was OTP-proven. Non-null = verified,
+  // and when. Null = unverified (or seller_whatsapp itself is null).
+  // Timestamp serves as both flag and audit trail — no separate boolean.
+  seller_whatsapp_verified_at: timestamp("seller_whatsapp_verified_at", {
+    withTimezone: true,
+  }),
+
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

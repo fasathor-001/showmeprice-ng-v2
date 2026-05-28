@@ -984,9 +984,11 @@ Opened 2026-05-25; updated 2026-05-29 with Paystack Developer Relations response
 
 **Why it matters:** the live DB now diverges from what `migrations/` documents. Any future agent who reads the committed schema will see `IN ('termii', 'arkesel')` and conclude `'mocean'` is invalid — when production accepts it. Standard "verify live `information_schema`, not the migrations folder" applies, but committed schema should still catch up.
 
-**Resolution scope:** author a small migration file (e.g., `migrations/E.2.11.0-phone-verifications-mocean.sql`) following the §0 / §1 / §2 pattern: pre-flight check showing the current constraint definition, the `ALTER TABLE` DROP+ADD, and a verification SELECT confirming `'mocean'` is in the accepted set. Apply locally is a no-op (production already has the new constraint); the file's purpose is the committed audit trail.
+**Resolution scope:** author a small migration file (e.g., `migrations/E.2.12.0-phone-verifications-mocean.sql` — bumped from the originally-suggested E.2.11.0 because that number was taken by the Stage A seller-WhatsApp migration on 2026-05-28) following the §0 / §1 / §2 pattern: pre-flight check showing the current constraint definition, the `ALTER TABLE` DROP+ADD, and a verification SELECT confirming `'mocean'` is in the accepted set. Apply locally is a no-op (production already has the new constraint); the file's purpose is the committed audit trail.
 
 **Surfaced:** 2026-05-28 during Wave 1A.1 Mocean integration. Banked alongside D-130.
+
+**Related (NOT a new instance of this issue):** E.2.11.0 (Stage A seller-WhatsApp foundation, applied 2026-05-28) was applied via the same Supabase SQL Editor running as `postgres` (after `RESET ROLE`) — the same execution pattern as the K-067 raw ALTER. For E.2.11.0 the file-vs-applied-state IS reconciled because the migration file (`migrations/E.2.11.0-seller-whatsapp-verification.sql`) is committed in the same commit that updates ACTUAL_SCHEMA. K-067 remains the only open instance of the "applied without a committed migration file" pattern.
 
 ## Resolved or superseded
 
