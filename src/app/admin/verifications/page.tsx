@@ -29,7 +29,7 @@ import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 
 export const runtime = "edge";
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 5;
 const SEARCH_MIN = 3;
 
 type StatusFilter = "pending" | "verified" | "rejected";
