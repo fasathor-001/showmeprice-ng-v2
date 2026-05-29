@@ -901,6 +901,39 @@ The three live captures in this session:
 - For verification controls that depend on bypassing RLS (e.g. SECURITY DEFINER positive controls), prefer **reading state via `information_schema` / `pg_catalog`** over running surrogate INSERTs that route through different policy paths than production.
 - The §2 paste-back step costs minutes; the gaps it catches cost rollbacks-from-production. Verification discipline pays for itself.
 
+## iOS Safari `aspect-ratio` collapses in nested grid contexts; mobile browsers don't render PDFs in iframes
+
+**Banked during the admin verification mobile fix (2026-05-29 small hours, commit `dc9c10b`).** Two real mobile-rendering gotchas surfaced from the same bug report ("verified user's ID + selfie aren't visible on mobile, rejected user's are").
+
+The initial diagnosis was a red herring — the rejected user's documents rendered because they were *uploaded*; the "verified" users had no documents at all because they were verified outside the submission pipeline (see the journal's "Diagnostic finding worth knowing" section). But while fixing the actual mobile rendering for the documents that ARE on file (the empire/empress rejected submission), two CSS/browser quirks bit:
+
+### 1. Tailwind `aspect-square` / CSS `aspect-ratio` can collapse to zero height on iOS Safari
+
+Inside a `grid grid-cols-1 lg:grid-cols-2 gap-6` container, with a Card → div with `aspect-square` → `<img className="w-full h-full object-contain">`. Renders correctly on desktop. On iOS Safari, the `aspect-ratio: 1 / 1` declaration sometimes doesn't compute the height correctly when the parent's intrinsic width resolution path goes through multiple grid/flex contexts — the div collapses to zero height, the image is technically rendered but has no visible area. Looks "missing" to the user.
+
+**Pattern to avoid:** `<div className="aspect-square"><img className="h-full w-full ..." /></div>` for user-uploaded images that need to be visible on mobile.
+
+**Pattern to prefer:** explicit viewport-relative max-heights — `max-h-[70vh] sm:max-h-[500px]` (or similar) on the `<img>` itself, with `block w-full object-contain` for the sizing. Image always has somewhere to render; scales naturally with viewport.
+
+### 2. Mobile browsers don't reliably render PDFs inside `<iframe>`
+
+iOS Safari **does not** render PDFs in iframes — the frame loads blank. Android Chrome's behavior is inconsistent (some versions blank, some try Google Docs viewer, some prompt download). **Desktop browsers handle PDF-in-iframe natively**, which makes this a classic "works on my laptop, broken on phone" trap.
+
+**Pattern to avoid:** `<iframe src={signedPdfUrl} />` anywhere the surface might be hit from mobile (admin pages especially — admins use phones).
+
+**Pattern to prefer:** show a centered link/button that opens the PDF in a new tab. Mobile devices hand it to their native PDF viewer (iOS Files/Books, Android Drive); desktop browsers render natively. Works everywhere:
+```tsx
+<a href={signedPdfUrl} target="_blank" rel="noopener noreferrer" className="...">
+  Open ID document (PDF) →
+</a>
+```
+
+### Bonus discipline: `loading="lazy"` + `decoding="async"` for any user-uploaded JPG
+
+Phone-camera JPGs from Nigerian sellers are typically 4–8 MP, 2–8 MB uncompressed. iOS Safari historically has memory issues decoding images above ~8 MP synchronously. `loading="lazy"` + `decoding="async"` let the mobile browser decode incrementally without stalling the render. Cheap to add; meaningful UX improvement on mobile.
+
+**Where this applies on this codebase today:** all admin surfaces that display seller-uploaded ID documents, selfies, listing product images, and any future PII upload. The verification detail page (`src/app/admin/verifications/[id]/page.tsx`) carries the pattern post-`dc9c10b`; mirror it for any future admin image-rendering surfaces.
+
 ---
 
 ## Meta-discipline: the documentation IS the institutional memory

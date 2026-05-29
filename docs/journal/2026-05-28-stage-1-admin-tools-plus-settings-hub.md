@@ -90,3 +90,32 @@ Lower-stakes documentation hygiene the agent and I trimmed from tonight's bankin
 - **DB-first / surface-first review on every migration.** E.2.14.0, E.2.15.0, E.2.16.0 all ran §0 / §1 / §2 with paste-back; the ACL gap on E.2.16.0 only surfaced because of the §2b grant audit. Without that step every admin function would have shipped wide-open at the role-grant layer with only the in-function `is_admin` as a barrier.
 - **Live-fire control tests inside ROLLBACK savepoints.** E.2.16.0's §2 ran twelve controls (positive + four negatives + idempotency for each RPC) — all green, zero residue. The RPCs went into production with the same confidence as if they'd been unit-tested.
 - **Trim-the-scope-for-tired-review when banking docs.** Tonight's directive split the documentation pass into "must-bank tonight" (this commit) and "can-wait" items deferred to tomorrow. Tighter scope at late-night attention levels = better odds the docs are accurate.
+
+## Post-handoff late-night follow-ups (2026-05-29 small hours)
+
+After banking the must-bank docs, five small fixes landed in sequence as we used the live admin tools and found friction:
+
+| Commit | Subject | What broke / improved |
+|---|---|---|
+| `be4676e` | `fix(auth): allow signed-in users to reach /forgot-password from settings` | Settings → Change password was bouncing to /dashboard because `/forgot-password` sat in `AUTH_ONLY_PREFIXES`. One-line middleware fix. |
+| `21ac9df` | `feat(admin): add verification queue tabs and user-detail link` | The verification queue only listed pending submissions; once approved/rejected, the row had no admin-facing nav path. Three tabs (Pending / Verified / Rejected) with counts, legal-name search, 10-item default cap with search bypass, four empty states. Bundled with a Verification-submission card on /admin/users/[id] (linking into the detail page) and a one-line drift fix on the detail page's status badge ("Approved" → "Verified") so wording is consistent end-to-end. |
+| `f6cc243` | `chore(admin): reduce verification queue default limit to 5` | Default cap dropped from 10 to 5 per-tab — search covers everything else. |
+| `dc9c10b` | `fix(admin): make verification ID + selfie render on mobile` | Selfie's `aspect-square` collapses to zero height on iOS Safari in nested grid contexts; ID-doc iframe doesn't render PDFs on mobile browsers. Replaced with viewport-relative max-heights + `loading="lazy"` + `decoding="async"` for images, and a "Open ID document (PDF) →" link in place of the iframe for PDF uploads. Added "Open full size →" link to both image cards for fine-detail inspection. |
+
+### Diagnostic finding worth knowing — verified sellers have no submission documents
+
+While debugging the mobile-rendering issue, ran a confirmation SQL and found that **all five currently-verified businesses on the platform have `submission_count = 0`** in `seller_verifications`. The total population of `seller_verifications` rows is **one** — a rejected submission (empire/empress). Every verified seller was approved by direct `businesses.verification_status='verified'` update, bypassing the submission pipeline entirely.
+
+This isn't a code bug — the admin pages render the truth (no submission = nothing to show). It surfaces a gap between **D-134** (banked the same day, names manual identity verification as "LIVE — PRIMARY HARD GATE" and "the load-bearing live trust mechanism today") and **actual production state** (zero documents on file for any verified seller).
+
+**Not material for Phase 1 private beta** — Phase 1 per D-128 is explicitly relational and Frank's personal vouching IS the trust mechanism for the founding cohort. **Becomes material before public launch.** Three pragmatic paths discussed (B+C combination recommended):
+
+- **A. Backfill** — re-submit each of the 5 verified sellers through `/sell/verify` for documentary trail.
+- **B. Rebank D-134** to acknowledge the Phase 1 founding-cohort exemption explicitly.
+- **C. Off-platform evidence file** — collect ID + selfie from the 5 grandfathered sellers via WhatsApp/email, store encrypted off-platform with a manifest.
+
+**Banked as a known gap; carried to tomorrow's directive.** Listed alongside the other can-wait items (D-140 / D-141 / K-?? entries / K-067 status check). The "honest UI signal" — surfacing "Verified via direct admin action — no submission documents on file" on /admin/users/[id] and the verifications Verified tab — would close the silent-gap part with ~15 lines across two files; the strategic question (which of A/B/C) is the harder call.
+
+### Lesson banked from the mobile fix
+
+One MEMORY entry added today: **"iOS Safari `aspect-ratio` collapses in nested grid contexts; mobile browsers don't render PDFs in iframes."** Two real captures from the same bug; the diagnostic was "rejected user's docs render on mobile, verified user's don't" which turned out to be a **data condition (no documents) masquerading as a rendering bug**, and only when we got to the actual rendering issue (Empire/Empress rejected docs not visible on mobile) did the underlying CSS quirks surface. The MEMORY entry captures the practical patterns: prefer viewport-relative max-heights over `aspect-ratio`; use `loading="lazy"` + `decoding="async"` for any user-uploaded JPG; never embed PDFs in iframes on a surface that might be hit from mobile.
