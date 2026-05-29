@@ -172,13 +172,30 @@ export default async function VerificationDetailPage({
               <div className="p-4 pb-2">
                 <h2 className="text-sm font-medium text-ink">Selfie</h2>
               </div>
-              <div className="bg-neutral-100 aspect-square">
+              {/* Mobile fix: aspect-square has known iOS Safari quirks in grid
+                  contexts (can collapse to zero height). Use explicit viewport-
+                  relative max-height instead so the image always has somewhere
+                  to render. loading="lazy" + decoding="async" let mobile
+                  browsers decode large phone-photo JPGs incrementally. */}
+              <div className="bg-neutral-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={selfieSigned.signedUrl}
                   alt="Seller selfie"
-                  className="w-full h-full object-contain"
+                  loading="lazy"
+                  decoding="async"
+                  className="block w-full max-h-[70vh] sm:max-h-[500px] object-contain"
                 />
+              </div>
+              <div className="p-3 border-t border-neutral-200 text-right">
+                <a
+                  href={selfieSigned.signedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-teal-700 hover:text-teal-900 font-medium"
+                >
+                  Open full size →
+                </a>
               </div>
             </Card>
           )}
@@ -190,17 +207,33 @@ export default async function VerificationDetailPage({
           </div>
           <div className="bg-neutral-100">
             {idDocSigned?.signedUrl && idDocIsPdf ? (
-              <iframe
-                src={idDocSigned.signedUrl}
-                className="w-full h-[600px]"
-                title="ID document"
-              />
+              // Mobile fix: iOS Safari + most mobile browsers won't render
+              // PDFs inside an iframe — show a link that opens in the device's
+              // native PDF viewer instead. Works on desktop too.
+              <div className="p-8 text-center">
+                <p className="text-sm text-ink-600 mb-4">
+                  PDF document — open in your device&apos;s PDF viewer.
+                </p>
+                <a
+                  href={idDocSigned.signedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
+                >
+                  Open ID document (PDF) →
+                </a>
+              </div>
             ) : idDocSigned?.signedUrl ? (
+              // Mobile fix: viewport-relative max-height + lazy/async decode
+              // so large phone-photo JPGs render reliably on iOS Safari and
+              // Android Chrome. Same w-full + object-contain shape as before.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={idDocSigned.signedUrl}
                 alt="ID document"
-                className="w-full max-h-[600px] object-contain"
+                loading="lazy"
+                decoding="async"
+                className="block w-full max-h-[80vh] sm:max-h-[600px] object-contain"
               />
             ) : (
               <p className="p-8 text-center text-sm text-ink-600">
@@ -208,6 +241,18 @@ export default async function VerificationDetailPage({
               </p>
             )}
           </div>
+          {idDocSigned?.signedUrl && !idDocIsPdf && (
+            <div className="p-3 border-t border-neutral-200 text-right">
+              <a
+                href={idDocSigned.signedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-teal-700 hover:text-teal-900 font-medium"
+              >
+                Open full size →
+              </a>
+            </div>
+          )}
         </Card>
 
         {verification.status === "pending" && (
