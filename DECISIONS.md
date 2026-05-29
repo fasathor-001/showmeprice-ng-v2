@@ -3131,3 +3131,174 @@ This decision deliberately uses the **app-strict / DB-permissive** pattern consi
 - Adding NOT NULL to `businesses.city_area` without a backfill plan — would error on the migration against legacy rows.
 - Letting `updateBusinessAction` permit blank `city_area` indefinitely — undermines the create-flow requirement; **flagged as a follow-up to tighten**.
 
+## D-137 — Verification sequencing gate: business details + verified WhatsApp before ID verification
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-032 (Verification hard gate — RLS-based visibility), D-131 (Seller WhatsApp OTP-proven before revealable), D-134 (Trust stack — `city_area` + `state_id` as reachability signals), D-136 (`city_area` required at seller setup)
+**Implementation:** Commit `6cef493`. Bundled in the same commit: a small `updateBusinessAction` fix closing the D-136 follow-up (existing sellers could previously blank `city_area` back out via the manage-business view).
+
+### The decision
+
+A seller cannot submit ID verification (the `/sell/verify` flow → `submitVerificationAction`) until both of the following are true:
+
+1. **Business details are complete** — `businesses.business_name`, `businesses.state_id`, and `businesses.city_area` are all populated (non-null and non-empty).
+2. **Seller WhatsApp is verified** — `businesses.seller_whatsapp_verified_at` is non-null (the verified-alternate-number path from D-131) OR the seller has explicitly chosen "use my verified profile phone" and `profiles.phone` is itself OTP-verified.
+
+If either gate fails, the `/sell/verify` page redirects back to `/sell` with a toast (`verify-needs-business-details` or `verify-needs-whatsapp`) and the seller is signposted to the missing step.
+
+### Three-layer enforcement
+
+Defense-in-depth on the gate, mirroring the verification stack's general posture:
+
+1. **UI checklist on `/sell`** — visible items show whether each prerequisite is met; the "Start verification →" / "Resubmit verification →" link is gated on the same condition so the link doesn't appear until the gates pass.
+2. **Server redirect on `/sell/verify` page load** — the page itself reads the gate state and redirects to `/sell` with the toast if a prerequisite is missing. Catches the case of a direct URL hit (bookmarks, copy-pasted links from prior states).
+3. **Action guard in `submitVerificationAction`** — the server action re-checks the gate before any insert into `seller_verifications`, returning a structured error if violated. Catches the case where the page redirect was bypassed (a stale tab whose form is submitted after the gate state has regressed).
+
+All three layers read the same authoritative fields (`businesses.business_name`, `state_id`, `city_area`, `seller_whatsapp_verified_at`, and the verification-status / phone state used by D-131's WhatsApp fallback resolution).
+
+### Rationale
+
+Without the gate, a seller could submit ID verification with no city / no state / no reachable WhatsApp — and the admin could approve the submission (the manual review checks the identity documents, not the business fields). The seller would then be `'verified'` and their listings public, but with no operational location and no buyer-reachable contact. That breaks the trust-stack contract D-134 establishes:
+
+- Mechanism #2 (manual identity verification) succeeds.
+- Mechanism #3 (seller WhatsApp OTP) is missing — the revealed contact at reveal time is whatever fallback resolves, possibly nothing usable.
+- Mechanism #4 (RLS public-listing gating) flips the seller's listings live, including listings with no operational city signal.
+
+The right place for this gate is **before** ID verification submission, not as a soft validation at admin-review time, because:
+
+- Admin reviewers should be evaluating identity-document evidence, not chasing missing operational fields.
+- A rejected verification for "missing city / unverified WhatsApp" is a worse seller experience than a clear pre-submission checklist saying "complete these first."
+- The fields the gate checks are seller-self-serve; admin can't fix them on the seller's behalf without violating the D-138 profile-lockdown (the WhatsApp path requires the seller's own OTP). Putting them at admin-review time would create a class of submissions that admin can't approve.
+
+### Bundled D-136 follow-up: `updateBusinessAction` city_area tightening
+
+D-136 originally flagged that `updateBusinessAction` (the manage-business / "edit your business" path) permitted blank `city_area` updates because the DB column is nullable. The verification sequencing gate would be undermined if existing sellers — having passed the gate once — could later blank `city_area` back out via the manage-business view and reach a state where the gate would no longer pass on a re-submission. Same commit closes this: `updateBusinessAction` now rejects empty `city_area` in updates, matching the create-flow strictness from D-136.
+
+### Operational consequences
+
+- **Banner pattern on `/sell`** — the existing "verify WhatsApp" recovery banner (`SellerWhatsappRecoveryBanner`, from `1e8d217`) is the surface the gate signposts to. The banner exists to close the dead-end where a seller had a degraded WhatsApp state with no recovery path; D-137 makes that banner load-bearing for the verification sequence.
+- **Toast keys** — `verify-needs-business-details` and `verify-needs-whatsapp` are registered in `toasts.ts`. New toast keys for future gate variants (e.g. "verify-needs-X") follow the same `verify-needs-…` naming.
+- **Gate condition lives in one place per layer.** The gate is expressed as a function over the seller's current state; future additions (extra prerequisites, e.g. profile-photo-required, payment-detail-required) extend that function, not by adding parallel checks in each of the three layers.
+
+### Anti-pattern
+
+- Moving the gate to admin-review time. Violates the rationale above; admin reviewers end up doing operational-field chasing instead of identity evaluation.
+- Adding a fourth enforcement layer (e.g. a DB trigger on `seller_verifications` insert). The three layers (UI / page redirect / action guard) already cover the realistic failure modes; a DB trigger would duplicate the action-guard check without adding meaningful protection, at the cost of forcing the gate condition to be expressible in SQL only (and tracking schema drift across two implementations).
+- Soft-gating with a warning instead of a hard block. The seller can choose to ignore a warning; the consequence is broken sellers in production. Hard gate, signposted recovery.
+
+## D-138 — Profile column lockdown (E.2.14.0): DB-enforced freeze on protected identity + monetization columns
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-017 (Trigger-protected column pattern — `businesses.verification_status` precedent), D-105 (Admin-bootstrap GUC bypass pattern for SECURITY DEFINER admin operations), D-083 (`signup_free_reveals_remaining` — buyer reveal accounting), D-084 (Pro activation timestamp), D-133 (Beta lifetime free-reveal grant — default 1 → 3), K-066 (Production phone-verify path — must not break), K-021 (`freeze_profile_role` search_path pinning — deferred)
+**Implementation:** `migrations/E.2.14.0-freeze-profile-protected-columns.sql` (applied 2026-05-28) + commit `3d5ee88`. Bundled fix in the same migration: `profiles.signup_free_reveals_remaining` default `1` → `3` per D-133.
+
+### The decision
+
+The following eight `profiles` columns are DB-enforced as write-protected via a new `BEFORE UPDATE` trigger `profiles_freeze_protected` (function `freeze_profile_protected_columns`). Owner and admin direct UPDATEs to any of them raise `42501` with a specific message naming the column:
+
+1. **`display_name`** — permanently frozen. Set at signup; cannot be changed by anyone, including the owner, including admin. The settings page surfaces this as "Set at signup; cannot be changed."
+2. **`phone`** — admin-only via SECURITY DEFINER RPC. Owner-facing settings copy: "Contact support to change your phone number." The RPC (`admin_change_user_phone`, E.2.16.0) is the one path that bypasses; it sets the GUC, writes the new phone, atomically strips `'phone_verified'` and `_phone`-suffixed `auth_providers`, and audits.
+3. **`tier`** — system-only. Future Paystack-webhook RPC writes this; no owner / admin manual path until that RPC ships.
+4. **`tier_started_at`** — system-only (same as `tier`).
+5. **`tier_expires_at`** — system-only (same as `tier`).
+6. **`signup_free_reveals_remaining`** — system-only. Future reveal-action decrement RPC will set the bypass GUC; no other path writes this column. (Bundled default change from `1` to `3` per D-133 — beta lifetime grant — applies to new INSERTs only; existing rows unaffected.)
+7. **`pro_activated_at`** — system-only.
+8. **`is_disabled`** — admin-only via future account-suspend RPC (Stage 2 of admin tools per D-139). Until that RPC ships, this column is unwritable by anyone except the postgres role / service_role with the bypass GUC set inline.
+
+The bypass mechanism is a transaction-local GUC `app.profile_system_write_authorized` consumed by the trigger via `current_setting('app.profile_system_write_authorized', true)` (second-arg `true` returns NULL when missing, NULLIF + COALESCE coerces NULL to false). The GUC mirrors the E.2.2.0 `app.role_change_authorized` pattern — set LOCAL inside legitimate SECURITY DEFINER RPCs, dies at COMMIT/ROLLBACK, not exposed via PostgREST.
+
+### Deliberately NOT locked
+
+Equally important — the columns the trigger DOES NOT cover, and why:
+
+- **`verification_status` + `auth_providers`** — the live `mark_phone_verified` RPC writes both columns and does NOT set the bypass GUC. Including them in the freeze would break K-066 (the production-critical phone-verify path). Hardening these is a deferred follow-up: either `mark_phone_verified` is taught to set the GUC, or the freeze condition learns to discriminate "legit append-only updates" from "owner manipulation." Until then, the operational discipline is that these columns have a single live writer (`mark_phone_verified`), and any future writer must be added to MEMORY first.
+- **`user_type`** — the legit buyer-to-seller upgrade path (`becomeSellerAction`) writes this column from `'buyer'` to `'seller'` via owner-driven action. Locking it would break seller onboarding.
+- **`last_seen_at`** — frequent legit messaging writes; locking it would cause continuous freeze-trigger noise without trust benefit.
+- **`state_id`** — settings-page editable when introduced (buyers update their state when they move). Admin-only path also exists via `admin_change_user_location` (E.2.16.0) for support-driven updates, routed through audit for consistency even though no DB lock requires it. **Asymmetry alert — `state_id` is the one field currently locked only at the UI layer.** The settings page (`77ce57d`) renders "Contact support to update your location" with no edit form, but the DB column remains owner-writable under the existing `profiles` RLS — the lock today relies on the absence of an edit form, not on the freeze trigger. This is acceptable while the settings page has no state edit UI; **if and when the settings page gains an owner-driven state edit form**, `state_id` MUST be moved into the freeze trigger first (so the owner-edit path goes through a SECURITY DEFINER RPC that sets the bypass GUC, matching the pattern for every other lockdown column). Until then, this asymmetry is the single instance where UI absence is the only barrier — flagged explicitly here so it does not silently degrade.
+- **`handle`** — settings-page editable when introduced (future feature).
+- **`avatar_path`** — settings-page editable when introduced (future feature; current settings hub ships initials-only).
+- **`full_name`** — settings-page editable when introduced (legal-name field distinct from `display_name`).
+- **`role`** — already protected by the pre-existing `profiles_freeze_role` trigger (E.2.2.0). The new lockdown deliberately does not duplicate that protection. K-021 (search_path pinning for `freeze_profile_role`) remains deferred.
+
+### Trust-thesis rationale
+
+The settings page after `77ce57d` makes specific claims to the user — "Set at signup; cannot be changed", "Contact support to change your phone number", "Contact support to update your location" (note: location is locked at the UI layer, not DB, see Deliberately NOT locked above). Until E.2.14.0, those claims were enforceable only by the absence of an edit form — any path with `rpc()` access (including the user's own authenticated session via the JS client) could mutate `display_name` / `phone` / `tier` / `is_disabled` directly. The settings copy was UI theater; the actual write-protection layer was the absence of code that called the writes.
+
+E.2.14.0 makes the settings page's claims true at the DB layer. A buyer who tries to `rpc()` a `display_name` update from their browser console hits `42501` from the trigger, not a "endpoint not implemented" 404 from the absence of UI. That's the contract trust-thesis requires.
+
+This is the same principle as D-017's `freeze_business_verification` trigger (which makes "only admin can verify a business" true at the DB layer, not just the admin-UI layer) and E.2.2.0's `freeze_profile_role` trigger (which makes "only existing admins can grant admin role" true at the DB layer). Three triggers, same posture: claims about who can write what live in trigger code, not in UI absence.
+
+### Defense-in-depth posture
+
+The freeze trigger is the **last line**, not the only one. The full posture for any column the lockdown covers:
+
+1. **No UI affordance.** The settings page has no edit form for these fields.
+2. **No app-layer write path.** No server action / RPC client call writes these fields outside the explicitly-banked SECURITY DEFINER RPCs.
+3. **DB-enforced freeze** (this decision). Catches the case where a malicious or buggy caller bypasses (1) and (2).
+4. **Bypass requires LOCAL GUC + SECURITY DEFINER ownership.** The bypass key `app.profile_system_write_authorized` is set only inside `postgres`-owned SECURITY DEFINER functions, and only LOCAL — it dies at transaction boundaries and cannot leak between calls.
+5. **Bypass-using RPCs are themselves ACL-locked.** Per the MEMORY lesson on Supabase default function ACL, the RPCs that set the bypass are `REVOKE EXECUTE`'d from `PUBLIC` + `anon` + (where appropriate) `service_role`, with `GRANT` to only the role that legitimately invokes them.
+
+### Bundled D-133 default fix
+
+`profiles.signup_free_reveals_remaining` default changed from `1` to `3` in the same migration. Per D-133, private beta = 3 free contact reveals per buyer, lifetime. The default was wrong (`1`) since E.2.0.0; the live test profile surfaced this. Default change applies to new INSERTs only; existing rows are unaffected (no backfill — beta is small enough that the affected cohort can be re-granted manually if needed, and most production rows post-this-fix will be new signups).
+
+### Anti-pattern
+
+- Adding new columns to the freeze without inventorying writers. A surprise lockdown that breaks a live RPC is worse than no lockdown. Process: before adding a column to the trigger, grep the codebase for all current writers, confirm each is either (a) a SECURITY DEFINER RPC that will set the bypass or (b) a path that should now be blocked.
+- Setting the bypass GUC at session scope (without `LOCAL`). Would leak across statements within the same Editor session and create accidental-bypass risk. The `set_config(..., true)` third-arg `true` enforces LOCAL — never drop it.
+- Exposing a `public.set_profile_system_write_authorized()` wrapper through PostgREST. Would re-open the bypass to any session that holds EXECUTE on the wrapper. `set_config` lives in `pg_catalog` (not exposed via REST), and no public wrapper exists — keep it that way.
+
+## D-139 — Stage 1 admin tools scope: phone + location change, with deferrals named
+
+**Status:** Locked (2026-05-28)
+**Cross-references:** D-105 (Admin role provisioning audit precedent — same RPC shape and lockdown discipline), D-138 (Profile column lockdown — the freeze trigger that Stage 1's phone-change RPC bypasses), D-081 (Admin-model unification deferred to Phase F+), K-004 (Account deletion — RESTRICT FK reality requires soft-delete-PII-scrub design)
+**Implementation:** `migrations/E.2.15.0-profile-admin-changes-audit.sql` (audit table) + `migrations/E.2.16.0-admin-profile-change-rpcs.sql` (two SECURITY DEFINER RPCs) + commit `4abe364` (admin UI: `/admin/users` search + `/admin/users/[id]` detail page + two action forms + user-notification email dispatcher).
+
+### What Stage 1 builds
+
+The admin support surface needed to fulfill the settings-page promises the user sees ("Contact support to change your phone number / location"):
+
+1. **Admin user search** (`/admin/users`) — search any user by name, email, or phone (with `normalizeNigerianWhatsApp` pre-normalization for phone-substring matching). Returns full directory: includes admins, includes disabled accounts. Distinct from `/admin/staff` which lists admins-only for the grant-role flow.
+2. **Admin user-detail page** (`/admin/users/[id]`) — read-only display of the user's current state (display_name, email, phone with verified badge, current state, role badge, disabled badge, joined date) plus recent admin-action history from `profile_admin_changes` (limit 5, ordered newest-first). Two action forms inline.
+3. **`admin_change_user_phone` RPC** (E.2.16.0) — SECURITY DEFINER, GUC-bypass-protected, audit-writing. Validates caller is admin (42501), reason length 5–500 (22023), phone format `^234\d{10}$` (22023). Idempotent on same value. Atomic UPDATE writes new phone + strips `'phone_verified'` from `verification_status` + strips `_phone`-suffixed entries from `auth_providers` + bumps `updated_at`. UNIQUE violation re-raised as 23505 with clearer message. Audit row written with `action='phone_changed'`, previous/new values, reason. ACL: `REVOKE FROM PUBLIC + anon + service_role`, `GRANT TO authenticated` (the in-function `is_admin` check is the real gate).
+4. **`admin_change_user_location` RPC** (E.2.16.0) — same authz + reason gates. State existence validated up-front (P0002). NULL-safe idempotency via `IS NOT DISTINCT FROM`. No bypass GUC needed (state_id is NOT in the E.2.14.0 freeze list); routed through this RPC purely for audit consistency. Audit row written with `action='location_changed'`, previous/new = state name (human-readable, not uuid).
+5. **User-notification email** (`dispatchAdminProfileChangeNotification`) — sent to the affected user after either RPC succeeds. Subject: "Your ShowMePrice account was updated by support". Body: factual statement of which field changed + recovery CTA ("If you didn't request this change, please reply to this email immediately"). Phone variant additionally notes the verified-status revoke. Fire-and-forget; never throws (mirrors `dispatchVerificationDecisionEmail`). `event_type=NULL` in `notification_log` (welcome-precedent — outside user-facing notification taxonomy, no opt-out — security/recovery class).
+
+Twelve live-fire control tests (positive + four negatives + idempotency for each RPC, all ROLLBACK-wrapped) verified the RPCs end-to-end before app code shipped.
+
+### What's deferred and why
+
+The original draft scope for "Stage 1 admin tools" was broader. The deliberate trim:
+
+- **Account suspension** — deferred to **Stage 2 admin tools**. Bare `is_disabled` flip is not enough; the design needs (a) middleware login-gate so a suspended user can't continue to act on stale session, (b) listing-visibility transition (do their listings hide on suspend? on suspend duration ≥ N? immediately?), (c) communication policy (does the suspended user receive an email? are their open conversations frozen?). Needs its own banked design pass before implementation; not blocking Stage 1's correctness gap.
+- **Email change** — deferred. Touches `auth.users` via the Supabase admin SDK, not just `profiles`. Different code path entirely (not a `public.fn()` RPC), different recovery posture (changing email invalidates magic-link recovery, requires re-confirmation), different abuse surface (mass-email-takeover via compromised admin account is much higher impact than mass-phone-takeover). Out of Stage 1 scope.
+- **Deletion processing** — deferred (K-004 stands). The `RESTRICT` FK posture on `messages` / `conversations` / `orders` / `contact_reveals` / `price_history` is intentional — those rows are evidence and accounting, not orphanable. Real deletion needs a soft-delete-PII-scrub design (anonymize `display_name`, null `phone`, retain referential integrity) rather than naive row delete. Out of Stage 1 scope.
+- **Consolidated `admin_action_log` coverage across all admin actions** — deferred. The codebase has three separate audit tables today: `admin_action_log` (originally intended as the unified log, but blocked by the `admins`-entity FK), `admin_role_changes` (E.2.2.0, purpose-specific to avoid the `admins`-FK dependency), and now `profile_admin_changes` (E.2.15.0, same rationale). The unification is gated on D-081 (admin-model unification deferred to Phase F+); until then, each purpose-specific table is the right pragmatic shape. Banked as a known gap.
+
+### Rationale for the deferrals
+
+Stage 1 closes a **specific live correctness gap**: the settings page (`77ce57d`) makes promises ("contact support to change your phone / location") that, until Stage 1, had no admin tool to fulfill. A user who hit "I need to change my phone" had no path; admin had no path either short of direct SQL. Stage 1 closes that gap with the minimum viable admin surface.
+
+Each deferred item adds **a design question that's harder than the build**, and entangling them with Stage 1 would delay the live-correctness fix while we work through the harder design. Specifically:
+
+- Account suspension needs the session/visibility/communication design (above) — that's a feature-design question, not a coding question.
+- Email change needs the `auth.users` write path + recovery-flow rethink — different code path, different design.
+- Deletion needs the soft-delete-PII-scrub design — different code path, different design, K-004 known.
+- Audit unification needs the admin-model unification decision — D-081 deferred for explicit Phase reasons.
+
+Each will get its own banked design + scope when the next stage warrants it. The deferrals are not "we didn't have time", they are "we don't yet know the right shape, and shipping a wrong shape would be worse than shipping nothing."
+
+### Operational consequences
+
+- **Stage 1 RPCs are called via the `authenticated` session client**, not `service_role`. The in-function `is_admin(p_granter_id)` check is the real authorization; `p_granter_id` is always `auth.userId`. This is a **deliberate departure** from `mark_phone_verified`'s `service_role`-only posture (which exists because that RPC is called from a `service_role`-authenticated server context). Document for future maintainers: the choice of which role to GRANT EXECUTE to is per-RPC, driven by what client the app will call it from.
+- **The "fire-and-forget email after RPC success" pattern** is now precedent-set across three dispatchers: `dispatchVerificationDecisionEmail` (verification approve/reject), `dispatchAdminVerificationSubmissionEmail` (admin notification on submission), `dispatchAdminProfileChangeNotification` (this one). Future admin actions that affect a user follow this shape — outer try/catch/swallow, never throws, always logs to `notification_log`, falls back to in_app log when Resend isn't configured.
+- **The "rich audit row" pattern** — `previous_value` + `new_value` as human-readable text — is precedent for future audit rows. State names not state UUIDs; canonical phones not formatted phones. The admin user-detail page renders these directly; readability at audit time matters more than re-parseability.
+- **Idempotency returns `false` from the RPC** and the action surfaces this as a distinct toast (`phone-unchanged` / `location-unchanged`). Not an error, not a silent success — a third state the operator can see. Future admin RPCs follow the same convention.
+
+### Anti-pattern
+
+- Cramming account-suspend / email-change / deletion into Stage 1. Each has design questions Stage 1 doesn't answer. Shipping the wrong design is worse than shipping nothing.
+- Using `service_role` to call `admin_change_user_phone` from the app, bypassing the in-function `is_admin` gate. The RPC was deliberately designed for `authenticated`-role call paths; service_role would skip the authorization layer that's the entire reason the RPC exists.
+- Adding a "soft email change" via a separate `auth.users` write path without thinking through magic-link recovery, password-recovery email, and confirmation re-flow. Email is identity in Supabase Auth in a way phone isn't; the design is meaningfully harder.
+- Naive `DELETE FROM profiles WHERE id = …` for account deletion. RESTRICT FKs will raise; even if they didn't, deleting the referent of `contact_reveals` / `messages` / `price_history` rows destroys evidence the marketplace's trust posture depends on. K-004 holds for a reason.
+

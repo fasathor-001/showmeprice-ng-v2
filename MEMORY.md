@@ -847,6 +847,60 @@ ALTER TABLE businesses ENABLE TRIGGER businesses_freeze_verification;
 ```
 Re-enable in the **same** submission so you never leave the freeze off. Discovered during Step 5 smoke testing (2026-05-20) when manually verifying a test seller to exercise the listing-creation gate.
 
+## Supabase default function ACL bites SECURITY DEFINER admin functions — `GRANT TO authenticated` flavour
+
+**Banked during E.2.16.0 (2026-05-28).** Complements the existing E.2.1.1 lesson on the same gotcha from a different angle.
+
+When `CREATE FUNCTION` lands a new function in the `public` schema, Supabase's default privileges grant `EXECUTE` to **`anon`**, **`authenticated`**, AND **`service_role`** automatically — in addition to the implicit grant to `PUBLIC`. `REVOKE EXECUTE ... FROM PUBLIC` undoes only the `PUBLIC` grant; the explicit grants to the three named roles survive.
+
+The E.2.1.1 lesson covered the service-role-only case (`mark_phone_verified`): revoke from PUBLIC + anon + authenticated, grant to service_role only. E.2.16.0 hits the inverse case — an admin function that the app calls **from a regular authenticated session**, so `authenticated` is the legitimate grantee but `anon` + `service_role` are the surplus grants that must be revoked. The migration file MUST carry:
+
+```sql
+REVOKE EXECUTE ON FUNCTION public.fn(...) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.fn(...) FROM anon, service_role;
+GRANT  EXECUTE ON FUNCTION public.fn(...) TO   authenticated;
+```
+
+Without the explicit `REVOKE FROM anon, service_role` lines, defense-in-depth degrades — the in-function `is_admin()` check is the only barrier left, and the ACL layer (which should also restrict) is wide open. Caught and fixed live during E.2.16.0 §2b verification (the grantee audit returned a `service_role` row that shouldn't have been there); the migration file now has the explicit REVOKEs encoded so a fresh-DB replay lands correctly.
+
+**Verify post-deploy** — the ACL audit must show ONLY postgres (owner) + the intended grantee role:
+```sql
+SELECT p.proname, p.proacl
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname='public' AND p.proname='fn';
+-- PASS: postgres=X/postgres + {intended_role}=X/postgres only.
+-- FAIL: any other role (anon, authenticated when not intended, service_role when not intended) present.
+```
+
+**The decision matrix for which role to GRANT to is per-RPC**, driven by what client calls it from where:
+- Called from a service-role server context (e.g. webhook handler, post-auth processing) → grant `service_role` only.
+- Called from a regular authenticated session (e.g. admin UI's `auth.supabase.rpc(...)`) → grant `authenticated` only, with the in-function authz check being the real gate.
+
+This applies to EVERY future `SECURITY DEFINER` function on this codebase. Writing one without the explicit triple-REVOKE + the intentional single GRANT reopens the gap — treat the ACL audit as a non-negotiable checklist item, paired with `SET search_path = public`.
+
+## SQL Editor session-role + transaction-local GUC subtleties bite under verification
+
+**Banked during the E.2.14.0 / E.2.15.0 / E.2.16.0 verification arc (2026-05-28).** Caught three times in one session — each surfaced under the §2 paste-back discipline; without that step, all three would have shipped silently.
+
+The Supabase SQL Editor session has surprising role + transaction-state behavior across statement runs that bites verification work specifically:
+
+1. **Session role is not always `postgres` even after `RESET ROLE`.** Some Editor statements run as `authenticated` regardless of the role you reset to. `RESET ROLE;` returns the session to its login role (postgres in the Editor) but the effective role inside RLS-gated reads can still be authenticated — affects how RLS evaluates, which affects what positive/negative INSERT-attempt controls see.
+2. **Transaction-local GUCs can appear to leak across statements.** A `set_config(..., true)` is LOCAL to the surrounding transaction — but the Editor's statement-wrapping can extend or interleave transactions in non-obvious ways, so a GUC set in one statement can appear to still be in effect for the next "statement" if the Editor batched them into one transaction. The fix is `BEGIN ... COMMIT` boundaries you control, not "run statements one at a time."
+3. **Positive/negative control INSERTs inside an Editor session that's RLS-gated can show false failures.** A direct INSERT under authenticated-role context hits the RLS write policy before the CHECK constraint runs; the resulting `42501` looks like a CHECK-constraint failure if you're reading the error message casually. Real SECURITY DEFINER calls from app code don't hit that RLS gate, so the production behavior is different from what the Editor verification suggests.
+
+The three live captures in this session:
+
+- **E.2.14.0 §2 freeze-trigger probes (afternoon)** — positive/negative/bypass controls were written assuming `RESET ROLE` was sufficient to make INSERTs run as postgres. They didn't, the controls were ROLLBACK-wrapped, paste-back showed unexpected behavior — caught and re-framed before shipping.
+- **E.2.15.0 §2 INSERT-attempt controls (evening)** — original §2g / §2h tried positive + negative INSERTs against `profile_admin_changes` to verify CHECK enum and RLS. Both hit `42501` insufficient_privilege from the absent INSERT policy BEFORE the CHECK ran — which is the design intent (writes go through SECURITY DEFINER RPCs only), but as a verification probe it produced misleading "test failures." Those tests were dropped from the saved migration file with an explicit comment in §2 explaining why.
+- **E.2.16.0 §2b ACL discovery (small hours of next morning)** — see the prior MEMORY entry. The ACL audit query revealed the surplus role grants only because we read `proacl` directly; a "function exists + SECURITY DEFINER + search_path pinned" structural check (§2a) would have passed without surfacing the gap.
+
+**Practical discipline:**
+- Run **§0, §1, §2 of every migration as separate Editor executions**, paste each result back individually, and confirm independently.
+- Don't trust a single "looks right" — when something surprises, re-test in isolation with explicit role + transaction boundaries.
+- For verification controls that depend on bypassing RLS (e.g. SECURITY DEFINER positive controls), prefer **reading state via `information_schema` / `pg_catalog`** over running surrogate INSERTs that route through different policy paths than production.
+- The §2 paste-back step costs minutes; the gaps it catches cost rollbacks-from-production. Verification discipline pays for itself.
+
 ---
 
 ## Meta-discipline: the documentation IS the institutional memory
