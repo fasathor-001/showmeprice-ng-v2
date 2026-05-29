@@ -92,7 +92,7 @@ export default async function VerificationDetailPage({
             <Badge variant="warning">Pending</Badge>
           )}
           {verification.status === "verified" && (
-            <Badge variant="verified">Approved</Badge>
+            <Badge variant="verified">Verified</Badge>
           )}
           {verification.status === "rejected" && (
             <Badge variant="danger">Rejected</Badge>

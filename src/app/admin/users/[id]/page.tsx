@@ -82,6 +82,7 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     { data: authUserResp },
     { data: changesRaw },
     { data: statesRaw },
+    { data: businessWithVerifsRaw },
   ] = await Promise.all([
     adminClient
       .from("profiles")
@@ -103,6 +104,19 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
       .from("nigerian_states")
       .select("id, name")
       .order("name", { ascending: true }),
+    // Latest verification submission for this user (if they own a business).
+    // Path: profiles.id = businesses.owner_id → seller_verifications.business_id.
+    // Embed returns all verifications for the business; we sort + take newest
+    // in-memory (PostgREST nested ordering+limit is awkward; this list is
+    // bounded by how many times one seller has re-submitted, so it's small).
+    adminClient
+      .from("businesses")
+      .select(
+        `id,
+         seller_verifications ( id, status, submitted_at, reviewed_at )`,
+      )
+      .eq("owner_id", params.id)
+      .maybeSingle(),
   ]);
 
   if (!targetProfileRaw) notFound();
@@ -116,6 +130,34 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     : (targetProfile.nigerian_states ?? null);
 
   const phoneVerified = isPhoneVerified(targetProfile.verification_status);
+
+  // Derive the latest seller_verifications row (any status). Sorted newest-
+  // first by submitted_at. NULL if the user has no business OR has a business
+  // but never submitted verification. The link target works for verified +
+  // rejected too — the detail page renders documents regardless of status,
+  // only the ReviewActions block is pending-gated.
+  const businessWithVerifs = businessWithVerifsRaw as
+    | {
+        id: string;
+        seller_verifications:
+          | {
+              id: string;
+              status: string;
+              submitted_at: string;
+              reviewed_at: string | null;
+            }[]
+          | null;
+      }
+    | null;
+  const latestVerification =
+    businessWithVerifs?.seller_verifications &&
+    businessWithVerifs.seller_verifications.length > 0
+      ? [...businessWithVerifs.seller_verifications].sort(
+          (a, b) =>
+            new Date(b.submitted_at).getTime() -
+            new Date(a.submitted_at).getTime(),
+        )[0]
+      : null;
 
   return (
     <Container>
@@ -224,6 +266,64 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
             )}
           </Card>
         </div>
+
+        {/* Verification submission — links to the verification detail page
+            (documents, NIN, address) regardless of status. Only renders if
+            this user owns a business AND has at least one submission on
+            record. */}
+        {latestVerification && (
+          <div className="mt-4 max-w-4xl">
+            <Card>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h2 className="text-sm font-medium text-ink">
+                      Verification submission
+                    </h2>
+                    {latestVerification.status === "pending" && (
+                      <Badge variant="warning">Pending</Badge>
+                    )}
+                    {latestVerification.status === "verified" && (
+                      <Badge variant="verified">Verified</Badge>
+                    )}
+                    {latestVerification.status === "rejected" && (
+                      <Badge variant="danger">Rejected</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-ink-600">
+                    Submitted{" "}
+                    {new Date(
+                      latestVerification.submitted_at,
+                    ).toLocaleDateString("en-NG", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {latestVerification.reviewed_at && (
+                      <>
+                        {" "}
+                        · reviewed{" "}
+                        {new Date(
+                          latestVerification.reviewed_at,
+                        ).toLocaleDateString("en-NG", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </>
+                    )}
+                  </p>
+                </div>
+                <Link
+                  href={`/admin/verifications/${latestVerification.id}`}
+                  className="text-sm text-teal-700 hover:text-teal-900 font-medium shrink-0"
+                >
+                  View submission →
+                </Link>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* Support actions */}
         <div className="mt-8 grid gap-4 sm:grid-cols-2 max-w-4xl">
