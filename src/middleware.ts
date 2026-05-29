@@ -8,7 +8,7 @@ const PROTECTED_PREFIXES = [
   "/listings/new",
   "/admin",
 ];
-const AUTH_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/forgot-password"];
+const AUTH_ONLY_PREFIXES = ["/sign-in", "/sign-up"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
