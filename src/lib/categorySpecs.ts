@@ -82,10 +82,34 @@ export const CATEGORY_SPECS: Record<string, CategorySpecsConfig> = {
   },
 
   // Automotive / vehicles. The Phase D taxonomy uses 'vehicles' as the slug
-  // (with the display name 'Automotive'). No subcategories exist live today;
-  // listings post under the parent directly.
+  // (display name 'Automotive'). The seed has 4 subcategories live: `cars`,
+  // `motorcycles`, `tricycles`, `vehicle-parts`. The 9-field set below
+  // applies to `cars`, `motorcycles`, and `tricycles` via parent-fallback
+  // in getSpecsForCategory. `vehicle-parts` carries its own minimal
+  // override below (parts don't have mileage / transmission / fuel /
+  // registration concerns).
+  //
+  // Stage 1 of the vehicle-marketplace upgrade — structured fields that
+  // make car listings credible without overpromising inspection or
+  // ownership verification. Field declaration order = display order on
+  // the public detail page (parseSpecsFromFormData persists into JSONB
+  // in this order; the detail page iterates Object.entries on read).
   vehicles: {
     fields: [
+      {
+        name: "make",
+        label: "Make",
+        type: "text",
+        required: true,
+        hint: "e.g. Toyota, Honda, Mercedes-Benz",
+      },
+      {
+        name: "model",
+        label: "Model",
+        type: "text",
+        required: true,
+        hint: "e.g. Camry, Accord, C-Class",
+      },
       {
         name: "year",
         label: "Year",
@@ -97,7 +121,83 @@ export const CATEGORY_SPECS: Record<string, CategorySpecsConfig> = {
         name: "mileage_km",
         label: "Mileage (km)",
         type: "number",
+        required: true,
+        hint: "e.g. 85000",
+      },
+      {
+        name: "condition_grade",
+        label: "Condition",
+        type: "select",
+        options: ["Brand new", "Tokunbo (foreign-used)", "Nigerian-used"],
+        required: true,
+      },
+      {
+        name: "transmission",
+        label: "Transmission",
+        type: "select",
+        options: ["Automatic", "Manual"],
+        required: true,
+      },
+      {
+        name: "fuel_type",
+        label: "Fuel type",
+        type: "select",
+        options: ["Petrol", "Diesel", "Hybrid", "Electric"],
+        required: true,
+      },
+      {
+        name: "registration_status",
+        label: "Registration",
+        type: "select",
+        options: ["Registered", "Unregistered", "Custom papers only"],
+        required: true,
+      },
+      {
+        name: "engine_size",
+        label: "Engine size (cc)",
+        type: "number",
         required: false,
+        hint: "e.g. 2000",
+      },
+    ],
+  },
+
+  // Vehicle parts — minimal override. Parts are typically inventory-tracked
+  // (NG parts vendors stock multiple identical units, per D-141), so the
+  // form needs less detail than the full-vehicle set: make + model
+  // identify what the part fits; year is optional (parts often span
+  // multiple model years); condition_grade uses the parts-specific enum
+  // (Refurbished is a real category for rebuilt parts; Tokunbo /
+  // Nigerian-used distinctions don't apply at the part level).
+  "vehicle-parts": {
+    fields: [
+      {
+        name: "make",
+        label: "Make",
+        type: "text",
+        required: true,
+        hint: "e.g. Toyota, Honda",
+      },
+      {
+        name: "model",
+        label: "Model",
+        type: "text",
+        required: true,
+        hint: "e.g. Camry, Accord",
+      },
+      {
+        name: "year",
+        label: "Year",
+        type: "number",
+        required: false,
+        hint: "e.g. 2018",
+      },
+      {
+        name: "condition_grade",
+        label: "Condition",
+        type: "select",
+        options: ["Brand new", "Refurbished", "Used"],
+        required: true,
       },
     ],
   },

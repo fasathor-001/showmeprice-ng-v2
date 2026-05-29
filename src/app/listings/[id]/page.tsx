@@ -85,6 +85,16 @@ export default async function ListingDetailPage({
   const isPropertyTree =
     category?.slug === "property" || parentCategory?.slug === "property";
 
+  // Vehicle listings carry a category-wide inspection + documents
+  // disclaimer (Stage 1 of the car flow). Matches when the listing is
+  // in 'vehicles' directly OR in any subcategory (cars, motorcycles,
+  // tricycles, vehicle-parts). Renders between the Specifications and
+  // Description blocks below. Same shape as isPropertyTree above —
+  // category-tree derivation kept in this file rather than helper-
+  // extracted because there are only two trees that need it today.
+  const isVehicleListing =
+    category?.slug === "vehicles" || parentCategory?.slug === "vehicles";
+
   // Seller's state (where the business operates from) — separate from the
   // listing's state. Used in the seller info card.
   let sellerState: { name: string } | null = null;
@@ -410,6 +420,21 @@ export default async function ListingDetailPage({
                 </div>
               );
             })()}
+
+            {/* Vehicle inspection + documents disclaimer (Stage 1 of the
+                car flow). Sits between Specifications and Description so
+                buyers see it after reading the structured data and before
+                the seller's free-text pitch. One sentence; matches the
+                page's calm density. Wording deliberately stops short of
+                any platform guarantee — ShowMePrice has not inspected
+                the vehicle and does not verify documents. */}
+            {isVehicleListing && (
+              <div className="bg-warning-bg/40 border border-warning/20 rounded-lg p-3 text-sm text-ink-600">
+                Before payment: inspect the vehicle in person, verify
+                ownership documents, and confirm customs duty papers
+                where applicable. Use a trusted mechanic for inspection.
+              </div>
+            )}
 
             {/* Description */}
             <div>
