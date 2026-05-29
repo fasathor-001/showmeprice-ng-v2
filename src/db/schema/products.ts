@@ -53,6 +53,16 @@ export const products = pgTable("products", {
   // Orthogonal to `status` (admin-hidden is independent of the seller's
   // draft/active/sold/archived lifecycle).
   hidden_at: timestamp("hidden_at", { withTimezone: true }),
+  // E.2.17.0: per-listing stock count. NOT NULL DEFAULT 1. Manually
+  // managed by the seller (no auto-decrement; the platform has no
+  // purchase events per D-129). UI visibility gated by the listing's
+  // category.supports_inventory flag — non-inventory categories ignore
+  // this value entirely. quantity=0 surfaces as the "Out of stock"
+  // badge on public surfaces while the listing stays status='active'
+  // for buyer browsability (status and quantity are orthogonal — status
+  // = seller intent, quantity = current stock). DB-level CHECK
+  // (products_quantity_nonneg_check) enforces quantity >= 0.
+  quantity: integer("quantity").notNull().default(1),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

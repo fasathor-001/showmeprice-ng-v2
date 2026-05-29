@@ -3362,3 +3362,86 @@ These four are not "Level 3 reserved" — they're "out of scope for this platfor
 - Re-introducing an allowlist when the next category needs to open. The allowlist shape was the original mistake — it required a code edit per new opening. The denylist + future JSONB-flag path means "open by default" is the normal case and closures are the exceptions, each with a banked reason.
 - Treating D-116 as either fully-binding or fully-abandoned. The right framing is "future engineering, not blocked-on, layered-on-top-of when it ships." This decision picks that middle.
 
+## D-141 — Universal quantity per listing; category-aware visibility; manual seller-managed; status and quantity are orthogonal
+
+**Status:** Locked (2026-05-29)
+**Cross-references:** D-129 (Payment integration sequencing — no purchase events on the platform yet, so no auto-decrement source of truth), D-140 (Category restriction shape — `pets`/`services` closed but pre-seeded as `supports_inventory=false` for forward compatibility), Sprint 3 / Gap B (`setListingStatusAction` — seller-driven sold/reactivate lifecycle), E.2.13.0 (`products.hidden_at` — admin moderation; orthogonal to both status and quantity)
+**Implementation:** `migrations/E.2.17.0-inventory-quantity.sql` (applied 2026-05-29) + commit `<this>`. Step 2 (app code — validators, action parsing, conditional form rendering, badges across public detail / dashboard / marketplace) ships separately.
+
+### Context
+
+A verified fashion seller surfaced two related gaps: (1) buyers have no way to know when an item is sold out, and (2) sellers have no way to indicate how many of an item they have. The current product model carries `status` (draft/active/sold/archived) but no quantity concept. Decision arrived at on the Frank side: ship Shape A — quantity per listing, universal across categories — not variant-level inventory (e.g. no per-size stock for fashion in v1).
+
+### Decision
+
+**Add `products.quantity` as a NOT NULL DEFAULT 1 integer column, with a CHECK ≥ 0 constraint, and gate its UI visibility by a new `categories.supports_inventory` boolean (default true, false on 7 enumerated slugs).**
+
+**Single source of truth:** `quantity` is the live stock signal. `quantity = 0` means out of stock (UI surfaces an "Out of stock" badge); `quantity > 0` means available. There is no separate `is_in_stock` flag — the integer is enough.
+
+**Category-aware visibility, not category-aware storage:** the `quantity` column exists on every product row regardless of category. The category flag (`supports_inventory`) controls whether the field is **shown** in the listing form and whether the badge is **rendered** on public surfaces — not whether the column has a value.
+
+**Seven categories carry `supports_inventory=false`:**
+- Single-instance vehicles: `vehicles` (parent), `cars`, `motorcycles`, `tricycles` — each row is a specific vehicle, not a unit. `vehicle-parts` deliberately stays `true` (NG parts vendors stock multiple identical units; matches Jiji / other major platforms).
+- Single-instance: `property` — each property is a specific instance.
+- Pre-seeded for forward compatibility: `pets` and `services` (closed per D-140 today; if/when either opens, the UI policy is already correct on day one — `pets` because each animal is unique, `services` because services aren't products and have no inventory concept).
+
+All other ~101 categories default to `supports_inventory=true` via the column default.
+
+### Why this shape
+
+**Why a boolean column on categories, not `category_features` JSONB:**
+
+The existing `category_features` JSONB column (Phase E.1.0) is for runtime UI tunables — warning banners, high-value markers, per-category required-field hints. `supports_inventory` is a different shape: a hard schema-level capability switch read on every listing-form render and every public-detail render. Reasons against JSONB here:
+
+- Frequent-path read. Boolean column lookup is cheaper than `category_features->>'supports_inventory'` JSONB extraction on every render.
+- Type safety. Drizzle treats the column as `boolean`; the JSONB path requires null-vs-missing handling and runtime coercion.
+- Semantic clarity. "Does this category have stock at all?" is a schema-shape decision, not a runtime UI tunable.
+
+The JSONB path stays right for `warning_banner`, `high_value`, etc. that genuinely vary per row and are display-only.
+
+**Why NOT NULL DEFAULT 1 (not nullable with NULL = N/A) on `products.quantity`:**
+
+The category flag is the source of truth for "show or hide the quantity UI". The value itself never needs a null sentinel because the visibility decision happens upstream. Choosing NOT NULL DEFAULT 1:
+
+- Render code reads `product.quantity` without null-check on every detail / card / dashboard path.
+- Backfills existing rows to 1 immediately and semantically (the handful of existing listings each represent "the seller has 1 of this item" — accurate by construction).
+- Defense in depth: if a row ever ends up in a non-inventory category with `quantity = 0` (e.g. cross-category edit), the UI still ignores it because `category.supports_inventory = false`.
+- Migration is one ALTER with an immediate backfill; no two-step "add nullable, backfill, ALTER NOT NULL" dance.
+
+The CHECK ≥ 0 prevents negative values at the DB layer.
+
+**Why `status` and `quantity` are orthogonal:**
+
+`status` (product_status enum: draft / active / sold / archived) is **seller intent** — "I want this listing live" vs. "I'm done selling it". `quantity` is **current stock count** — "I have N right now." Conflating them (auto-setting `status='sold'` when quantity hits 0) would destroy the buyer-browsability case: a fashion seller restocking next week wants buyers to still see the listing with an "Out of stock" badge, message about availability, and see their other items.
+
+- `setListingStatusAction` (Sprint 3 / Gap B — sold-or-reactivate) remains the seller's explicit lifecycle control.
+- `quantity` remains the live stock signal.
+- `hidden_at` (E.2.13.0) is a third orthogonal axis owned by admin moderation.
+
+Three independent dimensions, three independent change controls. Out-of-stock listings stay `status='active'`; the public-read RLS continues to surface them; the UI layer renders the "Out of stock" badge.
+
+**Why RLS is not touched:**
+
+`products_public_read_active` filters on `status = 'active' AND hidden_at IS NULL`. Because out-of-stock listings stay status='active' (per the orthogonality above), they remain visible to buyers. The "Out of stock" badge is purely a UI layer on top of the existing visibility policy. No policy changes; no migration to existing policies.
+
+**Why manual seller-managed (no auto-decrement):**
+
+The platform has no purchase events today — D-129 (payment integration sequencing) defers checkout/sale infrastructure to public-launch. Without a sale event, the only honest source of truth for stock is the seller's own action. Auto-decrement would require either (a) checkout that doesn't exist, or (b) treating contact-reveal as a proxy for sale (wrong — buyers reveal contact then don't buy all the time). Seller manually updates.
+
+### Operational consequences
+
+- **Step 2 app code (separate commit) carries:** `validateQuantity()` validator + `quantity?: string` on `ListingValidationErrors`; quantity parse + persist in `createListingAction` + `updateListingAction`; conditional `<QuantityField>` block in `NewListingForm` + `EditListingForm` (rendered based on the selected category's `supports_inventory`); "Out of stock" badge on the public detail page, the seller dashboard overlay, and the marketplace card overlay (mirroring the existing "Sold" overlay pattern).
+- **Step 2 also lands "Mark as sold out" / "Mark as available" quick-action buttons** on the seller dashboard listings list (one-click `quantity = 0` / `quantity = 1` for fast UX) — pure UI on top of the data model, no schema impact.
+- **Existing 5 products backfilled to `quantity = 1`** — semantically "seller has 1 of this item." Sellers can edit upward via the listing edit page once Step 2 ships. Per-seller out-of-band communication (WhatsApp) recommended ahead of the Step 2 deploy so sellers know to populate the new field on multi-quantity listings.
+- **`vehicle-parts` stays `supports_inventory=true`** — the explicit departure from the `vehicles` family. Captured in the seed + the migration's UPDATE deliberately omits the slug. If a future Nigerian parts subcategory pattern emerges where a specific used-part is a single instance, the row's flag can flip; the shape supports it.
+- **The "Mark as sold out" UX semantic is `quantity = 0`, NOT `status = 'sold'`.** They are different actions. `setListingStatusAction` (Gap B) is the seller saying "I'm done with this listing entirely" (final). `quantity = 0` is "I'm temporarily out; restocking" (transient). Future-you reading the seller dashboard code six months from now needs to keep the two affordances visually distinct.
+- **No reservations / holds / cart semantics in v1.** Quantity is a count, not a reservation system. Buyer A and Buyer B can both see "5 available" and both message the seller; the seller handles which sale completes. Adding reservation logic requires checkout infrastructure (D-129) and timeout management — out of scope for E.2.17.0 + its Step 2.
+
+### Anti-pattern
+
+- Auto-decrementing `quantity` on contact-reveal or message-send. Reveals and messages are intent signals, not sales. Auto-decrement on either would corrupt the stock signal (buyer reveals, doesn't buy → seller's "available" count is wrong; multiplied by the realistic conversion rate, the column becomes meaningless within a week).
+- Conflating `quantity = 0` with `status = 'sold'`. Two different seller intents (transient restock vs. permanent end-of-listing). A "mark sold out" button that flips `status` instead of `quantity` would force re-listing every time the seller restocks — a huge UX regression for fashion / electronics / generators sellers who turn over inventory regularly.
+- Adding `quantity` to the `marketplace` filter ("only show in-stock"). Out-of-stock listings stay visible by design — buyers still want to see the seller's range, message about availability, see related items. A filter could land in Step 3+ as an explicit user-toggleable preference, but it's not a default-on behavior.
+- Treating `supports_inventory=false` rows as "no quantity column" — the column exists universally and is queryable; non-inventory categories just ignore it in the UI layer. Code that special-cases storage by category invites schema drift.
+- Building variant-level inventory (per-size stock for fashion, per-color stock for phones) in v1. Shape A is universal quantity across categories. Variant inventory is a separate, harder design pass requiring schema for variants + per-variant stock + variant-aware listing forms. Not blocked-against; not built now.
+

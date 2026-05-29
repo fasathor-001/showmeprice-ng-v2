@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   jsonb,
+  boolean,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -41,6 +42,16 @@ export const categories = pgTable("categories", {
   // Phase E uses for the property warning banner (migrated from hardcoded);
   // Phase F+ uses for category-specific Pro pricing and tier restrictions.
   category_features: jsonb("category_features").notNull().default({}),
+
+  // E.2.17.0: per-category inventory eligibility flag. true (default) =
+  // listing-creation UI shows the quantity field and public surfaces render
+  // the "Out of stock" badge when product.quantity=0. false = single-
+  // instance category (vehicles/property/etc.) or categorically-no-
+  // inventory (pets/services) — quantity field hidden in the form and
+  // badge suppressed in display. Schema-shape flag, not a runtime UI
+  // tunable — distinct from category_features JSONB which carries
+  // per-row display tunables (warning_banner, high_value, etc.).
+  supports_inventory: boolean("supports_inventory").notNull().default(true),
 
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
