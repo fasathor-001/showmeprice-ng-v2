@@ -141,7 +141,9 @@ export default async function NewListingPage() {
       .from("categories")
       // slug + parent_id are needed by CategorySpecFields to resolve which
       // spec schema to render for the selected category.
-      .select("id, name, slug, parent_id")
+      // supports_inventory (E.2.17.0) drives the conditional quantity
+      // field on NewListingForm.
+      .select("id, name, slug, parent_id, supports_inventory")
       .order("sort_order", { ascending: true }),
     supabase
       .from("nigerian_states")

@@ -14,6 +14,7 @@ export {
   validateStateId,
   validateImageUrls,
   validateCityArea,
+  validateQuantity,
   validateListingForm,
   hasErrors,
   type ListingFormData,

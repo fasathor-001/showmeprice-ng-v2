@@ -162,6 +162,38 @@ export function NewListingForm({
         selectedCategoryId={categoryId}
       />
 
+      {/* E.2.17.0 / Step 2: per-listing inventory quantity. Renders only
+          when the selected category's supports_inventory flag is true
+          (vehicles / property / pets / services categories hide this
+          entirely). Server-side validateQuantity reinforces the same
+          gate; the DB CHECK enforces >= 0. */}
+      {(() => {
+        const selectedCategory = categories.find((c) => c.id === categoryId);
+        if (!selectedCategory?.supports_inventory) return null;
+        return (
+          <div>
+            <label
+              htmlFor="quantity"
+              className="block text-sm font-medium text-ink mb-1.5"
+            >
+              Available quantity
+            </label>
+            <Input
+              id="quantity"
+              name="quantity"
+              type="text"
+              inputMode="numeric"
+              required
+              defaultValue="1"
+              error={state?.errors?.quantity}
+              placeholder="1"
+            />
+            <p className="text-xs text-ink-600 mt-1">
+              How many of this item do you have? Set to 0 when sold out.
+            </p>
+          </div>
+        );
+      })()}
 
       <div>
         <label htmlFor="stateId" className="block text-sm font-medium text-ink mb-1.5">

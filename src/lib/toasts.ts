@@ -110,6 +110,16 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Location is already that value — no change made.",
   },
+  "marked-sold-out": {
+    variant: "info",
+    message:
+      "Listing marked as sold out. Buyers will see 'Out of stock' on the listing.",
+  },
+  "marked-available": {
+    variant: "success",
+    message:
+      "Listing marked as available. Quantity set to 1 — edit to update if you have multiples.",
+  },
   "verify-needs-whatsapp": {
     variant: "warning",
     message:

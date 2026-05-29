@@ -30,8 +30,9 @@ export default async function ListingDetailPage({
     .select(
       `
       id, title, description, price_kobo, is_negotiable, status, created_at, category_specs,
+      quantity,
       product_images ( storage_path, position ),
-      categories ( id, name, slug, parent_id ),
+      categories ( id, name, slug, parent_id, supports_inventory ),
       nigerian_states ( name, slug ),
       businesses ( id, business_name, description, verification_status, owner_id, created_at, state_id )
     `
@@ -55,6 +56,14 @@ export default async function ListingDetailPage({
   const state = Array.isArray(listing.nigerian_states)
     ? listing.nigerian_states[0]
     : listing.nigerian_states;
+
+  // E.2.17.0 / Step 2: derive out-of-stock state. Renders an "Out of
+  // stock" badge in the badge row below. Suppressed when the category
+  // doesn't support inventory (vehicles/property/etc. — single-instance
+  // categories don't have a stock concept).
+  const outOfStock =
+    category?.supports_inventory === true &&
+    Number(listing.quantity ?? 1) === 0;
 
   // Parent category for breadcrumb (e.g. "Mobile Phones & Tablets >
   // Smartphones (Pre-owned)"). Only fetched when the listing's category
@@ -218,6 +227,12 @@ export default async function ListingDetailPage({
 
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-3">
+                {/* E.2.17.0 / Step 2: most prominent of the badges —
+                    placed first so the buyer sees stock state before
+                    the verified-seller / state / negotiable signals. */}
+                {outOfStock && (
+                  <Badge variant="warning">Out of stock</Badge>
+                )}
                 <Badge
                   variant="verified"
                   leftIcon={

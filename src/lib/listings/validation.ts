@@ -18,6 +18,11 @@ export interface ListingValidationErrors {
   stateId?: string;
   imageUrls?: string;
   cityArea?: string;
+  // E.2.17.0: Step 2 of inventory feature. Validated per-action (not in
+  // validateListingForm) because the validator needs the selected
+  // category's supports_inventory flag, resolved server-side from the
+  // category_id form value.
+  quantity?: string;
   _form?: string;
 }
 
@@ -68,6 +73,30 @@ export function validateCityArea(cityArea: string): string | undefined {
   if (trimmed.length < 3) return "City / area must be at least 3 characters";
   if (trimmed.length > 100)
     return "City / area is too long (max 100 characters)";
+  return undefined;
+}
+
+// E.2.17.0 / Step 2: per-listing stock count validation. The category's
+// supports_inventory flag is resolved server-side from the selected
+// category_id; if the category doesn't support inventory the input is
+// ignored entirely (the form doesn't render the field in that case and
+// the server defensively persists quantity=1 regardless of what the
+// client sent). For inventory-supporting categories: required, integer,
+// >= 0, capped at 9999. quantity=0 is the legal out-of-stock state.
+export function validateQuantity(
+  raw: string,
+  supportsInventory: boolean,
+): string | undefined {
+  if (!supportsInventory) return undefined;
+  if (!raw || !raw.trim()) return "Quantity is required";
+  const trimmed = raw.trim();
+  // Reject anything that isn't a non-negative integer (digits only — no
+  // decimals, no signs, no commas).
+  if (!/^\d+$/.test(trimmed)) return "Quantity must be a whole number";
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return "Quantity must be a whole number";
+  if (n < 0) return "Quantity can't be negative";
+  if (n > 9999) return "Quantity is too high (max 9999)";
   return undefined;
 }
 

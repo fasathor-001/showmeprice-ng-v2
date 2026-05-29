@@ -19,6 +19,7 @@ import {
   parseNairaInputToKobo,
   validateListingForm,
   validateCityArea,
+  validateQuantity,
   hasErrors as listingHasErrors,
   generateListingSlug,
   type ListingValidationErrors,
@@ -1207,10 +1208,17 @@ async function getSellerBusiness(
 async function resolveCategoryForListing(
   supabase: ReturnType<typeof createClient>,
   categoryId: string
-): Promise<{ slug: string; specsSchema: ReturnType<typeof getSpecsForCategory> } | null> {
+): Promise<{
+  slug: string;
+  specsSchema: ReturnType<typeof getSpecsForCategory>;
+  // E.2.17.0 / Step 2: the inventory-eligibility flag, read off the
+  // category's own row (NOT inherited from parent — each category row
+  // carries its own value, including subcategories).
+  supports_inventory: boolean;
+} | null> {
   const { data: cat } = await supabase
     .from("categories")
-    .select("slug, parent_id")
+    .select("slug, parent_id, supports_inventory")
     .eq("id", categoryId)
     .maybeSingle();
   if (!cat) return null;
@@ -1223,7 +1231,11 @@ async function resolveCategoryForListing(
       .maybeSingle();
     parentSlug = parent?.slug ?? null;
   }
-  return { slug: cat.slug, specsSchema: getSpecsForCategory(cat.slug, parentSlug) };
+  return {
+    slug: cat.slug,
+    specsSchema: getSpecsForCategory(cat.slug, parentSlug),
+    supports_inventory: cat.supports_inventory ?? true,
+  };
 }
 
 // Loose UUID check — defends against malformed productId from the client.
@@ -1246,6 +1258,10 @@ export async function createListingAction(
   const productId = String(formData.get("productId") ?? "");
   // Sprint 3 / Gap D.2: listing-level city/area location.
   const cityArea = String(formData.get("cityArea") ?? "").trim();
+  // E.2.17.0 / Step 2: per-listing stock count. Empty + non-inventory
+  // category = skipped by validateQuantity below. Persisted to the new
+  // products.quantity column with the supports-inventory gate.
+  const quantityInput = String(formData.get("quantity") ?? "").trim();
 
   // Phase D.2: imagePaths are storage paths under the product-images bucket,
   // NOT public URLs. The old paste-URL flow used `imageUrls`.
@@ -1363,6 +1379,19 @@ export async function createListingAction(
   );
   if (specError) return { errors: { _form: specError } };
 
+  // E.2.17.0 / Step 2: validate quantity against the resolved category's
+  // supports_inventory flag. Non-inventory categories skip the check
+  // entirely (validateQuantity returns undefined) and persist
+  // quantity=1 defensively below.
+  const quantityError = validateQuantity(
+    quantityInput,
+    category.supports_inventory
+  );
+  if (quantityError) return { errors: { quantity: quantityError } };
+  const persistedQuantity = category.supports_inventory
+    ? Number(quantityInput)
+    : 1;
+
   const slug = generateListingSlug(title);
   const { data: product, error: productError } = await supabase
     .from("products")
@@ -1382,6 +1411,7 @@ export async function createListingAction(
       status: "active",
       published_at: new Date().toISOString(),
       category_specs: categorySpecs,
+      quantity: persistedQuantity, // E.2.17.0 / Step 2
     })
     .select("id")
     .single();
@@ -1432,6 +1462,9 @@ export async function updateListingAction(
   const negotiable = formData.get("negotiable") === "on";
   // Sprint 3 / Gap D.3: listing-level city/area location.
   const cityArea = String(formData.get("cityArea") ?? "").trim();
+  // E.2.17.0 / Step 2: per-listing stock count on edit. Same shape as
+  // createListingAction — empty + non-inventory category = skipped.
+  const quantityInput = String(formData.get("quantity") ?? "").trim();
 
   // Phase D.3: same imagePaths[] convention as createListingAction.
   const imagePaths = formData
@@ -1546,6 +1579,18 @@ export async function updateListingAction(
   );
   if (specError) return { errors: { _form: specError } };
 
+  // E.2.17.0 / Step 2: same validate-quantity gate as createListingAction.
+  // Cross-category edit from inventory-supporting into non-inventory
+  // (e.g. fashion → vehicles) defensively coerces to quantity=1 below.
+  const quantityError = validateQuantity(
+    quantityInput,
+    category.supports_inventory
+  );
+  if (quantityError) return { errors: { quantity: quantityError } };
+  const persistedQuantity = category.supports_inventory
+    ? Number(quantityInput)
+    : 1;
+
   // K-050 (Stage 2.C Commit 10-a): snapshot the original product row before
   // UPDATE. Mirrors the dbImages snapshot above; used to restore state on
   // image-reinsert failure so the edit doesn't ship as a silent partial
@@ -1553,7 +1598,7 @@ export async function updateListingAction(
   const { data: productSnapshot } = await supabase
     .from("products")
     .select(
-      "title, description, price_kobo, is_negotiable, category_id, state_id, city_area, category_specs",
+      "title, description, price_kobo, is_negotiable, category_id, state_id, city_area, category_specs, quantity",
     )
     .eq("id", productId)
     .maybeSingle();
@@ -1569,6 +1614,7 @@ export async function updateListingAction(
       state_id: stateId,
       city_area: cityArea, // Sprint 3 / Gap D.3
       category_specs: categorySpecs,
+      quantity: persistedQuantity, // E.2.17.0 / Step 2
     })
     .eq("id", productId);
   if (updateError) return { errors: { _form: updateError.message } };
@@ -1708,4 +1754,96 @@ export async function setListingStatusAction(
   const toast =
     status === "sold" ? "listing-marked-sold" : "listing-reactivated";
   redirect(`/dashboard/listings?toast=${toast}`);
+}
+
+/**
+ * E.2.17.0 / Step 2 — quick-action: mark a listing as sold out
+ * (`quantity = 0`). Distinct from `setListingStatusAction(sold)` —
+ * sold-out is transient ("restocking next week"), `status='sold'` is
+ * permanent ("done with this listing"). Per D-141: quantity and status
+ * are orthogonal axes. Out-of-stock listings stay `status='active'`
+ * for buyer browsability per the RLS policy.
+ *
+ * Authorization: ownership via the same shape as setListingStatusAction
+ * (seller_id check). Defense-in-depth: refuses to act on listings
+ * whose category does not support inventory (the UI should never call
+ * this in that state, but the server is the trust boundary).
+ */
+export async function markListingSoldOutAction(
+  formData: FormData
+): Promise<void> {
+  const productId = String(formData.get("productId") ?? "");
+  if (!productId) return;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Embed the category to check supports_inventory in one query —
+  // defense-in-depth against a non-inventory category somehow reaching
+  // this action.
+  const { data: existing } = await supabase
+    .from("products")
+    .select("seller_id, categories ( supports_inventory )")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!existing || existing.seller_id !== user.id) return;
+
+  const cat = Array.isArray(existing.categories)
+    ? existing.categories[0]
+    : existing.categories;
+  if (!cat || cat.supports_inventory !== true) {
+    // Silent no-op + redirect — UI shouldn't have offered this button.
+    redirect("/dashboard/listings");
+  }
+
+  await supabase
+    .from("products")
+    .update({ quantity: 0 })
+    .eq("id", productId);
+
+  redirect("/dashboard/listings?toast=marked-sold-out");
+}
+
+/**
+ * E.2.17.0 / Step 2 — quick-action: mark a previously sold-out listing
+ * available again (`quantity = 1`). Companion to
+ * markListingSoldOutAction. Sets to 1, not the prior quantity — the
+ * seller can edit upward via the listing edit page if they have
+ * multiples. Toast copy below explicitly tells the seller this.
+ */
+export async function markListingAvailableAction(
+  formData: FormData
+): Promise<void> {
+  const productId = String(formData.get("productId") ?? "");
+  if (!productId) return;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: existing } = await supabase
+    .from("products")
+    .select("seller_id, categories ( supports_inventory )")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!existing || existing.seller_id !== user.id) return;
+
+  const cat = Array.isArray(existing.categories)
+    ? existing.categories[0]
+    : existing.categories;
+  if (!cat || cat.supports_inventory !== true) {
+    redirect("/dashboard/listings");
+  }
+
+  await supabase
+    .from("products")
+    .update({ quantity: 1 })
+    .eq("id", productId);
+
+  redirect("/dashboard/listings?toast=marked-available");
 }

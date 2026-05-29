@@ -12,6 +12,12 @@ export interface CategoryForSpecs {
   name: string;
   slug: string;
   parent_id: string | null;
+  // E.2.17.0 / Step 2: per-category inventory eligibility flag. The
+  // listing form (NewListingForm + EditListingForm) reads this off the
+  // selected category to conditionally render the quantity input.
+  // Not consumed by CategorySpecFields itself — shared on this type
+  // because both forms hydrate categories from the same page query.
+  supports_inventory: boolean;
 }
 
 interface Props {

@@ -92,9 +92,11 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
       .select(
         `
         id, title, price_kobo, is_negotiable, created_at,
+        quantity,
         product_images ( storage_path, position ),
         businesses!inner ( business_name, verification_status ),
-        nigerian_states ( name )
+        nigerian_states ( name ),
+        categories ( supports_inventory )
       `
       )
       .eq("status", "active")
@@ -340,6 +342,15 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
               const state = Array.isArray(listing.nigerian_states)
                 ? listing.nigerian_states[0]
                 : listing.nigerian_states;
+              // E.2.17.0 / Step 2: out-of-stock overlay on the card.
+              // Only renders when the category supports inventory AND
+              // the listing's quantity is 0.
+              const cat = Array.isArray(listing.categories)
+                ? listing.categories[0]
+                : listing.categories;
+              const outOfStock =
+                cat?.supports_inventory === true &&
+                Number(listing.quantity ?? 1) === 0;
               return (
                 <ListingCard
                   key={listing.id}
@@ -353,6 +364,7 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
                       : undefined
                   }
                   stateName={state?.name}
+                  outOfStock={outOfStock}
                 />
               );
             })}

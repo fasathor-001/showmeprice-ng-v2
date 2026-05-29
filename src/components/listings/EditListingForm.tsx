@@ -30,6 +30,9 @@ interface Defaults {
   cityArea: string;
   /** Existing category_specs values from the DB, keyed on spec field name. */
   categorySpecs?: Record<string, string | number>;
+  /** E.2.17.0 / Step 2: existing per-listing stock count. Always set
+   *  (DB column is NOT NULL DEFAULT 1; all rows have a value). */
+  quantity: number;
 }
 
 interface Props {
@@ -174,6 +177,40 @@ export function EditListingForm({
         }
       />
 
+      {/* E.2.17.0 / Step 2: per-listing inventory quantity. Same shape
+          as NewListingForm — conditional on the selected category's
+          supports_inventory flag. Re-prefills the existing quantity
+          only when the user kept the same category (matching the
+          CategorySpecFields prefill discipline above). */}
+      {(() => {
+        const selectedCategory = categories.find((c) => c.id === categoryId);
+        if (!selectedCategory?.supports_inventory) return null;
+        const defaultQty =
+          categoryId === defaults.categoryId ? String(defaults.quantity) : "1";
+        return (
+          <div>
+            <label
+              htmlFor="quantity"
+              className="block text-sm font-medium text-ink mb-1.5"
+            >
+              Available quantity
+            </label>
+            <Input
+              id="quantity"
+              name="quantity"
+              type="text"
+              inputMode="numeric"
+              required
+              defaultValue={defaultQty}
+              error={state?.errors?.quantity}
+              placeholder="1"
+            />
+            <p className="text-xs text-ink-600 mt-1">
+              How many of this item do you have? Set to 0 when sold out.
+            </p>
+          </div>
+        );
+      })()}
 
       <div>
         <label htmlFor="stateId" className="block text-sm font-medium text-ink mb-1.5">

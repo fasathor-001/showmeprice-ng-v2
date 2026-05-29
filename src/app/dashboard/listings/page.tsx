@@ -6,7 +6,11 @@ import { Button, Card, Badge, ToastFromSearchParams } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
 import { getVerificationState } from "@/lib/verification";
 import { getProductImagePublicUrl } from "@/lib/storage";
-import { setListingStatusAction } from "@/app/(auth)/actions";
+import {
+  setListingStatusAction,
+  markListingSoldOutAction,
+  markListingAvailableAction,
+} from "@/app/(auth)/actions";
 import { MarkSoldButton } from "@/components/listings/MarkSoldButton";
 
 export const runtime = "edge";
@@ -49,7 +53,9 @@ export default async function SellerListingsPage() {
     .select(
       `
       id, title, price_kobo, is_negotiable, status, created_at,
-      product_images ( storage_path, position )
+      quantity,
+      product_images ( storage_path, position ),
+      categories ( supports_inventory )
     `
     )
     .eq("seller_id", user.id)
@@ -174,12 +180,29 @@ export default async function SellerListingsPage() {
               const primaryImage = sortedImages[0]
                 ? getProductImagePublicUrl(sortedImages[0].storage_path)
                 : undefined;
+              // E.2.17.0 / Step 2: out-of-stock signal + quick-action
+              // affordances. Category embed lookup → out-of-stock when
+              // category supports inventory AND quantity is 0. The
+              // "Sold" overlay (status='sold') and "Out of stock"
+              // overlay are mutually exclusive — sold takes precedence
+              // when both happen to apply.
+              const cat = Array.isArray(listing.categories)
+                ? listing.categories[0]
+                : listing.categories;
+              const supportsInventory = cat?.supports_inventory === true;
+              const qty = Number(listing.quantity ?? 1);
+              const outOfStock = supportsInventory && qty === 0;
               return (
                 <Card key={listing.id} padding="none" className="overflow-hidden">
                   <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">
                     {listing.status === "sold" && (
                       <span className="absolute top-2 left-2 z-10">
                         <Badge variant="neutral">Sold</Badge>
+                      </span>
+                    )}
+                    {listing.status !== "sold" && outOfStock && (
+                      <span className="absolute top-2 left-2 z-10">
+                        <Badge variant="warning">Out of stock</Badge>
                       </span>
                     )}
                     {primaryImage ? (
@@ -240,6 +263,46 @@ export default async function SellerListingsPage() {
                             action={setListingStatusAction}
                             productId={listing.id}
                           />
+                        )}
+                        {/* E.2.17.0 / Step 2: inventory quick actions.
+                            Asymmetric two-button pattern — only one
+                            renders at a time based on current quantity.
+                            Hidden entirely when the category doesn't
+                            support inventory (vehicles / property /
+                            etc.) OR the listing is marked sold (the
+                            seller-lifecycle action takes precedence —
+                            quantity quick-actions are for transient
+                            restock signaling, not permanent status). */}
+                        {supportsInventory && listing.status !== "sold" && (
+                          qty > 0 ? (
+                            <form action={markListingSoldOutAction}>
+                              <input
+                                type="hidden"
+                                name="productId"
+                                value={listing.id}
+                              />
+                              <button
+                                type="submit"
+                                className="text-teal-700 hover:text-teal-900 font-medium"
+                              >
+                                Mark sold out
+                              </button>
+                            </form>
+                          ) : (
+                            <form action={markListingAvailableAction}>
+                              <input
+                                type="hidden"
+                                name="productId"
+                                value={listing.id}
+                              />
+                              <button
+                                type="submit"
+                                className="text-teal-700 hover:text-teal-900 font-medium"
+                              >
+                                Mark available
+                              </button>
+                            </form>
+                          )
                         )}
                         <Link
                           href={`/listings/${listing.id}/edit`}

@@ -54,6 +54,7 @@ export default async function EditListingPage({
       `
       id, title, description, price_kobo, is_negotiable,
       category_id, state_id, city_area, seller_id, business_id, category_specs,
+      quantity,
       product_images ( storage_path, position )
     `
     )
@@ -69,7 +70,9 @@ export default async function EditListingPage({
       .from("categories")
       // slug + parent_id are needed by CategorySpecFields (D.7) to resolve
       // which spec schema applies for the selected category.
-      .select("id, name, slug, parent_id")
+      // supports_inventory (E.2.17.0) drives the conditional quantity
+      // field on EditListingForm.
+      .select("id, name, slug, parent_id, supports_inventory")
       .order("sort_order", { ascending: true }),
     supabase.from("nigerian_states").select("id, name").order("name", { ascending: true }),
   ]);
@@ -112,6 +115,9 @@ export default async function EditListingPage({
               categorySpecs: (listing.category_specs ?? undefined) as
                 | Record<string, string | number>
                 | undefined,
+              // E.2.17.0 / Step 2: existing stock count. DB column is
+              // NOT NULL DEFAULT 1; always set.
+              quantity: (listing.quantity as number | null) ?? 1,
             }}
           />
         </Card>

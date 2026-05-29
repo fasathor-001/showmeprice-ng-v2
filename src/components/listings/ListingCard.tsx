@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card } from "@/components/ui";
+import { Badge, Card } from "@/components/ui";
 import { formatNaira } from "@/lib/listings";
 import { ProductImage } from "./ProductImage";
 
@@ -10,6 +10,11 @@ interface ListingCardProps {
   isNegotiable: boolean;
   primaryImageUrl?: string | null;
   stateName?: string;
+  // E.2.17.0 / Step 2: when true, render an "Out of stock" overlay on
+  // the image (top-left, mirroring the dashboard's "Sold" overlay
+  // pattern). Caller computes this from the listing's category
+  // supports_inventory + the listing's quantity.
+  outOfStock?: boolean;
 }
 
 /**
@@ -26,11 +31,17 @@ export function ListingCard({
   isNegotiable,
   primaryImageUrl,
   stateName,
+  outOfStock = false,
 }: ListingCardProps) {
   return (
     <Link href={`/listings/${id}`} className="block">
       <Card variant="hover" padding="none" className="overflow-hidden h-full">
-        <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300">
+        <div className="aspect-square bg-neutral-100 flex items-center justify-center text-neutral-300 relative">
+          {outOfStock && (
+            <span className="absolute top-2 left-2 z-10">
+              <Badge variant="warning">Out of stock</Badge>
+            </span>
+          )}
           {primaryImageUrl ? (
             <ProductImage
               src={primaryImageUrl}
