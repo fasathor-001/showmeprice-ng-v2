@@ -122,64 +122,77 @@ export function getCategoryEmoji(slug: string | null | undefined): string {
 }
 
 /**
- * Phase E launch-category allowlist (Sprint 3 / Gap D.4).
+ * Listing-eligible category denylist (D-140 / 2026-05-29).
  *
- * Listing creation in Phase E is restricted to these category slugs —
- * the trust-product focus categories. The 5 launch category *types*:
- *   - phones        → mobile-phones-tablets tree
- *   - computers     → computer-accessories tree (laptops launch focus,
- *                     broadened to the full tree: desktops, monitors, etc.)
- *   - electronics   → electronics tree (also the listing home for
- *                     appliances, which are discoverable via the appliance
- *                     search_aliases added to `electronics` in Gap D.0b)
- *   - power/gen     → power-generators tree (seeded in Gap D.0a)
+ * Inverted from the original Phase E launch-allowlist shape (Sprint 3 /
+ * Gap D.4). Per D-140, three verified sellers are now live with referrals
+ * coming across multiple categories; most categories are open. A small
+ * denylist keeps the categories whose risks are regulatory or safety-shaped
+ * (not tier-shaped) closed.
  *
- * 20 slugs across 4 category trees. Source of truth: the D.0a seed
- * migration + the existing taxonomy in src/db/seed.ts.
+ * The four hard-closes — each shaped by a reason that won't go away when
+ * D-116's tiered seller-verification model ships:
  *
- * DEPRECATION PATH: Phase F+ replaces this hardcoded constant with an
- * admin-toggleable `categories.category_features` JSONB flag (e.g.
- * `{"phase_e_launch": true}`), so the launchable set can expand without a
- * code change as new seller categories onboard. When that migration ships,
- * this constant + isLaunchCategory() get deprecated in favour of a
- * data-driven check. Until then, this is the Phase E enforcement surface.
+ *   - alcohol (`drinks` parent + alcohol subcategories): NAFDAC + Nigerian
+ *     state liquor laws require age verification at point of sale; the
+ *     platform has no age-gate.
+ *   - `health`: NAFDAC tightly regulates pharmaceutical + supplement
+ *     sales; there is no regulated-seller verification path on the
+ *     platform; counterfeit-drug fraud is a known Nigerian vector.
+ *   - `pets`: wildlife-trafficking exposure (Nigerian Endangered Species
+ *     Act + CITES species), live-animal welfare moderation, exotic
+ *     species scam attractant.
+ *   - `services`: categorical misfit — services aren't products, and
+ *     "DM for price" is the pain ShowMePrice exists to remove; the
+ *     category attracts scams (fake jobs, "investment" opportunities).
  *
- * Note: this allowlist is keyed on category SLUG. `createListingAction` /
- * `updateListingAction` work with category_id (UUID), so the D.2/D.3
- * patches must resolve categoryId → slug before calling isLaunchCategory().
+ * D-116 originally reserved `vehicles` and `property` for Level 3 / Business
+ * Verified (CAC-checked). Per D-140 those are open NOW; the Level 3 tier
+ * design remains future work and, if it ships, may layer additional gating
+ * on top of (not in place of) this list.
+ *
+ * LONG-TERM SHAPE: this hardcoded denylist is interim. The eventual home is
+ * `categories.category_features` JSONB (the column is already in schema; a
+ * flag like `{"phase_e_listable": false}` on each closed row) —
+ * admin-toggleable without a code change, per the original deprecation
+ * note. When that migration ships, this constant + isLaunchCategory() get
+ * deprecated in favour of a data-driven check.
+ *
+ * Note: this denylist is keyed on category SLUG. `createListingAction` /
+ * `updateListingAction` work with category_id (UUID), so they resolve
+ * categoryId → slug before calling isLaunchCategory().
  */
-export const LAUNCH_CATEGORY_SLUGS = [
-  // phones (mobile-phones-tablets tree)
-  "mobile-phones-tablets",
-  "smartphones-new",
-  "smartphones-used",
-  "tablets",
-  "phone-accessories",
-  "smart-wearables",
-  // electronics (covers appliances via search_aliases — Gap D.0b)
-  "electronics",
-  "electronics-accessories",
-  // computers (full computer-accessories tree)
-  "computer-accessories",
-  "laptops",
-  "desktops-workstations",
-  "monitors",
-  "keyboards-mice",
-  "storage-drives",
-  "computer-accessories-misc",
-  // power & generators (seeded by Gap D.0a)
-  "power-generators",
-  "generators",
-  "inverters",
-  "solar-panels",
-  "batteries",
+export const RESTRICTED_CATEGORY_SLUGS = [
+  // Alcohol — NAFDAC + state liquor laws require age verification at sale;
+  // platform has no age-gate. Parent `drinks` included to push specificity
+  // — non-alcoholic drink subs (`soft-drinks`, `juices`, `water`,
+  // `coffee-tea`) remain open via their own slugs.
+  "drinks",
+  "alcohol-spirits",
+  "wine",
+  "beer",
+  // Health — NAFDAC pharmaceutical regulation; no regulated-seller
+  // verification path on the platform; counterfeit-drug fraud is a known
+  // Nigerian commerce vector.
+  "health",
+  // Pets — wildlife-trafficking exposure (CITES + Nigerian Endangered
+  // Species Act); live-animal welfare moderation; exotic species scam
+  // attractant.
+  "pets",
+  // Services — services aren't products. "DM for price" is the pattern
+  // this platform exists to remove. Fake-job / "investment opportunity"
+  // scams cluster here. Revisit if/when a services surface is designed.
+  "services",
 ] as const;
 
 /**
- * True if the given category slug is in the Phase E launch allowlist.
- * Consumed by createListingAction / updateListingAction (D.2/D.3) to
- * enforce the Phase E category restriction server-side.
+ * True if the given category slug is open for listing — i.e. NOT in the
+ * D-140 denylist. Consumed by createListingAction / updateListingAction
+ * (Sprint 3 D.2/D.3) to enforce the category restriction server-side.
+ *
+ * Name kept (vs. e.g. `isListableCategory`) because the two call sites in
+ * `src/app/(auth)/actions.ts` already use it; rename is a follow-up.
  */
 export function isLaunchCategory(slug: string): boolean {
-  return (LAUNCH_CATEGORY_SLUGS as readonly string[]).includes(slug);
+  return !(RESTRICTED_CATEGORY_SLUGS as readonly string[]).includes(slug);
 }

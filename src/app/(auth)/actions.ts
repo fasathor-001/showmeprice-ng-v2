@@ -1348,7 +1348,7 @@ export async function createListingAction(
     return {
       errors: {
         categoryId:
-          "This category isn't available during launch. Available categories: phones, computers, electronics, power & generators.",
+          "This category requires additional seller verification and isn't available yet. Contact support if you need to list here.",
       },
     };
   }
@@ -1536,7 +1536,7 @@ export async function updateListingAction(
     return {
       errors: {
         categoryId:
-          "This category isn't available during launch. Available categories: phones, computers, electronics, power & generators.",
+          "This category requires additional seller verification and isn't available yet. Contact support if you need to list here.",
       },
     };
   }

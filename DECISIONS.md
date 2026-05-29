@@ -3302,3 +3302,63 @@ Each will get its own banked design + scope when the next stage warrants it. The
 - Adding a "soft email change" via a separate `auth.users` write path without thinking through magic-link recovery, password-recovery email, and confirmation re-flow. Email is identity in Supabase Auth in a way phone isn't; the design is meaningfully harder.
 - Naive `DELETE FROM profiles WHERE id = …` for account deletion. RESTRICT FKs will raise; even if they didn't, deleting the referent of `contact_reveals` / `messages` / `price_history` rows destroys evidence the marketplace's trust posture depends on. K-004 holds for a reason.
 
+## D-140 — Category restriction shape updated: denylist (4 hard-closes) replaces 4-family allowlist; vehicles + property opened pre-Level-3
+
+**Status:** Locked (2026-05-29)
+**Cross-references:** D-116 (Tiered listing access — verification level × category risk; consciously updated by this decision), D-091 (Phase E "unlimited listings" framing), D-032 (verification gate), D-112 (honest verification labels), D-128 (Phase 1 Private Beta — observation over growth-hacking), D-134 (trust stack)
+**Implementation:** `src/lib/categories.ts` — `LAUNCH_CATEGORY_SLUGS` (20-slug allowlist) replaced by `RESTRICTED_CATEGORY_SLUGS` (denylist of 7 slugs covering 4 hard-closed category families); `isLaunchCategory()` flipped to `!denylist.includes(slug)`. Two server-side enforcement points in `src/app/(auth)/actions.ts` (`createListingAction` + `updateListingAction`) get a clearer error message at the same lines but otherwise unchanged.
+
+### Context
+
+The original Phase E launch-category allowlist restricted listing creation to four category families — phones, computers, electronics, power & generators (20 slugs total). That allowlist was the right shape for a single-seller smoke test of the pipeline. With three verified sellers now live and referrals arriving across multiple categories (Fashion was the immediate trigger), the allowlist is materially blocking growth that the trust stack (D-134) is otherwise ready to support.
+
+D-116 (2026-05-22) banked a tiered seller-verification model (L1 / L2 / L3) under which `vehicles` and `property` are reserved for Level 3 — Business Verified (CAC-checked). That verification-level model is **explicitly future engineering** per D-116's own "Implications (future engineering, NOT this commit)" note. It has not been built.
+
+### Decision
+
+Replace the allowlist with a small, regulator-and-safety-shaped denylist. Open everything else, including `vehicles` and `property`, ahead of D-116's tiered model.
+
+**Four hard-closed category families (7 slugs total):**
+
+1. **Alcohol** — `drinks` parent (closed to push specificity) + `alcohol-spirits`, `wine`, `beer`. Non-alcoholic drinks subcategories (`soft-drinks`, `juices`, `water`, `coffee-tea`) remain open via their own slugs.
+2. **`health`** — single slug; no subcategories exist in the taxonomy today.
+3. **`pets`** — single slug; no subcategories.
+4. **`services`** — single slug; no subcategories.
+
+The function signature `isLaunchCategory(slug: string): boolean` is kept (two call sites already use it); only its semantics flip — true now means "open for listing," false means "in the denylist."
+
+### Rationale
+
+**Why open vehicles and property despite D-116:**
+
+D-116 reserved them for Level 3 because the verification-level model is the right shape *in the abstract*. But that model has not been built and is not on the near-term roadmap. Blocking real seller growth on architecture that doesn't exist yet creates more cost (lost trust with seller cohort, repeated "contact support" escalations, brand friction at the worst stage) than the policy prevents. Three verified sellers — vouched for personally per the Phase 1 / D-128 relational-trust posture — are the population this affects today.
+
+If/when D-116's tiered model ships, `vehicles` and `property` can be re-gated then (it would be additive on top of, not in place of, this list — high-risk-category × low-verification-level can fail at submission even when neither rule alone blocks). D-116 is not abandoned; it is acknowledged as still-future and deliberately not blocked-against in the interim.
+
+**Why the four chosen closures stay closed regardless of D-116:**
+
+Each of the four denylist categories is shaped by a reason that doesn't depend on verification tiers and won't go away when D-116 ships:
+
+- **Alcohol** is gated by NAFDAC + Nigerian state liquor laws on **age-of-buyer**, not on seller credentials. A CAC-verified seller is not licensed to sell alcohol to a minor without age verification at point of sale. The platform has no age-gate; until one ships, alcohol stays closed. (When the day comes that an age-gate exists, the same denylist mechanism + a separate `age_restricted` flag can open the category.)
+- **`health`** is gated by NAFDAC pharmaceutical regulation, which is a regulator-licensed-seller question, not a verification-level question. Counterfeit drugs is a known Nigerian fraud vector that a buyer-facing trust badge does not mitigate.
+- **`pets`** carries wildlife-trafficking exposure (CITES + the Nigerian Endangered Species Act) and live-animal welfare moderation that a verification level does not address. Exotic-species scams attract this category specifically.
+- **`services`** is a categorical mismatch — services aren't products, and "DM for price" is the user pain ShowMePrice exists to remove. Fake-job / "investment opportunity" scams cluster in this category. A separate services surface, if ever designed, would have its own scope and own design.
+
+These four are not "Level 3 reserved" — they're "out of scope for this platform's current trust mechanisms regardless of seller verification level."
+
+### Operational consequences
+
+- **Frontend was already showing all 108 categories in the listing-creation dropdown** (no UI-side filter); the seller sees no change there. The change is at submit time — categories that used to fail with the launch-allowlist error now succeed (if they're not on the denylist) and the four denylist categories fail with a clearer "requires additional seller verification" message.
+- **Marketplace / `/categories` / homepage discovery surfaces are unchanged.** They already render all 108 categories regardless of the listing-creation restriction; investigation confirmed zero references to `isLaunchCategory` outside the two action call sites. Newly-opened categories become populated naturally as sellers post; the four closed categories stay browsable (the empty-state shows "no verified listings yet in this category" as before).
+- **Per-category spec schemas (`src/lib/categorySpecs.ts`) are opt-in** — categories without a schema entry render without the "Details for this category" fieldset. Fashion already has a schema (size + color, both optional). Categories without a schema (Hair & Wigs, Beauty, Home & Furniture, Baby & Kids, most Tier 2 & 3) get a clean form with no extra fields. No category breaks on opening.
+- **Error message standardized at both call sites** (createListingAction + updateListingAction) — *"This category requires additional seller verification and isn't available yet. Contact support if you need to list here."* — replaces the prior listing-launch-categories enumeration that's now stale.
+- **D-116 is not abandoned.** The tiered verification model is still the right long-term shape for `vehicles` and `property` specifically; this decision just declines to gate on architecture that has not been built. When D-116 ships, the tier check layers on top of this denylist (additive, not replacement).
+- **Long-term migration path remains documented in code.** The deprecation note in `categories.ts` carries forward — the hardcoded denylist is interim; the eventual home is `categories.category_features` JSONB (column already in schema; the long-term flag shape `{"phase_e_listable": false}` was already named in the original deprecation note and remains right). When that migration ships, the constant and `isLaunchCategory()` retire in favour of a data-driven per-row check.
+
+### Anti-pattern
+
+- Opening **alcohol** without an age-gate. Alcohol's gate is age-of-buyer, not seller-of-record. Adding alcohol to the open set on the assumption that "verified sellers are responsible" mis-identifies which party the regulation is protecting.
+- Opening **`services`** because "we want more supply." Services don't fit the product-with-real-price thesis; opening them quietly muddies the marketplace identity and pulls moderation effort onto fake-job / investment-opportunity surfaces that have nothing to do with the founding pain.
+- Re-introducing an allowlist when the next category needs to open. The allowlist shape was the original mistake — it required a code edit per new opening. The denylist + future JSONB-flag path means "open by default" is the normal case and closures are the exceptions, each with a banked reason.
+- Treating D-116 as either fully-binding or fully-abandoned. The right framing is "future engineering, not blocked-on, layered-on-top-of when it ships." This decision picks that middle.
+
