@@ -10,6 +10,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { searchUsers } from "@/lib/admin/search-users";
 
 export interface AdminActionResult {
   ok?: boolean;
@@ -26,9 +27,6 @@ interface SearchResult {
   users?: AdminSearchUser[];
   error?: string;
 }
-
-const SEARCH_MIN = 3;
-const SEARCH_LIMIT = 10;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -155,61 +153,26 @@ export async function revokeAdminAction(
  * Search users to promote to admin (D-107). Admin-only (returns emails).
  * Matches email or display_name (case-insensitive substring, min 3 chars),
  * excludes existing admins and disabled accounts, returns the top matches.
+ *
+ * E.2.16.0 Step 3 refactor: delegates to the shared searchUsers helper in
+ * @/lib/admin/search-users. The staff page filters out admins + disabled;
+ * /admin/users searches the full directory. Behavior here is unchanged.
  */
 export async function searchUsersAction(query: string): Promise<SearchResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return { error: authError(auth.reason) };
 
-  const q = query.trim().toLowerCase();
-  if (q.length < SEARCH_MIN) return { users: [] };
-
-  const admin = createAdminClient();
-
-  // LIMITATION: auth.admin.listUsers caps at 200 results per page; users beyond
-  // that aren't searchable. Acceptable for MVP scale. Replace with scalable
-  // hybrid (profiles ILIKE + getUserById enrichment) when total user count
-  // approaches the cap. Tracked as future enhancement.
-  const { data: authList, error: listErr } = await admin.auth.admin.listUsers({
-    page: 1,
-    perPage: 200,
+  const res = await searchUsers({
+    query,
+    excludeAdmins: true,
+    excludeDisabled: true,
   });
-  if (listErr) {
-    console.error("[searchUsersAction] listUsers failed", listErr.message);
-    return { error: "Search is temporarily unavailable. Please try again." };
-  }
-
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("id, display_name, role, is_disabled")
-    .limit(200);
-
-  type ProfileLite = {
-    id: string;
-    display_name: string | null;
-    role: string | null;
-    is_disabled: boolean;
+  if (res.error) return { error: res.error };
+  return {
+    users: (res.users ?? []).map((u) => ({
+      id: u.id,
+      email: u.email,
+      displayName: u.displayName,
+    })),
   };
-  const profileById = new Map<string, ProfileLite>(
-    ((profiles ?? []) as ProfileLite[]).map((p) => [p.id, p]),
-  );
-
-  const matches: AdminSearchUser[] = [];
-  for (const u of authList?.users ?? []) {
-    const p = profileById.get(u.id);
-    // Exclude existing admins (already admin, can't re-grant) and disabled
-    // accounts (not admin candidates; pairs with the grantAdminAction guard).
-    if (p?.role === "admin") continue;
-    if (p?.is_disabled) continue;
-    const email = (u.email ?? "").toLowerCase();
-    const name = (p?.display_name ?? "").toLowerCase();
-    if (email.includes(q) || name.includes(q)) {
-      matches.push({
-        id: u.id,
-        email: u.email ?? "—",
-        displayName: p?.display_name ?? "—",
-      });
-      if (matches.length >= SEARCH_LIMIT) break;
-    }
-  }
-  return { users: matches };
 }

@@ -94,6 +94,22 @@ export const toastMessages: Record<string, ToastMessage> = {
     message:
       "Before you can verify your account, complete your business details below (city / area, state).",
   },
+  "phone-changed": {
+    variant: "success",
+    message: "Phone number changed. Verification was revoked.",
+  },
+  "phone-unchanged": {
+    variant: "info",
+    message: "Phone number is already that value — no change made.",
+  },
+  "location-changed": {
+    variant: "success",
+    message: "Location updated.",
+  },
+  "location-unchanged": {
+    variant: "info",
+    message: "Location is already that value — no change made.",
+  },
   "verify-needs-whatsapp": {
     variant: "warning",
     message:

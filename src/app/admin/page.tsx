@@ -26,6 +26,12 @@ export default async function AdminLandingPage() {
 
   const cards = [
     {
+      href: "/admin/users",
+      title: "Users",
+      description:
+        "Find a user and apply support actions (phone change, location change).",
+    },
+    {
       href: "/admin/staff",
       title: "User Management",
       description: "Grant or revoke admin role; manage staff accounts.",
