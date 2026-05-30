@@ -13,13 +13,13 @@ export function PropertyWarningBanner() {
       className="rounded-lg border border-warning/30 bg-warning-bg text-warning-text p-4 text-sm"
     >
       <p className="font-semibold mb-1">
-        ⚠️ Property listings — verification limits
+        Property listings — verification limits
       </p>
       <p className="leading-relaxed">
-        ShowMePrice verifies seller identity (NIN + address + ID). We do{" "}
-        <strong>NOT</strong> verify property titles, ownership documents, or
-        property authenticity. Always inspect property and verify documents
-        independently before any payment.
+        ShowMePrice verifies seller identity (NIN + address + ID). We don&apos;t
+        verify property titles, ownership documents, or property authenticity.
+        Always inspect property and verify documents independently before any
+        payment.
       </p>
     </div>
   );

@@ -263,9 +263,12 @@ export default async function ListingDetailPage({
 
           {/* Details */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Header with report button */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-ink-600">Details</h2>
+            {/* Header with report button. Feature H: visible "Details"
+                label dropped — the H1 title + badge row below already
+                serve as the visual entry. h2 retained as sr-only so the
+                landmark hierarchy stays intact for assistive tech. */}
+            <div className="flex justify-end">
+              <h2 className="sr-only">Details</h2>
               <ListingReportButton
                 listingId={listing.id}
                 listingTitle={listing.title}
@@ -335,6 +338,18 @@ export default async function ListingDetailPage({
               <p className="text-xs text-ink-600">
                 Listed {timeAgo(listing.created_at)}
               </p>
+              {/* E.2.17.0 / Feature H: out-of-stock indicator at the
+                  action point. The badge row above already signals
+                  stock state, but on mobile the buyer reaches the
+                  sticky-bottom CTA via the price/timestamp block — this
+                  one-liner keeps stock context co-located with the
+                  action. CTA itself stays active per Frank's lean:
+                  buyers asking about restock is high-value, low-friction. */}
+              {outOfStock && (
+                <p className="text-sm text-warning-text mt-1">
+                  Currently out of stock — message the seller about restock.
+                </p>
+              )}
             </div>
 
             {/* Stage 2.B Commit 7 — MessageSellerButton. Replaces the
@@ -421,7 +436,8 @@ export default async function ListingDetailPage({
                     href={`/sellers/${business.slug}`}
                     className="inline-block text-xs text-teal-700 hover:text-teal-900 font-medium mt-1.5"
                   >
-                    View all listings from this seller →
+                    View all listings from this seller{" "}
+                    <span aria-hidden="true">→</span>
                   </Link>
                 </div>
               </div>
@@ -430,7 +446,10 @@ export default async function ListingDetailPage({
                   + selfie, so a verified seller has all three checks. We
                   render the badges based on verification_status rather than
                   re-querying seller_verifications (which is RLS-restricted
-                  to seller/admin reads). */}
+                  to seller/admin reads). Feature H: micro-label above the
+                  chip group so the chips read as a trust signal rather
+                  than free-floating decorations. */}
+              <p className="text-xs text-ink-600 mb-2">Identity verified</p>
               <div className="flex flex-wrap gap-1.5">
                 <TrustChip label="NIN verified" />
                 <TrustChip label="Address verified" />
@@ -463,10 +482,10 @@ export default async function ListingDetailPage({
                         key={key}
                         className="flex justify-between gap-2 border-b border-neutral-100 pb-1.5 last:border-b-0"
                       >
-                        <dt className="text-ink-600">
+                        <dt className="text-ink-600 min-w-0">
                           {labelForSpec(schema, key)}
                         </dt>
-                        <dd className="text-ink text-right">
+                        <dd className="text-ink text-right min-w-0">
                           {String(value)}
                         </dd>
                       </div>
