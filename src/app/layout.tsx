@@ -14,9 +14,19 @@ export const metadata: Metadata = {
   description:
     "Real prices, verified sellers, one tap to chat. Skip the 'DM for price' frustration on Nigeria's marketplace where every listing has a price and every seller is verified.",
   icons: {
-    icon: "/favicon.svg",
-    apple: "/apple-touch-icon.svg",
-    shortcut: "/favicon.svg",
+    // Feature I.1: full favicon set across browser eras. Modern
+    // browsers pick the SVG (sharp at every zoom); older ones fall
+    // back to the 96×96 PNG. Apple touch icon points at the 180×180
+    // PNG generated for the PWA (better iOS support than an SVG —
+    // some iOS versions silently ignore SVG apple-touch icons).
+    // `shortcut` resolves to favicon.ico for legacy browsers / Windows
+    // pinned-site contexts.
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
+    shortcut: "/favicon.ico",
   },
   // Feature I — Phase 1 PWA. Next renders manifest.ts to
   // /manifest.webmanifest at build time; this metadata field emits
