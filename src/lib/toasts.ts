@@ -119,6 +119,20 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Location is already that value — no change made.",
   },
+  // Feature J.3: account suspension toasts. The unsuspend message
+  // explicitly calls out that businesses stay disabled (locked decision
+  // #6 — suspension cascades businesses.is_disabled=true, unsuspension
+  // does NOT auto-reverse it; admin re-enables each separately).
+  "account-suspended": {
+    variant: "success",
+    message:
+      "Account suspended. Their owned businesses are hidden from buyers.",
+  },
+  "account-unsuspended": {
+    variant: "success",
+    message:
+      "Account unsuspended. Their owned businesses stay disabled — re-enable each separately.",
+  },
   "marked-sold-out": {
     variant: "info",
     message:

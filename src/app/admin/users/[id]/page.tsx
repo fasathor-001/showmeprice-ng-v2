@@ -7,6 +7,7 @@ import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { formatNigerianPhone, isPhoneVerified } from "@/lib/auth";
 import { ChangePhoneForm } from "./ChangePhoneForm";
 import { ChangeLocationForm } from "./ChangeLocationForm";
+import { SuspendUserPanel } from "./SuspendUserPanel";
 
 // /admin/users/[id] — user-detail page for Stage 1 admin tools
 // (E.2.16.0 Step 3). Read-only display of the user's current account state
@@ -248,7 +249,11 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
                           ? "Phone changed"
                           : c.action === "location_changed"
                             ? "Location changed"
-                            : c.action}
+                            : c.action === "account_suspended"
+                              ? "Account suspended"
+                              : c.action === "account_unsuspended"
+                                ? "Account unsuspended"
+                                : c.action}
                       </span>
                     </p>
                     {(c.previous_value || c.new_value) && (
@@ -352,6 +357,32 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
               targetUserId={targetProfile.id}
               currentStateId={targetProfile.state_id}
               states={states}
+            />
+          </Card>
+        </div>
+
+        {/* Feature J.3 — moderation action. Separated from the support-action
+            grid above because suspension is materially higher-stakes:
+            cascades businesses.is_disabled=true and hides every owned
+            listing across the 6 D-146 public surfaces. Own row, distinct
+            visual treatment. */}
+        <div className="mt-8 max-w-4xl">
+          <Card>
+            <h2 className="text-sm font-medium text-ink mb-1">
+              {targetProfile.is_disabled
+                ? "Unsuspend account"
+                : "Suspend account"}
+            </h2>
+            <p className="text-xs text-ink-600 mb-4">
+              {targetProfile.is_disabled
+                ? "Restores the user's ability to sign in and use the app. Owned businesses stay disabled — re-enable each separately. Audited."
+                : "Blocks the user from signing in and using the app. Owned businesses are auto-disabled and listings hidden from public browse. Audited."}
+            </p>
+            <SuspendUserPanel
+              targetUserId={targetProfile.id}
+              targetDisplayName={targetProfile.display_name ?? "this user"}
+              isTargetSuspended={targetProfile.is_disabled}
+              isSelfTarget={user.id === targetProfile.id}
             />
           </Card>
         </div>
