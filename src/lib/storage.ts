@@ -12,6 +12,9 @@
  */
 
 const PRODUCT_IMAGES_BUCKET = "product-images";
+// E.2.18.0: public-read bucket for seller business avatars/logos. Path
+// shape `{business_id}/avatar-{timestamp}.{ext}` per the bucket's RLS.
+const BUSINESS_AVATARS_BUCKET = "business-avatars";
 
 function publicBaseUrl(): string {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,4 +28,19 @@ function publicBaseUrl(): string {
 
 export function getProductImagePublicUrl(storagePath: string): string {
   return `${publicBaseUrl()}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${storagePath}`;
+}
+
+/**
+ * Public URL for a business avatar storage path. NULL-safe: returns null
+ * when the path is null/empty, which lets render-side `<Avatar src=...>`
+ * accept the result directly (the component falls back to initials when
+ * src is null). Mirrors getProductImagePublicUrl shape — pure URL
+ * construction, no Supabase client roundtrip, works in edge + server +
+ * client contexts.
+ */
+export function getBusinessAvatarPublicUrl(
+  storagePath: string | null | undefined
+): string | null {
+  if (!storagePath) return null;
+  return `${publicBaseUrl()}/storage/v1/object/public/${BUSINESS_AVATARS_BUCKET}/${storagePath}`;
 }

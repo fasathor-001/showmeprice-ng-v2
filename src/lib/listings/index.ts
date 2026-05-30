@@ -5,6 +5,7 @@ export {
   timeAgo,
   isValidImageUrl,
   generateListingSlug,
+  generateBusinessSlug,
 } from "./format";
 export {
   validateTitle,

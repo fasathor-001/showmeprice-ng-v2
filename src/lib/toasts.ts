@@ -89,6 +89,15 @@ export const toastMessages: Record<string, ToastMessage> = {
     variant: "info",
     message: "Listing restored to public view.",
   },
+  "avatar-updated": {
+    variant: "success",
+    message: "Avatar updated.",
+  },
+  "avatar-removed": {
+    variant: "info",
+    message:
+      "Avatar removed — your initials will show in its place.",
+  },
   "verify-needs-business-details": {
     variant: "warning",
     message:

@@ -92,3 +92,28 @@ export function generateListingSlug(title: string): string {
 
   return base ? `${base}-${suffix}` : suffix;
 }
+
+/**
+ * Generate a URL-safe business slug. Deterministic — same input always
+ * produces the same output. NO random suffix (unlike generateListingSlug)
+ * because business URLs must be stable + brandable: Jiji's
+ * `/dealer/abc-motors`, not `/dealer/abc-motors-xy7z`. D-142.
+ *
+ * Mirrors the E.2.18.0 §1 SQL backfill regex exactly so app-time inserts
+ * produce slugs identical in shape to backfilled rows. The caller
+ * (becomeSellerAction) is responsible for collision handling — on the
+ * rare duplicate, append a numeric suffix (-2, -3, …) until unique.
+ *
+ * Returns the empty string for input that strips to nothing (e.g. names
+ * composed entirely of punctuation/whitespace). Caller should treat
+ * empty as an error rather than persisting.
+ */
+export function generateBusinessSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}

@@ -133,6 +133,14 @@ export default async function DashboardPage() {
                 >
                   Manage business →
                 </Link>
+                {/* E.2.18.0 / D-142: dedicated avatar/branding surface
+                    separate from the broader business-details edit. */}
+                <Link
+                  href="/dashboard/business-profile"
+                  className="text-sm text-teal-700 hover:text-teal-900 font-medium"
+                >
+                  Business profile →
+                </Link>
               </div>
             </Card>
           ) : (

@@ -22,6 +22,7 @@ import {
   validateQuantity,
   hasErrors as listingHasErrors,
   generateListingSlug,
+  generateBusinessSlug,
   type ListingValidationErrors,
 } from "@/lib/listings";
 import {
@@ -445,6 +446,53 @@ export async function becomeSellerAction(
       return { errors: { _form: "You already have a seller account" } };
     }
 
+    // E.2.18.0 / D-142: generate the URL slug for this business deterministically
+    // from business_name (no random suffix — business URLs must be stable
+    // + brandable). businesses.slug is NOT NULL UNIQUE post-90f5661, so
+    // we must produce a non-empty unique value here or the INSERT fails.
+    //
+    // Collision strategy: try the base slug first. If taken (UNIQUE
+    // conflict), append `-2`, `-3`, … up to 100. 100 is generous —
+    // realistic collisions cluster at small N, and any business that
+    // can't find an unused suffix within 100 attempts has a pathological
+    // name we should reject rather than persist as e.g. "abc-motors-127".
+    //
+    // Empty base (name composed entirely of punctuation/whitespace) is
+    // rejected — the seller's existing business-name validation would
+    // have caught that, but defense in depth.
+    const baseSlug = generateBusinessSlug(businessName);
+    if (!baseSlug) {
+      return {
+        errors: {
+          businessName: "Business name must include letters or numbers",
+        },
+      };
+    }
+    let resolvedSlug = baseSlug;
+    let collisionAttempt = 1;
+    while (collisionAttempt <= 100) {
+      const candidate =
+        collisionAttempt === 1 ? baseSlug : `${baseSlug}-${collisionAttempt}`;
+      const { data: existingSlug } = await supabase
+        .from("businesses")
+        .select("id")
+        .eq("slug", candidate)
+        .maybeSingle();
+      if (!existingSlug) {
+        resolvedSlug = candidate;
+        break;
+      }
+      collisionAttempt++;
+    }
+    if (collisionAttempt > 100) {
+      return {
+        errors: {
+          _form:
+            "Couldn't generate a unique URL for your business. Try a more distinctive business name.",
+        },
+      };
+    }
+
     // Build the insert payload. seller_whatsapp + seller_whatsapp_verified_at
     // are populated INLINE only on the verified path (the value is already
     // OTP-proven via the profile-phone lane). On the different-number path
@@ -464,6 +512,7 @@ export async function becomeSellerAction(
     const { error: insertError } = await supabase.from("businesses").insert({
       owner_id: user.id,
       business_name: businessName,
+      slug: resolvedSlug, // E.2.18.0 / D-142
       description: businessDescription,
       state_id: stateId,
       city_area: cityArea,
@@ -1846,4 +1895,143 @@ export async function markListingAvailableAction(
     .eq("id", productId);
 
   redirect("/dashboard/listings?toast=marked-available");
+}
+
+/**
+ * E.2.18.0 / D-142 Step 2 — persist a freshly-uploaded business avatar
+ * path to `businesses.logo_path`. The storage upload happened
+ * client-side (BusinessAvatarUploader.tsx) via the authenticated
+ * session — Storage RLS already enforced folder-ownership; this action
+ * records the path, fetches the previous value, best-effort deletes
+ * the old file so storage doesn't accumulate orphans, and redirects.
+ *
+ * Defense-in-depth: validates the submitted path starts with
+ * `{business_id}/` even though storage RLS would have rejected an
+ * upload outside the owner's folder. We don't trust the client to
+ * round-trip the right path either.
+ *
+ * Authorization: standard auth + ownership via .eq("owner_id", user.id)
+ * + .eq("id", business.id) on the UPDATE — RLS (`businesses_owner_update`)
+ * double-checks the same condition; three layers, smallest viable set.
+ */
+export async function updateBusinessAvatarAction(
+  formData: FormData
+): Promise<void> {
+  const logoPath = String(formData.get("logoPath") ?? "").trim();
+  if (!logoPath) return;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Resolve the user's business (UNIQUE on owner_id — one per user).
+  // Fetch the previous logo_path in the same query so we can delete
+  // the old file after persisting the new value.
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, logo_path")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!business) return;
+
+  // Defense in depth — path must live under this business's folder.
+  // Storage RLS would have rejected the upload that produced such a
+  // path, but we don't want to persist a path we can't validate
+  // ownership of either.
+  if (!logoPath.startsWith(`${business.id}/`)) {
+    console.warn(
+      "[updateBusinessAvatarAction] path does not belong to this business",
+      { businessId: business.id, logoPath }
+    );
+    return;
+  }
+
+  const previousLogoPath =
+    typeof business.logo_path === "string" ? business.logo_path : null;
+
+  const { error } = await supabase
+    .from("businesses")
+    .update({ logo_path: logoPath })
+    .eq("id", business.id);
+
+  if (error) {
+    console.error(
+      "[updateBusinessAvatarAction] update failed",
+      error.message
+    );
+    return;
+  }
+
+  // Best-effort cleanup of the previous avatar object. If this fails
+  // the new avatar is already saved — we just leak one storage object,
+  // not a correctness issue worth surfacing to the seller.
+  if (previousLogoPath && previousLogoPath !== logoPath) {
+    const { error: removeErr } = await supabase.storage
+      .from("business-avatars")
+      .remove([previousLogoPath]);
+    if (removeErr) {
+      console.warn(
+        "[updateBusinessAvatarAction] previous avatar delete failed",
+        previousLogoPath,
+        removeErr.message
+      );
+    }
+  }
+
+  redirect("/dashboard/business-profile?toast=avatar-updated");
+}
+
+/**
+ * E.2.18.0 / D-142 Step 2 — clear `businesses.logo_path` and best-effort
+ * delete the storage object. After this, the shop page + listing seller
+ * card + dashboard widget all fall back to the initials placeholder via
+ * the existing <Avatar> shape. Same auth + ownership pattern as
+ * updateBusinessAvatarAction.
+ */
+export async function removeBusinessAvatarAction(): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, logo_path")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!business) return;
+
+  const previousLogoPath =
+    typeof business.logo_path === "string" ? business.logo_path : null;
+
+  const { error } = await supabase
+    .from("businesses")
+    .update({ logo_path: null })
+    .eq("id", business.id);
+
+  if (error) {
+    console.error(
+      "[removeBusinessAvatarAction] update failed",
+      error.message
+    );
+    return;
+  }
+
+  if (previousLogoPath) {
+    const { error: removeErr } = await supabase.storage
+      .from("business-avatars")
+      .remove([previousLogoPath]);
+    if (removeErr) {
+      console.warn(
+        "[removeBusinessAvatarAction] storage delete failed",
+        previousLogoPath,
+        removeErr.message
+      );
+    }
+  }
+
+  redirect("/dashboard/business-profile?toast=avatar-removed");
 }

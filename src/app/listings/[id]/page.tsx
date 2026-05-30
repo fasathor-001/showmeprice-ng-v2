@@ -5,7 +5,10 @@ import { isPhoneVerified } from "@/lib/auth";
 import { Container } from "@/components/layout";
 import { Badge, Card, Avatar } from "@/components/ui";
 import { formatNaira, timeAgo } from "@/lib/listings";
-import { getProductImagePublicUrl } from "@/lib/storage";
+import {
+  getProductImagePublicUrl,
+  getBusinessAvatarPublicUrl,
+} from "@/lib/storage";
 import { ListingImageGallery } from "@/components/listings/ListingImageGallery";
 import { MessageSellerButton } from "@/components/listings/MessageSellerButton";
 import { ListingShareBar } from "@/components/listings/ListingShareBar";
@@ -34,7 +37,7 @@ export default async function ListingDetailPage({
       product_images ( storage_path, position ),
       categories ( id, name, slug, parent_id, supports_inventory ),
       nigerian_states ( name, slug ),
-      businesses ( id, business_name, description, verification_status, owner_id, created_at, state_id )
+      businesses ( id, slug, business_name, description, verification_status, owner_id, created_at, state_id, logo_path )
     `
     )
     .eq("id", params.id)
@@ -336,15 +339,25 @@ export default async function ListingDetailPage({
             <Card>
               <div className="flex items-start gap-3 mb-4">
                 <Avatar
+                  src={getBusinessAvatarPublicUrl(
+                    typeof business.logo_path === "string"
+                      ? business.logo_path
+                      : null,
+                  )}
                   initials={business.business_name.slice(0, 2)}
                   alt={business.business_name}
                   size="md"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-sm font-medium text-ink truncate">
+                    {/* E.2.18.0 / D-142: business name links to the
+                        public seller shop page. */}
+                    <Link
+                      href={`/sellers/${business.slug}`}
+                      className="text-sm font-medium text-ink hover:text-teal-700 truncate"
+                    >
                       {business.business_name}
-                    </p>
+                    </Link>
                     <svg
                       width="14"
                       height="14"
@@ -368,6 +381,14 @@ export default async function ListingDetailPage({
                     Member since {memberSince}
                     {sellerState && <> · {sellerState.name}</>}
                   </p>
+                  {/* E.2.18.0 / D-142: discoverability CTA into the
+                      seller's full shop catalogue. */}
+                  <Link
+                    href={`/sellers/${business.slug}`}
+                    className="inline-block text-xs text-teal-700 hover:text-teal-900 font-medium mt-1.5"
+                  >
+                    View all listings from this seller →
+                  </Link>
                 </div>
               </div>
 
