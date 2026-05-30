@@ -14,6 +14,7 @@ import { MessageSellerButton } from "@/components/listings/MessageSellerButton";
 import { ListingShareBar } from "@/components/listings/ListingShareBar";
 import { ListingReportButton } from "@/components/listings/ListingReportButton";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
+import { MoreFromSeller } from "@/components/listings/MoreFromSeller";
 import {
   getSpecsForCategory,
   labelForSpec,
@@ -140,9 +141,35 @@ export default async function ListingDetailPage({
   // All three queries run in parallel with each other (the listing query
   // above is the gate — without a verified listing we 404 before reaching
   // here, so the parallelism only kicks in for valid listings).
-  const {
-    data: { user: currentUser },
-  } = await supabase.auth.getUser();
+  // Feature F: the "More from this seller" rail query runs in parallel
+  // with the auth call so the rail adds zero serial round-trips on edge.
+  // The inner currentUser-gated Promise.all below stays as-is — it has
+  // a real data dependency on currentUser that this top-level pair does
+  // not. Visibility gates already passed above (lines 56–61), so the
+  // rail's seller is known verified + !is_disabled by D-146 contract.
+  const [
+    {
+      data: { user: currentUser },
+    },
+    { data: moreFromSeller },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from("products")
+      .select(
+        `
+        id, title, price_kobo, is_negotiable, created_at, quantity,
+        product_images ( storage_path, position ),
+        nigerian_states ( name ),
+        categories ( supports_inventory )
+      `,
+      )
+      .eq("status", "active")
+      .eq("business_id", business.id)
+      .neq("id", listing.id)
+      .order("created_at", { ascending: false })
+      .limit(6),
+  ]);
 
   let currentUserPhoneVerified = false;
   let existingConversationId: string | null = null;
@@ -473,6 +500,16 @@ export default async function ListingDetailPage({
             </div>
           </div>
         </div>
+
+        {/* Feature F — "More from this seller" rail. Renders below the
+            2-column grid so the cards span full-width on lg (matching the
+            marketplace/homepage/category grid shape). Component returns
+            null when the seller has no other active listings. */}
+        <MoreFromSeller
+          businessName={business.business_name}
+          businessSlug={business.slug}
+          listings={moreFromSeller ?? []}
+        />
       </div>
     </Container>
   );
