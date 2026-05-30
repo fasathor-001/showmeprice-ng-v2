@@ -6,13 +6,13 @@ export function Footer() {
 
   const platformLinks = [
     { label: "Home", href: "/" },
-    { label: "How it works", href: "https://showmeprice.ng/#how" },
+    { label: "How it works", href: "/#how" },
     { label: "Already invited? Open app", href: "https://app.showmeprice.ng" },
   ];
 
   const forSellersLinks = [
     { label: "Seller early access", href: "/sell" },
-    { label: "Verification", href: "/sell/verify" },
+    { label: "How verification works", href: "/sell/verify" },
     { label: "Contact founder", href: "mailto:admin@showmeprice.ng" },
   ];
 
@@ -23,7 +23,7 @@ export function Footer() {
     { label: "Cookie Policy", href: "/cookie-policy" },
   ];
 
-  const cities = ["Lagos", "Abuja", "Port Harcourt", "Delta and More"];
+  const cities = ["Lagos", "Abuja", "Port Harcourt", "Delta — and more"];
 
   return (
     <footer className="bg-slate-900 text-white mt-24">
@@ -40,7 +40,7 @@ export function Footer() {
                 Nigeria&apos;s trust-first marketplace.
               </p>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Real prices, verified sellers, and safer buyer-seller conversations.
+                Real prices from verified Nigerian sellers, with direct WhatsApp contact when you&apos;re ready.
               </p>
             </div>
 

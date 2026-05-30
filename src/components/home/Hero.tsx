@@ -24,7 +24,7 @@ export async function Hero() {
         <div className="py-12 sm:py-20 text-center max-w-2xl mx-auto">
           <div className="inline-flex items-center justify-center mb-4 sm:mb-6">
             <span className="text-xs sm:text-sm font-semibold tracking-wider text-teal-700 uppercase">
-              Real prices from verified sellers
+              Verified sellers · Nigeria
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-medium text-ink leading-tight tracking-tight">
@@ -32,8 +32,10 @@ export async function Hero() {
             verified Nigerian sellers.
           </h1>
           <p className="mt-4 text-base text-ink-600 max-w-md mx-auto">
-            No more &quot;DM for price&quot;. See actual prices, message
-            verified sellers directly, and shop with confidence.
+            No more &quot;DM for price.&quot; Browse real prices from
+            verified Nigerian sellers, then contact them directly on
+            WhatsApp to ask questions, inspect, and agree the deal
+            yourself.
           </p>
 
           {/* State picker — global search lives in the header (D.5.1). */}

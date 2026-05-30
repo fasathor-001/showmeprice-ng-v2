@@ -4,7 +4,7 @@ const steps = [
   {
     n: 1,
     title: "Browse with real prices",
-    body: "Every listing shows the actual price. No more 'DM for price' or back-and-forth.",
+    body: 'Every listing shows the actual price. No more "DM for price" or back-and-forth.',
   },
   {
     n: 2,
@@ -13,14 +13,14 @@ const steps = [
   },
   {
     n: 3,
-    title: "Chat directly on WhatsApp",
-    body: "Tap once to message the seller. No middleman, no fees, just a direct conversation.",
+    title: "Contact directly on WhatsApp",
+    body: "Chat with the seller, ask questions, inspect before payment, and agree the deal yourself.",
   },
 ];
 
 export function HowItWorks() {
   return (
-    <section className="py-12 sm:py-16">
+    <section id="how" className="py-12 sm:py-16">
       <Container>
         <div className="text-center mb-10 sm:mb-12">
           <h2 className="text-2xl sm:text-3xl font-medium text-ink">How it works</h2>
