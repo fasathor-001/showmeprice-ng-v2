@@ -3515,3 +3515,79 @@ Avatars display at 80px max (shop-page header) and 32–48px in listing cards. A
 - **Building a separate "branding" admin tool to upload avatars on behalf of sellers.** Avatar upload is a self-service seller action; if the seller doesn't upload one, the initials-placeholder shape works fine. Building admin-upload infra is scope creep.
 - **Forcing square aspect ratio at upload time.** Adds client-side validation friction; the circular crop at render handles non-square uploads gracefully. Soft guidance ("Square images look best — 400×400 or larger") is sufficient.
 
+## D-143 — Jewelry & Watches subcategory under Fashion: slug, search_aliases pattern, parent-spec inheritance, smartwatch routing
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** Phase D.4.1 (Fashion taxonomy seed — original 6 Fashion subs at sort_order 1-6), Phase D.7 (per-category `category_specs` with parent-fallback resolution), Phase D.7.2 (`search_aliases` JSONB for buyer-query routing), D-141 (`supports_inventory` flag — E.2.17.0 inventory feature; defaults true and inherited for non-overridden subs), D-142 (preceding migration in this session's arc — seller shop pages foundation)
+**Implementation:** `migrations/E.2.19.0-jewelry-watches-subcategory.sql` (applied 2026-05-30) + commit `<this>`. Single data-row INSERT under Fashion's parent. No app code changes.
+
+### Context
+
+A verified fashion seller asked yesterday (2026-05-29) for a dedicated jewelry subcategory. Today expanded to include watches per founder call — the Nigerian luxury and everyday watch market (Rolex, Tag Heuer, Casio, Citizen) pairs naturally with jewelry under the "personal adornment" shopping intent. Combining into one subcategory keeps the taxonomy lean (no need for a second new row for watches) without semantic compromise — Jiji and Jumia handle the split similarly.
+
+### Decision
+
+Add a single subcategory `jewelry-watches` (display name "Jewelry & Watches") under the existing `fashion` parent at `sort_order=7`. Inherit Fashion's `category_specs` (size + color, both optional text) for v1. Populate rich `search_aliases` on the subcategory row — a deliberate departure from the existing subcategory pattern where aliases default to `'[]'`. Exclude `smartwatch` from the alias set to preserve clean routing to `smart-wearables`.
+
+### Rationale
+
+**Why slug `jewelry-watches` (not just `jewelry`):**
+
+Honest representation of the category's scope. A buyer landing on `/categories/jewelry-watches` sees the URL match the content. Naming the slug `jewelry` would create UX dissonance when watch listings show up there. The compound slug is slightly longer than ideal for URL aesthetics, but the trade-off favors semantic accuracy at the address bar.
+
+**Why include watches in this subcategory (not as a separate `watches` sibling):**
+
+Three Nigerian-market arguments:
+1. Buyers searching for personal adornment commonly want both — a buyer browsing for a chain is plausibly also browsing for a watch. One subcategory keeps that shopping intent intact.
+2. Jewelry sellers commonly also carry watches; the operational reality is one cohort of sellers, not two.
+3. Adding a second subcategory `watches` would require sort_order=8 (still appendable, no conflict), but doubles the taxonomy maintenance surface for no real categorization benefit. If watch volume eventually warrants a split, that's a future migration that promotes `watches` to standalone — cheap to do later, free to defer now.
+
+**Why sort_order = 7 (appending, not inserting):**
+
+Existing Fashion subs occupy `sort_order` 1-6 with the current display ordering (Men's Clothing → Women's Clothing → Kids' Clothing → Traditional/Ankara → Shoes → Accessories). Appending at 7 has zero conflict, requires no rebalance of existing rows, and reads sensibly — Accessories at 6 is the closest semantic neighbor (both are "adornment + small wearable" categories), so Jewelry & Watches landing immediately after produces natural flow when buyers browse Fashion's sub-grid. Inserting between Accessories and Shoes (or elsewhere mid-list) would require either reassigning two or more existing sort_orders or accepting non-unique sort_order values within the same parent (which would surface as nondeterministic display order in the UI). Append-and-bank is the right shape at private-beta scale.
+
+**Why no `category_specs` override:**
+
+`getSpecsForCategory(slug, parentSlug)` falls back to the parent's schema when the subcategory has no own entry. Fashion's parent specs (size + color, both optional text) cover:
+- **Jewelry:** ring size 6, chain color "gold", bracelet size "medium", earring color "rose gold."
+- **Watches:** case size "42mm", band color "stainless steel", strap color "leather brown."
+
+Both fields are optional — appropriate for a category where some items don't have either dimension (a generic pendant has no meaningful size; a unisex chain has no meaningful gender). A future override is a separate scope when real seller demand surfaces — pure data-config change in `src/lib/categorySpecs.ts`, no migration needed. Concrete future overrides that might land: `material` (gold/silver/stainless/leather/other) as a select, `gender` (men's/women's/unisex), `watch_type` (mechanical/quartz/digital/smartwatch — distinct from the smart-wearables routing) for watches specifically. None of these are blocking today.
+
+**Why rich `search_aliases` on a SUBCATEGORY (pattern departure):**
+
+Existing subcategory rows leave `search_aliases` at the column default `'[]'`. Aliases today live only on parent rows (Fashion: `["fashion", "clothes", "clothing", "dress", "wear", "outfit", "apparel", "style"]`; Electronics & Gadgets: 23 terms; etc.). But marketplace category-search (Phase D.7.2) routes via JSONB containment against the aliases column on EVERY category row — sub rows participate too if populated. Jewelry & Watches has a distinctive buyer-query vocabulary (`"necklace"`, `"wristwatch"`, `"bangle"`) that should resolve directly to this subcategory, not the parent Fashion's broader rollup.
+
+**Banking the search-aliases-on-subcategory pattern.** Future subcategory additions with distinctive vocabulary should populate aliases the same way. Specific candidates worth filing as follow-ups when they're added:
+- Sneakers under Shoes (`"sneaker"`, `"sneakers"`, `"trainer"`, `"trainers"`, `"running shoe"`, `"running shoes"`, `"adidas"`, `"nike"`, `"jordan"`, etc.).
+- Wedding/bridal subcategory anywhere (`"wedding"`, `"bridal"`, `"bride"`, etc.).
+- Suits under Men's Clothing (`"suit"`, `"suits"`, `"tuxedo"`, `"agbada"` — but Traditional/Ankara already takes some of this).
+
+Subcategories with naming that's already self-evident in the dropdown (e.g., `smartphones-new` doesn't need aliases; the parent's "phone" alias does the work) should continue to leave aliases at the default.
+
+**Why `smartwatch` is deliberately EXCLUDED from the aliases:**
+
+The existing `smart-wearables` subcategory under Mobile Phones & Tablets is where smartwatches (Apple Watch, Galaxy Watch, etc.) route. Adding `smartwatch` to Jewelry & Watches' aliases would create dual-routing ambiguity — a buyer query for `"smartwatch"` would match both categories and the search resolution becomes non-deterministic. The deliberate split:
+- **`smartwatch`** → routes to `smart-wearables` (wearable tech, OS-driven, paired with phone, fitness tracking).
+- **`watch` / `watches` / `wristwatch` / `wristwatches`** → routes to `jewelry-watches` (mechanical, quartz, luxury — the "I want a real watch" shopping intent).
+
+This is a distinct shopping intent split, not a redundancy. A buyer typing `"watch"` wants the traditional category; `"smartwatch"` is a separate product class with its own buying criteria (compatibility, battery, sensor specs).
+
+### Operational consequences
+
+- **No app code changes needed.** The categories dropdown in `NewListingForm.tsx` and `EditListingForm.tsx` reads `slug, name, parent_id, supports_inventory` from the DB; the new row appears automatically. The `CategorySpecFields` component routes via `getSpecsForCategory("jewelry-watches", "fashion")` which auto-resolves to Fashion's size+color schema.
+- **Marketplace category-page rollup** at `/categories/fashion` automatically includes Jewelry & Watches' listings via the parent-children rollup query.
+- **Direct `/categories/jewelry-watches` URL** works automatically — the category-page route resolves by slug.
+- **Inventory feature parity** — `supports_inventory=true` means the quantity field renders on the listing form for Jewelry & Watches; the "Out of stock" badge surfaces consistently with other inventory-supporting categories.
+- **Seed-drift acknowledgment for future readers.** ACTUAL_SCHEMA's category taxonomy section banked 108 design-time rows; live count pre-E.2.19.0 was 100 (8-row discrepancy with the seed snapshot — discrepancy not investigated as part of E.2.19.0's scope). Post-migration live count is 101. The taxonomy table reflects design-time intent; refer to live DB for authoritative count.
+
+### Anti-pattern
+
+- **Naming the slug `jewelry` while including watches.** Semantic dissonance; URLs lie about content. Compound slug is mildly less aesthetic but accurate.
+- **Adding `smartwatch` to the alias set "just in case."** Creates dual-routing ambiguity that produces nondeterministic search resolution. The split between smart-wearables (wearable tech) and watches (traditional timepieces) is a real shopping-intent distinction that the routing must respect.
+- **Building a `category_specs` override for jewelry/watches preemptively.** Parent inheritance from Fashion's size + color covers v1. Adding override fields before real seller demand surfaces is over-architecture; the override-when-needed shape is `src/lib/categorySpecs.ts` — pure data-config, no migration.
+- **Inserting at sort_order 3.5 (or anywhere mid-list) and rebalancing existing rows.** No real UX benefit at 6 → 7 sub count; introduces avoidable change to existing data with no upside. Append.
+- **Rebalancing the sort_orders so e.g. Jewelry & Watches sits at sort_order 2 (right after Men's Clothing).** Same problem — touches existing data without a real benefit. The display ordering is sensible already; new rows append.
+- **Skipping `search_aliases` on the new row because "subcategories don't have them today."** That's not a pattern, it's a coincidence — the column has supported aliases since Phase D.7.2 and the marketplace search reads them on every category row. Jewelry & Watches' distinctive vocabulary genuinely warrants aliases. Following the existing "no-alias-on-subs" coincidence would silently route real Nigerian buyer queries (`"jewellery"`, `"bangle"`) to no results.
+- **Treating the seed-drift discrepancy as blocking.** The 8-row gap between seed snapshot (108) and live count (100) is data hygiene, not correctness — the rows that didn't make it to live were not blocking any seller or buyer flow. Investigating and banking is a separate, low-priority follow-up.
+
