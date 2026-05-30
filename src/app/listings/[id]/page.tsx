@@ -37,7 +37,7 @@ export default async function ListingDetailPage({
       product_images ( storage_path, position ),
       categories ( id, name, slug, parent_id, supports_inventory ),
       nigerian_states ( name, slug ),
-      businesses ( id, slug, business_name, description, verification_status, owner_id, created_at, state_id, logo_path )
+      businesses ( id, slug, business_name, description, verification_status, owner_id, created_at, state_id, logo_path, is_disabled )
     `
     )
     .eq("id", params.id)
@@ -49,9 +49,16 @@ export default async function ListingDetailPage({
     ? listing.businesses[0]
     : listing.businesses;
 
-  // Visibility gate (Phase C.5.4): defensive 404 even though RLS P.2 should
-  // already filter unverified businesses out of public queries.
-  if (!business || business.verification_status !== "verified") notFound();
+  // Visibility gate (Phase C.5.4 verification + D-146 is_disabled contract):
+  // defensive 404 mirroring the shop page filter at /sellers/[slug].
+  // The direct listing URL must not render for a disabled seller — same
+  // contract parity as the shop page itself 404-ing.
+  if (
+    !business ||
+    business.verification_status !== "verified" ||
+    business.is_disabled === true
+  )
+    notFound();
 
   const category = Array.isArray(listing.categories)
     ? listing.categories[0]

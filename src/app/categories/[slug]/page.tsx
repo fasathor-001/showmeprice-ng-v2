@@ -92,6 +92,8 @@ export default async function CategoryPage({
       .eq("status", "active")
       .in("category_id", categoryIds)
       .eq("businesses.verification_status", "verified")
+      // D-146: disabled-seller listings stay invisible on public browse.
+      .eq("businesses.is_disabled", false)
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE);
 

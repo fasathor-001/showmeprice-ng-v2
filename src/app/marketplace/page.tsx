@@ -101,6 +101,8 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
       )
       .eq("status", "active")
       .eq("businesses.verification_status", "verified")
+      // D-146: disabled-seller listings stay invisible on public browse.
+      .eq("businesses.is_disabled", false)
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE);
 

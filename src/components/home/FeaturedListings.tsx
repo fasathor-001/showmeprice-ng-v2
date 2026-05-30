@@ -107,6 +107,10 @@ export async function FeaturedListings() {
     )
     .eq("status", "active")
     .eq("businesses.verification_status", "verified")
+    // D-146: disabled-seller listings stay invisible on public browse.
+    // Filtering pre-round-robin keeps the OVER_FETCH=32 pool clean — a
+    // disabled seller can never enter the round-robin's input.
+    .eq("businesses.is_disabled", false)
     .order("created_at", { ascending: false })
     .limit(OVER_FETCH);
 
