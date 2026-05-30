@@ -133,6 +133,14 @@ export const toastMessages: Record<string, ToastMessage> = {
     message:
       "Account unsuspended. Their owned businesses stay disabled — re-enable each separately.",
   },
+  // Feature K: user-target report submission success. Toast is shown
+  // after the shop-page redirect; the conversation-page mount uses
+  // router.refresh without a toast (the modal closing is its own
+  // acknowledgment in that surface).
+  "user-reported": {
+    variant: "success",
+    message: "Report submitted. Our team will review it.",
+  },
   "marked-sold-out": {
     variant: "info",
     message:

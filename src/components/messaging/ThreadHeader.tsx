@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui";
+import { ReportUserButton } from "@/components/users/ReportUserButton";
 
 // Commit 3 — header for /messages/[conversationId]. Commit 4.1 dropped the
 // `sticky top-16 z-30` here because the route's container is now `position:
@@ -28,6 +29,13 @@ interface ThreadHeaderProps {
   /** conversation.status — drives the status badge ("Sold" / "Archived" etc.) */
   conversationStatus: string;
 }
+
+// Feature K: ThreadHeader receives both participants resolved server-
+// side, so the conversation page can always render the report button
+// because the other party is, by definition, never the current user
+// (otherwise the conversation would not exist with this otherParty).
+// The not-self gate is therefore implicit at this surface. The server
+// action still enforces it as defense in depth.
 
 const STATUS_LABEL: Record<string, string> = {
   active: "",
@@ -139,7 +147,7 @@ export function ThreadHeader({
             />
           </svg>
         </Link>
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-base font-medium text-ink truncate">
             {otherName}
           </span>
@@ -149,6 +157,14 @@ export function ThreadHeader({
             </Badge>
           )}
         </div>
+        {/* Feature K — one-per-other-party report affordance at
+            conversation header level (not per-message). No router
+            redirect on success: the modal closes and router.refresh
+            keeps the buyer on the same thread. */}
+        <ReportUserButton
+          targetUserId={otherParty.id}
+          targetDisplayName={otherName}
+        />
       </div>
       <div className="px-3 sm:px-6 py-2 border-t border-neutral-100">
         {listing ? (

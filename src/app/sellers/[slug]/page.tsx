@@ -3,8 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
-import { Avatar, Badge, Card } from "@/components/ui";
+import { Avatar, Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { ReportUserButton } from "@/components/users/ReportUserButton";
 import {
   getBusinessAvatarPublicUrl,
   getProductImagePublicUrl,
@@ -59,6 +60,10 @@ interface BusinessRow {
   city_area: string | null;
   created_at: string;
   is_disabled: boolean;
+  // Feature K: owner_id surfaced so the page can decide whether to
+  // render the "Report user" affordance for the viewing buyer (button
+  // is hidden when viewer is the seller themselves).
+  owner_id: string;
   nigerian_states: { name: string } | { name: string }[] | null;
   products: EmbeddedProduct[] | null;
 }
@@ -93,12 +98,17 @@ export default async function SellerShopPage({ params }: PageProps) {
   // accounts at the DB level. Listing status filter happens in JS
   // (PostgREST embed filtering is awkward enough that the JS pass is
   // simpler than the SQL).
-  const { data: businessRaw } = await supabase
-    .from("businesses")
-    .select(
-      `
+  // Feature K: resolve current user in parallel with the business
+  // query — used to gate the Report button (signed-in + not-self).
+  // The auth call is cheap (cookie + JWT decode), so running it
+  // unconditionally is simpler than threading conditional resolution.
+  const [{ data: businessRaw }, { data: { user } }] = await Promise.all([
+    supabase
+      .from("businesses")
+      .select(
+        `
       id, slug, business_name, description, verification_status,
-      logo_path, city_area, created_at, is_disabled,
+      logo_path, city_area, created_at, is_disabled, owner_id,
       nigerian_states ( name ),
       products (
         id, title, price_kobo, is_negotiable, created_at, status,
@@ -108,11 +118,13 @@ export default async function SellerShopPage({ params }: PageProps) {
         categories ( supports_inventory )
       )
     `,
-    )
-    .eq("slug", params.slug)
-    .eq("verification_status", "verified")
-    .eq("is_disabled", false)
-    .maybeSingle();
+      )
+      .eq("slug", params.slug)
+      .eq("verification_status", "verified")
+      .eq("is_disabled", false)
+      .maybeSingle(),
+    supabase.auth.getUser(),
+  ]);
 
   if (!businessRaw) notFound();
 
@@ -144,6 +156,7 @@ export default async function SellerShopPage({ params }: PageProps) {
 
   return (
     <Container>
+      <ToastFromSearchParams />
       <div className="py-8 sm:py-12">
         {/* Shop header */}
         <div className="flex items-start gap-4 sm:gap-6 mb-6 sm:mb-8">
@@ -167,6 +180,20 @@ export default async function SellerShopPage({ params }: PageProps) {
               Member since {memberSince} · {activeListings.length} active{" "}
               {activeListings.length === 1 ? "listing" : "listings"}
             </p>
+            {/* Feature K — report-user affordance. Signed-in-only and
+                not visible when the viewer is the seller themselves
+                (defense-in-depth gates: server-action also blocks
+                self-report). Subtle styling so it doesn't crowd the
+                shop-header info hierarchy. */}
+            {user && user.id !== businessRaw.owner_id && (
+              <div className="mt-2">
+                <ReportUserButton
+                  targetUserId={businessRaw.owner_id}
+                  targetDisplayName={businessRaw.business_name}
+                  redirectTo={`/sellers/${businessRaw.slug}`}
+                />
+              </div>
+            )}
           </div>
         </div>
 
