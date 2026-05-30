@@ -14,6 +14,14 @@
 //
 // Idempotent RPC returns (false) are treated as success with a distinct
 // "unchanged" toast key so the operator gets accurate feedback.
+//
+// E.2.20.0 / Feature J Stage 2: suspendUserAction + unsuspendUserAction
+// added below. They mirror the phone/location pattern (requireAdmin gate
+// → RPC via authenticated client → mapped error messages) but call the
+// E.2.20.0 RPCs instead. Notification dispatch is intentionally NOT
+// wired here — the existing dispatcher only handles 'phone'/'location'
+// change types, and extending it for suspension is out of scope per
+// the J.2 directive (no new notification infrastructure).
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import {
@@ -199,4 +207,122 @@ export async function changeUserLocationAction(
     changed,
   });
   return changed ? { ok: true } : { ok: true, unchanged: true };
+}
+
+// ----------------------------------------------------------------------
+// Feature J Stage 2 — account suspension / unsuspension server actions.
+// ----------------------------------------------------------------------
+
+export interface AdminSuspensionResult {
+  ok?: boolean;
+  /** Discriminates between suspend / unsuspend success for caller UX. */
+  action?: "account_suspended" | "account_unsuspended";
+  error?: string;
+}
+
+function mapSuspendRpcError(message: string): string {
+  const m = message.toLowerCase();
+  // Mirrors the EXCEPTION blocks raised inside admin_suspend_user.
+  if (m.includes("insufficient_privilege") || m.includes("not an admin"))
+    return "Your admin access may have been revoked. Sign in again.";
+  if (m.includes("self_suspension_refused"))
+    return "You cannot suspend your own account.";
+  if (m.includes("reason must be between"))
+    return `Reason must be between ${REASON_MIN} and ${REASON_MAX} characters.`;
+  if (m.includes("target user not found"))
+    return "User not found. Refresh and try again.";
+  if (m.includes("already suspended"))
+    return "This user is already suspended.";
+  return "Couldn't suspend the user. Please try again.";
+}
+
+function mapUnsuspendRpcError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("insufficient_privilege") || m.includes("not an admin"))
+    return "Your admin access may have been revoked. Sign in again.";
+  if (m.includes("self_unsuspension_refused"))
+    return "You cannot unsuspend your own account.";
+  if (m.includes("reason must be between"))
+    return `Reason must be between ${REASON_MIN} and ${REASON_MAX} characters.`;
+  if (m.includes("target user not found"))
+    return "User not found. Refresh and try again.";
+  if (m.includes("not suspended"))
+    return "This user is not currently suspended.";
+  return "Couldn't unsuspend the user. Please try again.";
+}
+
+export async function suspendUserAction(
+  targetUserId: string,
+  reason: string,
+): Promise<AdminSuspensionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { error: authError(auth.reason) };
+
+  if (!targetUserId || !UUID_RE.test(targetUserId)) {
+    return { error: "Invalid user. Refresh and try again." };
+  }
+
+  const validatedReason = validateReason(reason);
+  if ("error" in validatedReason) return { error: validatedReason.error };
+
+  // RPC call via the AUTHENTICATED session client. The in-function
+  // is_admin(p_granter_id) check is the real authorization gate; the
+  // requireAdmin() above is defense-in-depth.
+  //
+  // admin_suspend_user RETURNS void — Supabase returns { data: null }
+  // on success. Only `error` is checked.
+  const { error } = await auth.supabase.rpc("admin_suspend_user", {
+    p_target_user_id: targetUserId,
+    p_granter_id: auth.userId,
+    p_reason: validatedReason.reason,
+  });
+  if (error) {
+    console.error(
+      "[suspendUserAction] RPC failed",
+      error.message,
+      { targetUserId },
+    );
+    return { error: mapSuspendRpcError(error.message) };
+  }
+
+  console.info("[suspendUserAction] ok", {
+    granterId: auth.userId,
+    targetUserId,
+  });
+  return { ok: true, action: "account_suspended" };
+}
+
+export async function unsuspendUserAction(
+  targetUserId: string,
+  reason: string,
+): Promise<AdminSuspensionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { error: authError(auth.reason) };
+
+  if (!targetUserId || !UUID_RE.test(targetUserId)) {
+    return { error: "Invalid user. Refresh and try again." };
+  }
+
+  const validatedReason = validateReason(reason);
+  if ("error" in validatedReason) return { error: validatedReason.error };
+
+  const { error } = await auth.supabase.rpc("admin_unsuspend_user", {
+    p_target_user_id: targetUserId,
+    p_granter_id: auth.userId,
+    p_reason: validatedReason.reason,
+  });
+  if (error) {
+    console.error(
+      "[unsuspendUserAction] RPC failed",
+      error.message,
+      { targetUserId },
+    );
+    return { error: mapUnsuspendRpcError(error.message) };
+  }
+
+  console.info("[unsuspendUserAction] ok", {
+    granterId: auth.userId,
+    targetUserId,
+  });
+  return { ok: true, action: "account_unsuspended" };
 }
