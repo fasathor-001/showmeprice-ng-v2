@@ -45,10 +45,10 @@ export default function SuspendedPage() {
             <p className="text-sm text-ink-600 leading-relaxed mb-6">
               If you believe this is a mistake, contact support:{" "}
               <a
-                href="mailto:admin@showmeprice.ng"
+                href="mailto:support@showmeprice.ng"
                 className="text-teal-700 hover:text-teal-900 font-medium"
               >
-                admin@showmeprice.ng
+                support@showmeprice.ng
               </a>
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">

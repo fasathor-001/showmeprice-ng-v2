@@ -54,7 +54,7 @@ export default function FAQPage() {
     {
       question: 'How do I contact support?',
       answer:
-        'Email Frank (the founder) at admin@showmeprice.ng with questions, bugs, or concerns. Response times may be slower during early access since we are a small team.',
+        'Email our support team at support@showmeprice.ng with questions, bugs, or concerns. Response times may be slower during early access since we are a small team.',
     },
   ];
 
@@ -87,12 +87,12 @@ export default function FAQPage() {
         <div className="mt-12 bg-slate-100 rounded-lg border border-slate-200 p-8 text-center">
           <h3 className="text-xl font-semibold text-slate-900 mb-2">Can&apos;t find your answer?</h3>
           <p className="text-slate-600 mb-4">
-            Email Frank at{' '}
+            Email our support team at{' '}
             <a
-              href="mailto:admin@showmeprice.ng"
+              href="mailto:support@showmeprice.ng"
               className="text-teal-600 hover:text-teal-700 font-medium"
             >
-              admin@showmeprice.ng
+              support@showmeprice.ng
             </a>
           </p>
         </div>

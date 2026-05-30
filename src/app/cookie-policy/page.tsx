@@ -95,12 +95,12 @@ export default function CookiePolicyPage() {
           <section className="bg-slate-100 rounded-lg border border-slate-200 p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-3">Questions about cookies?</h2>
             <p className="text-slate-700">
-              Email Frank at{' '}
+              Email our support team at{' '}
               <a
-                href="mailto:admin@showmeprice.ng"
+                href="mailto:support@showmeprice.ng"
                 className="text-teal-600 hover:text-teal-700 font-medium"
               >
-                admin@showmeprice.ng
+                support@showmeprice.ng
               </a>
             </p>
           </section>

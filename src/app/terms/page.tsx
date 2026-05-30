@@ -133,8 +133,8 @@ export default function TermsPage() {
             <h2 className="text-2xl font-semibold text-slate-900 mb-4">10. Contact</h2>
             <p className="leading-relaxed">
               Questions about these terms can be sent to{' '}
-              <a href="mailto:admin@showmeprice.ng" className="text-teal-600 hover:text-teal-700 font-medium">
-                admin@showmeprice.ng
+              <a href="mailto:support@showmeprice.ng" className="text-teal-600 hover:text-teal-700 font-medium">
+                support@showmeprice.ng
               </a>
               .
             </p>

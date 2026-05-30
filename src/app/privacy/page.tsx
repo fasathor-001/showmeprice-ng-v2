@@ -129,8 +129,8 @@ export default function PrivacyPage() {
             <p className="leading-relaxed">
               You can update your account information through the platform. If you want to know what information we hold about you,
               or want your account and information removed, contact us at{' '}
-              <a href="mailto:admin@showmeprice.ng" className="text-teal-600 hover:text-teal-700 font-medium">
-                admin@showmeprice.ng
+              <a href="mailto:support@showmeprice.ng" className="text-teal-600 hover:text-teal-700 font-medium">
+                support@showmeprice.ng
               </a>{' '}
               and we will help.
             </p>
@@ -155,8 +155,8 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-semibold text-slate-900 mb-4">9. Contact</h2>
             <p className="leading-relaxed">
               Questions about your privacy or this policy can be sent to{' '}
-              <a href="mailto:admin@showmeprice.ng" className="text-teal-600 hover:text-teal-700 font-medium">
-                admin@showmeprice.ng
+              <a href="mailto:support@showmeprice.ng" className="text-teal-600 hover:text-teal-700 font-medium">
+                support@showmeprice.ng
               </a>
               .
             </p>

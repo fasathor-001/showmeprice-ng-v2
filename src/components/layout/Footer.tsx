@@ -13,7 +13,7 @@ export function Footer() {
   const forSellersLinks = [
     { label: "Seller early access", href: "/sell" },
     { label: "How verification works", href: "/sell/verify" },
-    { label: "Contact founder", href: "mailto:admin@showmeprice.ng" },
+    { label: "Email our support team", href: "mailto:support@showmeprice.ng" },
   ];
 
   const helpLegalLinks = [
@@ -106,19 +106,19 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Middle Section: Founder + Cities */}
+        {/* Middle Section: Support + Cities */}
         <div className="py-8 border-b border-slate-800">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Founder Contact */}
+            {/* Support Contact */}
             <div>
               <p className="text-sm text-slate-300 mb-1">
-                <span className="font-semibold">Frank A.</span>
+                <span className="font-semibold">Email our support team</span>
               </p>
               <a
-                href="mailto:admin@showmeprice.ng"
+                href="mailto:support@showmeprice.ng"
                 className="text-sm text-slate-400 hover:text-white transition-colors duration-200"
               >
-                admin@showmeprice.ng
+                support@showmeprice.ng
               </a>
             </div>
 
