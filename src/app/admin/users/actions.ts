@@ -18,10 +18,16 @@
 // E.2.20.0 / Feature J Stage 2: suspendUserAction + unsuspendUserAction
 // added below. They mirror the phone/location pattern (requireAdmin gate
 // → RPC via authenticated client → mapped error messages) but call the
-// E.2.20.0 RPCs instead. Notification dispatch is intentionally NOT
-// wired here — the existing dispatcher only handles 'phone'/'location'
-// change types, and extending it for suspension is out of scope per
-// the J.2 directive (no new notification infrastructure).
+// E.2.20.0 RPCs instead.
+//
+// Feature J.5: notification dispatch is now wired. Both actions fire
+// dispatchAccountSuspensionNotification (best-effort, never throws)
+// after the RPC succeeds — the email is a status notification, the RPC
+// is the source of truth. The dispatcher is intentionally separate
+// from dispatchAdminProfileChangeNotification because the suspension
+// event is in a different copy class (no "previous value → new value"
+// framing, no recovery CTA tied to a specific field) and the locked
+// copy omits the suspension reason (Position B).
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import {
@@ -29,6 +35,7 @@ import {
   isPlausibleNigerianMobile,
 } from "@/lib/auth";
 import { dispatchAdminProfileChangeNotification } from "@/lib/notifications/send-admin-profile-change-notification";
+import { dispatchAccountSuspensionNotification } from "@/lib/notifications/send-account-suspension-notification";
 
 export interface AdminProfileChangeResult {
   ok?: boolean;
@@ -285,6 +292,20 @@ export async function suspendUserAction(
     return { error: mapSuspendRpcError(error.message) };
   }
 
+  // Feature J.5: fire-and-forget email notification. The dispatcher's
+  // outer try/catch swallows errors; the extra try here is belt-and-
+  // braces against an unhandled promise rejection bubbling up if the
+  // dispatcher's contract ever changes. Mirrors the change-phone
+  // dispatch shape (lines 128–143).
+  try {
+    void dispatchAccountSuspensionNotification({
+      affectedUserId: targetUserId,
+      eventType: "suspended",
+    });
+  } catch (err) {
+    console.error("[suspendUserAction] dispatch enqueue failed", err);
+  }
+
   console.info("[suspendUserAction] ok", {
     granterId: auth.userId,
     targetUserId,
@@ -318,6 +339,17 @@ export async function unsuspendUserAction(
       { targetUserId },
     );
     return { error: mapUnsuspendRpcError(error.message) };
+  }
+
+  // Feature J.5: fire-and-forget restoration email notification. Same
+  // pattern as suspendUserAction above, with eventType="unsuspended".
+  try {
+    void dispatchAccountSuspensionNotification({
+      affectedUserId: targetUserId,
+      eventType: "unsuspended",
+    });
+  } catch (err) {
+    console.error("[unsuspendUserAction] dispatch enqueue failed", err);
   }
 
   console.info("[unsuspendUserAction] ok", {
