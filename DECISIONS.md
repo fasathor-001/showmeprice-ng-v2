@@ -3591,3 +3591,362 @@ This is a distinct shopping intent split, not a redundancy. A buyer typing `"wat
 - **Skipping `search_aliases` on the new row because "subcategories don't have them today."** That's not a pattern, it's a coincidence — the column has supported aliases since Phase D.7.2 and the marketplace search reads them on every category row. Jewelry & Watches' distinctive vocabulary genuinely warrants aliases. Following the existing "no-alias-on-subs" coincidence would silently route real Nigerian buyer queries (`"jewellery"`, `"bangle"`) to no results.
 - **Treating the seed-drift discrepancy as blocking.** The 8-row gap between seed snapshot (108) and live count (100) is data hygiene, not correctness — the rows that didn't make it to live were not blocking any seller or buyer flow. Investigating and banking is a separate, low-priority follow-up.
 
+## D-144 — Homepage round-robin seller diversity via TypeScript over-fetch + grouping
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** D-091 (Phase E "unlimited listings" framing — diversity is a buyer-side surface concern, not a seller-side limit), D-128 (Phase 1 Private Beta — observation-not-growth posture; the round-robin is what makes "verified seller catalogue" not read as "single-seller catalogue" while supply is sparse), D-134 (trust stack — homepage is the buyer's first impression of the verified-seller cohort)
+**Implementation:** `src/components/home/FeaturedListings.tsx` + commit `207da1d`. Pure-function `roundRobinBySeller<T>(rows, limit)` helper introduced; query over-fetches at `OVER_FETCH = FEATURED_COUNT * 4 = 32` rows; helper groups by `seller_id`, orders sellers by their most-recent listing's `created_at` DESC, then walks round-robin.
+
+### Context
+
+The homepage `FeaturedListings` section used recency-only sort with `LIMIT 8`. At the time the issue surfaced, one fashion seller held 8 of 9 verified-seller listings on the platform; the homepage rendered as 8 fashion listings (or 7 fashion + 1 from the only other seller). The "Recent listings" framing implied a representative sample of platform activity; the rendering produced a single-seller catalogue. The pattern would degrade further, not improve, as a prolific seller posted more.
+
+### Decision
+
+Replace recency-only `LIMIT 8` on the homepage with **over-fetch + round-robin pick by seller**:
+- Query over-fetches at `FEATURED_COUNT * 4 = 32` rows ordered by `created_at DESC`.
+- Pure function `roundRobinBySeller<T extends { seller_id: string; created_at: string }>(rows: T[], limit: number): T[]` groups rows by `seller_id`, sorts each group newest-first, orders the groups by their newest row's `created_at` DESC, then walks round-robin: newest from seller A, newest from B, newest from C, then 2nd-newest from A, B, C, etc. Stops at `limit` or when all groups are exhausted.
+
+Scoped out: `/marketplace` and `/categories/[slug]` stay recency-only with their existing `PAGE_SIZE = 24`. Those surfaces' contract is *"show me everything"* — diversity-shaping there would distort the explicit browse intent.
+
+### Rationale
+
+**Why over-fetch in TypeScript rather than a DB-side window function:**
+
+The cleanest "first listing per seller" shape at DB layer is `ROW_NUMBER() OVER (PARTITION BY seller_id ORDER BY created_at DESC)` inside a CTE. At today's supply scale (handful of sellers, dozens of listings) the savings are zero and the cost is real: every query becomes harder to reason about, the migration adds a stored view or function, and Supabase RLS interaction with window-function queries adds a layer the codebase doesn't otherwise need. TypeScript over-fetch + group-and-pick is observably cheap (32-row over-fetch is one network round-trip; the grouping is `O(n)` over 32 elements) and stays in the existing query pattern. Migrate to a DB-side approach if and when supply outgrows the over-fetch (rough threshold: > 200 active listings making 32-row over-fetch insufficient to diversify).
+
+**Why round-robin by most-recent-posting seller first:**
+
+Sorting sellers by their newest listing's `created_at` DESC means the seller who just posted gets the first slot in the first round. That's the right shape for a *recent listings* surface — newly-active sellers surface, dormant sellers fade naturally without an explicit decay model. A buyer landing on the homepage sees the platform's pulse, not a frozen snapshot of the prolific cohort.
+
+**Why guarantee one listing per seller before any seller's second listing:**
+
+At sparse supply this matters most: with 3 sellers, the first 3 slots show one listing each, then the next 3 slots show second-newest per seller, etc. The buyer can't form the "this is all one seller" impression in the first scroll. At dense supply (e.g. 10+ sellers), the first 8 slots show one listing each from the 8 most-recently-active sellers — even better diversity.
+
+**Why scope this to the homepage only:**
+
+The homepage is a "platform first impression" surface; diversity matters most there. `/marketplace` is a "show me everything" surface where buyers expect recency-ordered results — applying round-robin there would distort the "filter and browse" contract. `/categories/[slug]` is the same. If buyer complaints about marketplace single-seller-dominance emerge later, the round-robin helper is already a pure function ready to be applied — but it's not the right default for those surfaces.
+
+### Operational consequences
+
+- **No DB migration, no schema change, no new column.** The pure-function shape means future tuning (changing the over-fetch ratio, changing the sort criteria for seller ordering) is a one-file edit.
+- **`roundRobinBySeller` is generic** — any future surface that wants seller-diverse picks can reuse the helper without copy-paste. Type-safe via the `T extends { seller_id, created_at }` constraint.
+- **Empty/single-seller degradation is graceful.** If only one seller exists, the round-robin returns that seller's `limit` newest listings in order — identical to the prior `LIMIT 8` behavior. No special-casing.
+- **`outOfStock` overlay parity** — homepage cards now render the out-of-stock badge consistently with marketplace (the same commit that introduced round-robin also closed a parallel parity gap from the inventory feature).
+- **Future migration path is documented inline** — when supply outgrows over-fetch, the helper's JSDoc points at the `ROW_NUMBER OVER PARTITION BY` SQL shape as the next iteration.
+
+### Anti-pattern
+
+- **Applying round-robin to `/marketplace`.** Distorts the "show me everything" contract; buyers using state/category filters explicitly want all matching listings, not a diversity-shaped sample.
+- **Sorting sellers alphabetically or randomly instead of by recency.** Loses the "platform pulse" signal — a freshly-active seller's listing should be reachable from the homepage immediately, not after the alphabet catches up.
+- **Hardcoding `OVER_FETCH = FEATURED_COUNT * 4` in the helper rather than at the call site.** Different surfaces may want different over-fetch ratios; the helper takes raw rows + a limit, the caller decides over-fetch.
+- **Building a DB view or stored function for the window-query approach today.** Premature at current scale; adds a migration to maintain and a schema surface to evolve. Defer.
+
+## D-145 — Test account cleanup: delete-when-clean, soft-disable-when-engaged, dry-run-with-ROLLBACK mandatory
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** D-146 (the soft-disable companion — what to do when delete isn't safe), D-142 (E.2.18.0 — `businesses` schema state including the FK relationships this decision relies on), K-004 (deletion-flow gap — user-facing self-serve account deletion is still deferred; this decision is operator-side test-account cleanup, not user-facing)
+**Implementation:** No code; operator discipline. Surfaced during this session's pre-E.2.18.0 cleanup pass. Documented here as standing policy.
+
+### Context
+
+Mid-session investigation surfaced 10 businesses in the live DB where the prior assumption (and journal record) had been 5. On inspection: 4 were real seller accounts (`Jervis_luxebrand`, `Reseller By OJemba`, `Darace Gadgets`, `ShowMePrice-NG` admin), 5 were personal/friend test accounts created during build phases (`empire world`, `Fasa Communications`, `FO Fashion Line`, `Johnbull Furnitures`, `JU Building Materials`), and 1 (`SMP Phones`) was a test account that had accumulated real buyer conversations during testing — making it a different cleanup class.
+
+During this session, `SMP Phones` was initially disabled per Path 2; after operator confirmation that the 2 buyer conversations were test artifacts, both conversations and the business were subsequently deleted — illustrating that Path 2 (disable) is the default, but explicit confirmation of test-engagement-history can later move to Path 1-with-cleanup. The decision is not one-way.
+
+Without a documented policy, the temptation is to "just delete the test accounts." But:
+- The FK relationships between `businesses` → `products` → `conversations` → `messages` mean a naive `DELETE FROM businesses` cascades through real buyer-side history when one exists.
+- Postgres protects against orphaning via the `NO ACTION` (default) FK constraint on `conversations.listing_id` — a real DELETE would raise. The protection caught a real cascade conflict during this session's cleanup attempt.
+
+### Decision
+
+Test accounts split into two cleanup paths:
+
+**Path 1 — Clean delete (no real engagement):**
+- Confirmed test account with no buyer-side conversation history → `DELETE FROM businesses WHERE id = '…'` cascades cleanly via the existing FK relationships (`products`, `product_images`, `seller_verifications` cascade-delete on business removal). Used during this session's cleanup of the 5 personal test businesses.
+
+**Path 2 — Soft disable (engaged or ambiguous):**
+- Test account WITH real buyer conversations, OR any account where future restoration might be needed → set `is_disabled = true` instead of deleting. See **D-146** for the soft-delete behavior contract. Used during this session for `SMP Phones` initially.
+
+**Path 2 → Path 1 escalation is allowed** when operator confirms the engagement history was itself test artifacts (the SMP Phones case). Sequence: disable first, investigate the conversations, delete the conversations explicitly, then delete the business. Never the reverse (don't bypass investigation by deleting first).
+
+**Mandatory before EITHER path:** dry-run the DELETE inside `BEGIN; … ROLLBACK;`. The ROLLBACK surfaces FK constraint failures and row-count mismatches before they land in production. The protection caught a real cascade conflict during this session's cleanup — confirming the discipline pays for itself.
+
+### Rationale
+
+**Why ROLLBACK-wrap as a hard rule:**
+
+Postgres FK protection is the safety net, not the discipline. A naive `DELETE` against a business with real conversations raises `23503 foreign_key_violation` and rejects — that's correct behavior, but only the explicit `BEGIN` + dry-run reveals *which* FK would have raised and lets the operator decide between Path 1 and Path 2 *before* committing. Skipping the dry-run means either: (a) discovering the constraint conflict in production with whatever surface effect, or (b) writing a `DELETE … CASCADE` that destroys real evidence. Both are worse than a 10-second ROLLBACK probe.
+
+**Why is_disabled-soft-delete is the default for ambiguous cases:**
+
+Soft-delete is reversible; hard delete is not. At private-beta scale the storage cost of a soft-deleted business is trivial; the cost of accidentally deleting real evidence is real (lost conversation history makes future disputes unresolvable, lost listing history breaks `contact_reveals`/`price_history` referent chains). When in doubt, disable. The shop page filter on `is_disabled = false` makes the surface effect indistinguishable from delete for buyers — the data is preserved without the public exposure.
+
+**Why this isn't K-004 (user-facing deletion):**
+
+K-004 is the deferred user-facing self-serve "delete my account" flow which requires a soft-delete-PII-scrub design (anonymize `display_name`, null `phone`, retain referential integrity). This decision is operator-side test-account cleanup — Frank deleting accounts the operator created during build phases. The cleanup decision is per-account on inspection; the user-facing flow is a designed pipeline. They share the FK-protection lesson but are different scopes.
+
+### Operational consequences
+
+- **Storage objects are NOT cleaned by row delete.** `product_images` storage files persist after the DB rows are gone — orphan files in the `product-images` bucket. Cleanup is a separate scheduled job (not blocking; storage cost is trivial at current scale; tracked as a known operational tail).
+- **Slug remains taken** under both Path 1 (after delete the slug is reusable) and Path 2 (after disable the slug is held — see D-146 for the rename-on-disable note).
+- **The discipline applies to ANY destructive operation against business / profile / message data**, not just test-account cleanup. Future operator-side investigations should default to BEGIN/ROLLBACK first.
+
+### Anti-pattern
+
+- **Assuming a "test" account has no real engagement without checking `conversations` table first.** The label "test" is operator memory; engagement reality lives in the database.
+- **Using `DELETE … CASCADE` to power through FK protection.** Destroys real evidence (`messages`, `contact_reveals`, `price_history`); the FK is protecting buyers, not nagging the operator.
+- **Skipping ROLLBACK because "the constraint will catch it."** True for naive deletes; not true for chained DELETEs (e.g., `DELETE FROM conversations; DELETE FROM businesses;` runs both irreversibly outside a transaction).
+- **Treating soft-disable as second-class.** It's the right default when in doubt — the shop page filter makes the visible effect identical, and the data is preserved.
+- **Treating the Path 2 → Path 1 escalation as exotic.** It's a deliberate sequence: disable first to make the public surfaces immediately safe, then investigate the engagement history, then explicitly delete the conversations if confirmed test, then delete the business. Each step is reversible until the explicit delete.
+
+## D-146 — Soft-delete via `businesses.is_disabled = true` for sellers with engagement history
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** D-145 (the cleanup-decision framework — D-146 is the "what to do when delete isn't safe" half), D-142 (`/sellers/[slug]` shop page query already filters on `is_disabled = false` — making soft-delete behaviorally invisible to buyers), K-004 (user-facing account deletion deferred — D-146 is the operator-side companion shape)
+**Implementation:** No new code; existing `businesses.is_disabled` column (Phase E.1.0) is the soft-delete state. Shop page query (`src/app/sellers/[slug]/page.tsx`) and listing detail page seller-card resolution both filter on `is_disabled = false` and `verification_status = 'verified'`.
+
+### Context
+
+When an operator decides a seller account should not be publicly visible — but the account has real buyer-side engagement history (conversations, messages, contact reveals) — hard delete cascades that history. The right shape needs to **hide the account from public surfaces without destroying historical data**.
+
+### Decision
+
+`businesses.is_disabled = true` is the soft-delete state. The shop page query already filters on `is_disabled = false AND verification_status = 'verified'`, so flipping `is_disabled` produces:
+- **Public shop page** (`/sellers/[slug]`) → 404 (the same gate as unverified/disabled — no data leak about whether the slug ever existed).
+- **Listing detail page seller card** → the embedded `businesses` join still returns the row (the join doesn't filter on disabled), but the seller-name link points at the disabled slug which 404s, preserving the same protection.
+- **Marketplace card grid** → listings filter through `businesses.verification_status='verified'` (the existing inner-join filter); adding `is_disabled = false` to the inner-join WHERE is a separate small-scope fix worth flagging as a follow-up.
+
+When to use:
+- **Any ambiguous case** where buyer-side history might exist or future restoration might be needed.
+- **Test accounts with real buyer conversations** (per D-145 Path 2).
+- **Sellers under admin moderation** where temporary hide-from-public is desired.
+
+When NOT to use:
+- Pure test accounts confirmed to have no engagement → delete (per D-145 Path 1; cleaner DB, smaller surface, slug freed for reuse).
+
+### Rationale
+
+**Why reuse the existing `is_disabled` column rather than a new `deleted_at` timestamp:**
+
+`is_disabled` was banked at Phase E.1.0 with this exact use case in mind (admin moderation + seller-requested public-hide). Adding a parallel `deleted_at` would require an explicit semantics split ("disabled" vs "deleted" — what's the difference at the DB layer if both produce the same 404?). The boolean is sufficient for the soft-delete shape; a future `deleted_at` could land if and when the distinction matters operationally.
+
+**Why the shop page 404 is the right user-facing signal:**
+
+A buyer who had bookmarked `/sellers/their-favorite-shop` and finds it 404 has the same experience as a buyer who typo'd the slug. We deliberately don't render "This seller has been disabled" — that signals to a sophisticated user that the account exists in some state, which is more information than the buyer needs and a minor privacy concern for the seller. 404 is the cleanest, least-information-leaking shape.
+
+**Why the slug remains held under soft-disable (and isn't released for reuse):**
+
+A disabled account that gets undisabled later expects its URL to come back. Releasing the slug for reuse during the disabled period creates a "URL hijack" risk if the original seller comes back to find a different seller at their old address. At private-beta scale this is theoretical; at scale it would be a real concern. The cost of holding the slug is trivial (one row's `slug` column value).
+
+### Operational consequences
+
+- **Disabled accounts remain visible to admins** via the existing admin surfaces (admin user search, admin verification queue) — the public-side filter is the only one that excludes them. Admins can still operate on these accounts (re-enable, change details, view listings).
+- **Listings stay in `products` table** with `seller_id` referencing the disabled account. They won't appear on the marketplace (verified-only filter) or shop page (is_disabled filter), but the row data persists. If the account is re-enabled, all listings return.
+- **Conversations stay in `conversations`/`messages`** untouched. If the buyer ever re-engages (via a different listing from a different seller), the disabled account's history doesn't surface unless explicitly admin-queried.
+- **The slug stays in `businesses.slug`** holding the URL. If a future feature wants to release slugs on prolonged disable (e.g. 365 days), that's a small admin tool — not blocking.
+- **Marketplace inner-join filter** — the existing `businesses!inner ( verification_status )` filter on marketplace queries should be extended to also gate on `is_disabled = false` for full parity with shop page behavior. Tracked as a small follow-up; not blocking.
+
+### Anti-pattern
+
+- **Rendering "This account has been disabled" instead of 404 on the public shop page.** Leaks the existence of the slug; provides no buyer value over a generic 404.
+- **Auto-releasing the slug on disable.** "URL hijack" risk if the account is later restored.
+- **Treating soft-disable as terminal.** It's reversible — admin re-enabling restores the public surfaces immediately. Hard delete is what makes the data unreachable; soft-disable hides it.
+- **Building a separate `deleted_at` timestamp.** Adds schema surface without operational benefit at current scale.
+- **Adding a "soft-delete" indicator on the dashboard for the seller themselves.** A disabled seller may not be aware their account is hidden; that's intentional in the admin-moderation case. If the seller logs in and sees their listings missing from the public surfaces, they'll know — but no UI should surface "you are disabled" as the seller-facing label.
+
+## D-147 — Storage bucket RLS: mirror `product-images` precedent unless explicitly justified
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** D-142 (E.2.18.0 — added `business-avatars` bucket following this principle), Phase D.2 (`product-images` original precedent — owner-writable + public-readable), Phase C.5 (`verification-id-documents` / `verification-selfies` precedent for private buckets — different trust model, opposite shape)
+**Implementation:** `migrations/E.2.18.0-business-slug-backfill-and-avatars.sql` § 4 + commit `90f5661`. Three policies: `business_avatars_owner_insert`, `business_avatars_owner_delete`, `business_avatars_public_select`. Same shape as `product-images`.
+
+### Context
+
+E.2.18.0 introduced the `business-avatars` storage bucket for seller logos/avatars. The migration directive had two reasonable shapes available:
+1. Design new RLS policies from scratch tailored to avatar semantics.
+2. Mirror the existing `product-images` 3-policy shape exactly.
+
+Option 1 invites micro-bespoke design ("avatars only have one per business, so add a UNIQUE constraint on the folder path"; "support upsert because the seller is replacing not adding"; etc.). Option 2 reuses an audit-reviewed, deployed pattern.
+
+### Decision
+
+**New image buckets follow the `product-images` RLS shape exactly unless there's an explicit, documented reason to differ.** The shape:
+
+- **3 policies on `storage.objects`** scoped to `bucket_id = '<new-bucket>'`:
+  - `<bucket>_owner_insert` — `WITH CHECK` requires the folder name `{owner_resource_id}` matches a resource owned by `auth.uid()`.
+  - `<bucket>_owner_delete` — `USING` same ownership check.
+  - `<bucket>_public_select` — `USING (bucket_id = '<bucket>')`, no other filter.
+- **Folder convention** `{owner_resource_id}/<filename>` — first folder segment via `storage.foldername(name)[1]`.
+- **No UPDATE policy** — replace semantics use timestamped filenames + INSERT + best-effort old-file DELETE.
+
+### Rationale
+
+**Why "mirror, don't invent" is the right default:**
+
+`product-images` has been in production since Phase D.2; it's been audit-reviewed during shop pages investigation (D-142); the 3-policy shape correctly enforces owner-write / public-read while keeping the SQL straightforward and the mental model uniform. Every additional bucket that invents its own pattern creates a maintenance burden — readers have to learn the n-th model rather than the single one. The `product-images` shape covers any future "owner-writable, public-readable" image bucket without modification.
+
+**Why no UPDATE policy:**
+
+Supabase Storage's `upsert: true` upload path needs an UPDATE policy to allow overwrites of existing objects. The alternative — and the precedent — is **timestamped filenames**: each upload writes to `{owner_id}/<resource>-{Date.now()}.{ext}`, guaranteeing a new path. The old file is best-effort deleted from the server action after the new file is persisted. This sidesteps the UPDATE policy entirely AND auto-busts CDN caches on replace (different URL = different cache key). The replace flow is structurally simpler than upsert, more cache-friendly, and one less RLS surface to reason about.
+
+**Why this is a default, not an absolute:**
+
+Some future bucket may have a genuinely different shape (e.g., a bucket where the owner is multi-tenant rather than single-user; a bucket where reads should be authenticated rather than public; a bucket where partial-deletes need a different ownership model). The principle is *justify the divergence in the migration's design-choices header* — not invent silently. If a divergence is justified, bank it as its own D-entry. Otherwise mirror.
+
+**When to use the private-bucket precedent instead:**
+
+For PII-class content (NIN slips, ID-holding selfies, future bank-detail screenshots, future verification documents), the `verification-id-documents` / `verification-selfies` shape is the right mirror: `public=false`, signed-URL generation via service-role, no `public_select` policy. The choice between the two precedents is **"is this content buyer-facing branding (public) or seller PII (private)?"** Avatars are clearly the former; ID documents are clearly the latter. New buckets pick a precedent based on this question and mirror that one's shape.
+
+### Operational consequences
+
+- **Every new bucket migration's design-choices header** explicitly references which precedent it mirrors (`product-images` for public-readable, `verification-id-documents` for private). E.2.18.0 does this; future migrations should too.
+- **The "no UPDATE policy" choice is enforced by the upload flow** — client uses timestamped filenames + `upsert: false`. The server action handles the old-file delete. If a future feature needs upsert semantics for some reason, that's a justified divergence per the "mirror unless justified" framing.
+- **Storage cleanup tail** — best-effort delete on replace means occasional orphan files. Trivial cost at current scale; trackable as known operational tail.
+
+### Anti-pattern
+
+- **Inventing a new RLS shape per bucket "because the semantics are slightly different."** Slight semantic differences usually don't require RLS differences. The 3-policy shape covers most owner/public image buckets unchanged.
+- **Adding an UPDATE policy "for upsert support."** Use timestamped filenames + best-effort old-file DELETE instead. Cleaner, cache-friendlier, smaller RLS surface.
+- **Skipping the design-choices header that names the precedent.** Future readers need to know which lineage a bucket descends from.
+- **Mixing private + public read in the same bucket** (e.g., `business-documents` with some files public-read and some not). That's a sign the content classes should be in different buckets; each bucket should have one trust model.
+
+## D-148 — Client-supplied storage path requires server-side ownership validation (defense in depth)
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** D-147 (the bucket RLS pattern that handles upload-time ownership — D-148 is the post-upload validation companion), D-142 (E.2.18.0 — `updateBusinessAvatarAction` is the canonical implementation of this pattern), D-138 (server-as-trust-boundary discipline — UI may filter, server must enforce)
+**Implementation:** `src/app/(auth)/actions.ts` — `updateBusinessAvatarAction` line ~1943: `if (!logoPath.startsWith(\`${business.id}/\`)) { ... silent return }`. Commit `1f6c8b2`.
+
+### Context
+
+The avatar upload flow (D-142 / D-147) is **client-direct upload to Supabase Storage** using the authenticated session. The flow:
+1. Client validates file size + MIME locally.
+2. Client uploads to `business-avatars/{business_id}/avatar-{timestamp}.{ext}` via `supabase.storage.from('business-avatars').upload(...)`.
+3. Client passes the resulting path to a server action (`updateBusinessAvatarAction`) which persists it to `businesses.logo_path`.
+
+Storage RLS protects step 2 (an unauthorized folder write fails at upload time). But the server action in step 3 receives a client-supplied path string. **Without validation, the server would persist whatever path the client sent.**
+
+A malicious client that successfully uploaded to its own folder *could* round-trip a path string pointing at *another business's folder* to the server action — RLS allowed the upload (to the correct folder), but the persisted DB column would point at the wrong path.
+
+### Decision
+
+**Server actions that persist a client-supplied storage path MUST validate the path's first folder segment matches the user's owned resource before persisting.** For `updateBusinessAvatarAction`:
+
+```ts
+if (!logoPath.startsWith(`${business.id}/`)) {
+  console.warn(
+    "[updateBusinessAvatarAction] path does not belong to this business",
+    { businessId: business.id, logoPath }
+  );
+  return;
+}
+```
+
+The **trailing slash is load-bearing** — it prevents a prefix attack where a malicious client submits a path like `{business.id}-evil/file.jpg` that would pass a naive `startsWith({business.id})` check. The slash ensures the match is against the exact folder boundary.
+
+Failure mode: silent return + `console.warn` log. The UI shouldn't ever submit a mismatched path (it just uploaded to its own folder); a mismatch indicates either a buggy client, a stale UI state, or a malicious actor — none of those need a user-facing error.
+
+### Rationale
+
+**Why server-side validation when Storage RLS already gated the upload:**
+
+Storage RLS protects the *write*. The server action is a separate write — to a different table (`businesses`), into a different column (`logo_path`). The RLS check at upload doesn't know what the server action will do with the resulting path. Two write paths require two validations.
+
+The threat model isn't "evil hacker bypasses RLS"; it's "buggy or malicious client passes the wrong string." A client that uploaded to its own folder correctly could send the server `evil-business/file.jpg` and the server, trusting the path, would persist it. The buyer-side render of the wrong business's logo would be visible immediately; cleanup would require manual reversal.
+
+**Three layers of defense:**
+
+1. **Storage RLS at upload time** — prevents write to wrong folder.
+2. **Ownership check via `.eq("owner_id", user.id)` on business resolution** — server-side identifies which business this user owns.
+3. **Path-prefix check on the submitted path** — server-side verifies the submitted path matches that business.
+
+Three layers because: layer 1 doesn't see the DB; layer 2 doesn't see the path; layer 3 connects them. Each layer alone is insufficient.
+
+**Why silent return on mismatch (not a thrown error):**
+
+The mismatch case shouldn't be reachable via the happy-path UI. Throwing would surface as an error to the user with no recourse — they didn't do anything wrong; the form did. Silent return + log lets the system continue without writing the bad path; the user sees no avatar update; the log captures the anomaly for investigation. Same pattern as `markListingSoldOutAction`'s ownership-mismatch case (D-141 / E.2.17.0 Step 2).
+
+### Operational consequences
+
+- **`removeBusinessAvatarAction` does not need the path check** — it doesn't accept a client-supplied path (just clears the column based on what's already in DB). One server action accepts client paths; one doesn't; the validation is scoped to the one that does.
+- **Future server actions that accept client-uploaded paths** — for any future bucket / feature (e.g., business cover image, additional brand image) — replicate the same path-prefix check at the same shape.
+- **The log message structure** (`[ActionName] path does not belong to this <resource>`) is the standard for these validations; future readers can `grep` for the pattern.
+
+### Anti-pattern
+
+- **Trusting client-supplied paths blindly "because RLS will catch it."** RLS catches the upload, not the database persistence. The persisted path can be wrong even though the upload was right.
+- **Using `.includes(business.id)` instead of `.startsWith(\`${business.id}/\`)`.** `includes` matches anywhere in the string — `evil/{business.id}/file.jpg` would pass. The strict prefix-with-slash is the correct shape.
+- **Skipping the trailing slash.** Allows a prefix attack: `{business.id}-evil/file.jpg` would pass `startsWith({business.id})` without the slash.
+- **Throwing an error on mismatch.** Surfaces as user-facing noise; provides no recovery path; obscures the silent-investigation log signal.
+- **Forgetting the same pattern when a future bucket is introduced.** New bucket → new client upload path → new server action → new path-prefix check. Bank the discipline; apply it each time.
+
+## D-149 — Deterministic slug + app-level collision loop for user-input-derived slugs
+
+**Status:** Locked (2026-05-30)
+**Cross-references:** D-142 (E.2.18.0 — added `businesses.slug` NOT NULL UNIQUE constraint; D-149 is the app-time generation policy that satisfies it), Phase D.2 (`generateListingSlug` precedent for listing slugs — random-suffix pattern; D-149 is the *different* pattern for business slugs)
+**Implementation:** `src/lib/listings/format.ts` — `generateBusinessSlug(name: string): string` deterministic regex normalization. `src/app/(auth)/actions.ts` — `becomeSellerAction` collision loop (probe via `.eq("slug", candidate).maybeSingle()`, append `-2`, `-3`, etc. up to 100 attempts before form-level error). Commit `1f6c8b2`.
+
+### Context
+
+E.2.18.0 added `businesses.slug` as `NOT NULL UNIQUE`. Going forward, every new business creation (`becomeSellerAction`) must generate a non-null, globally-unique slug from the seller-supplied `business_name`. The pattern needs to:
+- Produce stable, brandable URLs (Jiji-style `/dealer/abc-motors`, not `/dealer/abc-motors-xy7z`).
+- Match the deterministic shape used by the E.2.18.0 §1 backfill SQL so existing backfilled rows and future inserts share one normalization rule.
+- Handle the rare collision case without polluting the normal-case URL.
+
+### Decision
+
+**`generateBusinessSlug(name)` is deterministic** — same input always produces the same output:
+
+```ts
+return name
+  .toLowerCase()
+  .normalize("NFKD")
+  .replace(/[̀-ͯ]/g, "")  // strip diacritics
+  .replace(/[^a-z0-9]+/g, "-")       // collapse non-alphanumeric to dashes
+  .replace(/^-+|-+$/g, "")            // trim edge dashes
+  .slice(0, 60);                       // cap length
+```
+
+Same regex shape as the E.2.18.0 §1 SQL backfill — app-time inserts produce slugs identical to backfilled rows.
+
+**Empty-base rejection:** if the normalized output is empty (e.g. seller name `"@@@@"`), the caller returns a field-level validation error before any DB write. Defense-in-depth; the existing business-name validators would have rejected the name first.
+
+**Collision loop in `becomeSellerAction`:**
+- Try the base slug first (`abc-motors`).
+- If a row already has that slug, try `abc-motors-2`.
+- Then `abc-motors-3`, etc. up to a hard cap of 100 attempts.
+- If 100 attempts exhaust, return form-level error: *"Couldn't generate a unique URL for your business. Try a more distinctive business name."*
+
+### Rationale
+
+**Why deterministic (vs. listing-slug-style random suffix):**
+
+`generateListingSlug` (Phase D.2) appends a 4-char random suffix because listing titles like *"iPhone 15 Pro Max"* collide constantly — random suffix is the only way to guarantee uniqueness without forcing sellers to invent unique titles. Business slugs are different: they're **URLs the seller will share** (social media, business cards, email signatures). A stable URL is brand equity; a random suffix makes that URL ugly and unmemorable. The trade-off favors stability + collision-loop over random suffix.
+
+**Why app-level collision loop (vs. DB-side trigger or unique-with-suffix function):**
+
+A Postgres trigger that auto-suffixes on UNIQUE conflict would work but adds a stored-procedure surface to maintain, evolves less cleanly with the codebase (versioning a SQL function vs versioning TypeScript), and obscures the collision-handling logic from app-code readers. The app-level loop is debuggable in TypeScript, testable in isolation, and visible to anyone reading `becomeSellerAction`.
+
+**Why 100 attempts as the cap (not unbounded):**
+
+Realistic collisions cluster at small N — `abc-motors`, `abc-motors-2`, maybe `abc-motors-3`. A loop hitting 100 attempts indicates a pathological input (every variation already exists) where the right operator response is "ask the seller to use a more distinctive name" rather than persist `abc-motors-127`. The 100 cap surfaces the issue cleanly. Choice of 100 is generous; 20 would also work; the exact number matters less than having one at all.
+
+**Why the regex matches the SQL backfill exactly:**
+
+If the app-time generator produced different output than the backfill (e.g. different Unicode normalization, different slice length), existing backfilled businesses and new businesses would have inconsistent slug shapes. Future maintenance — debugging a slug, regenerating one, comparing across rows — would have to remember two rules. One rule, expressed two ways (SQL for backfill, TypeScript for app), keeping both in sync at all times.
+
+### Operational consequences
+
+- **Existing E.2.18.0 backfilled businesses** (`jervis-luxebrand`, `reseller-by-ojemba`, `darace-gadgets`, `showmeprice-ng`) all have deterministic slugs matching what `generateBusinessSlug` would produce for the same name. New businesses inserted via `becomeSellerAction` produce slugs of identical shape — no maintenance surface from "old vs new generator."
+- **Collision loop performance** — at most 100 SELECT queries against `businesses.slug` (UNIQUE indexed, sub-millisecond each). Realistic case is 1 query (no collision). The cap is a safety valve, not a normal path.
+- **The pattern generalizes** — any future user-input-derived globally-unique slug (e.g., future seller storefronts with custom subdomains, future category management UI, future invite-code shortlinks) can reuse the same shape: deterministic normalizer + uniqueness probe + cap.
+- **The 100-cap error message ("Couldn't generate a unique URL")** is one of the rare form-level errors that asks the user to change their business name. The frequency in the wild should be effectively zero — track if it ever fires as a possible name-collision-cluster hint.
+
+### Anti-pattern
+
+- **Applying the listing-slug random-suffix pattern to business slugs.** Produces ugly, unmemorable URLs (`/sellers/abc-motors-xy7z`); destroys the brand-URL value.
+- **Building a Postgres trigger to auto-suffix on UNIQUE conflict.** Hides the logic from app readers; adds a stored-procedure surface; harder to evolve with code review.
+- **No collision cap at all.** A pathological input (every variation already exists) would spin indefinitely or hit a timeout. The 100-cap is the safety valve.
+- **Different regex shapes between SQL backfill and TypeScript app-time generator.** Creates two parallel normalizers to maintain; future debugging has to remember which produced a given slug.
+- **Treating the 100-cap error as a backend bug** — it's a seller-facing error asking for a more distinctive name. The "fix" is the seller picking a different name, not raising the cap.
+
