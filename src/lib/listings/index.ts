@@ -7,6 +7,7 @@ export {
   generateListingSlug,
   generateBusinessSlug,
 } from "./format";
+export { roundRobinBySeller } from "./round-robin";
 export {
   validateTitle,
   validateDescription,

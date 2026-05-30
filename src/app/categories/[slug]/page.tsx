@@ -7,10 +7,19 @@ import { ListingCard } from "@/components/listings/ListingCard";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { sortStatesByFeatured } from "@/lib/states";
+import { roundRobinBySeller } from "@/lib/listings";
 
 export const runtime = "edge";
 
 const PAGE_SIZE = 24;
+// Over-fetch multiplier matching the homepage 4× ratio (D-144). 96 rows
+// is the input pool the round-robin samples to produce a seller-diverse
+// PAGE_SIZE=24 slice. No pagination on this page today, so a single
+// over-fetch is enough — the round-robin shapes the only render the
+// buyer sees. If pagination is ever added, page 2+ would either need
+// plain recency (Option A from the investigation) or a deterministic
+// per-page slicing scheme (Option B).
+const OVER_FETCH = PAGE_SIZE * 4;
 
 export default async function CategoryPage({
   params,
@@ -83,10 +92,11 @@ export default async function CategoryPage({
       .from("products")
       .select(
         `
-        id, title, price_kobo, is_negotiable, created_at,
+        id, title, price_kobo, is_negotiable, seller_id, created_at, quantity,
         product_images ( storage_path, position ),
         businesses!inner ( business_name, verification_status ),
-        nigerian_states ( name )
+        nigerian_states ( name ),
+        categories ( supports_inventory )
       `
       )
       .eq("status", "active")
@@ -95,7 +105,7 @@ export default async function CategoryPage({
       // D-146: disabled-seller listings stay invisible on public browse.
       .eq("businesses.is_disabled", false)
       .order("created_at", { ascending: false })
-      .limit(PAGE_SIZE);
+      .limit(OVER_FETCH);
 
     if (selectedStateId) {
       query = query.eq("state_id", selectedStateId);
@@ -103,7 +113,11 @@ export default async function CategoryPage({
 
     const { data: listings, error } = await query;
     if (error) throw error;
-    items = listings ?? [];
+    // D-144 parity: round-robin across sellers so a single prolific seller
+    // can't dominate the category page. No pagination on this page today,
+    // so this single OVER_FETCH=96 pool feeds the only PAGE_SIZE=24 slice
+    // the buyer sees.
+    items = roundRobinBySeller(listings ?? [], PAGE_SIZE);
   } catch (err) {
     console.error("[categories]", err);
     queryError = "Couldn't load listings. Please refresh to try again.";
@@ -253,6 +267,16 @@ export default async function CategoryPage({
               const state = Array.isArray(listing.nigerian_states)
                 ? listing.nigerian_states[0]
                 : listing.nigerian_states;
+              // E.2.17.0 / Step 2 parity with the marketplace card
+              // (commit 6a2611e). Same shape: category embed lookup +
+              // quantity===0 check; non-inventory categories never
+              // surface the overlay.
+              const cat = Array.isArray(listing.categories)
+                ? listing.categories[0]
+                : listing.categories;
+              const outOfStock =
+                cat?.supports_inventory === true &&
+                Number(listing.quantity ?? 1) === 0;
               return (
                 <ListingCard
                   key={listing.id}
@@ -266,6 +290,7 @@ export default async function CategoryPage({
                       : undefined
                   }
                   stateName={state?.name}
+                  outOfStock={outOfStock}
                 />
               );
             })}
