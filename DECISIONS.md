@@ -3445,3 +3445,73 @@ The platform has no purchase events today — D-129 (payment integration sequenc
 - Treating `supports_inventory=false` rows as "no quantity column" — the column exists universally and is queryable; non-inventory categories just ignore it in the UI layer. Code that special-cases storage by category invites schema drift.
 - Building variant-level inventory (per-size stock for fashion, per-color stock for phones) in v1. Shape A is universal quantity across categories. Variant inventory is a separate, harder design pass requiring schema for variants + per-variant stock + variant-aware listing forms. Not blocked-against; not built now.
 
+## D-142 — Seller shop pages at `/sellers/[slug]`: public storefront foundation with business slug + business-avatars storage bucket
+
+**Status:** Locked (2026-05-29)
+**Cross-references:** Phase E.1.0 (`businesses.slug` + `businesses.logo_path` columns added anticipating this build — ACTUAL_SCHEMA banking note explicitly named "the not-yet-built public storefront"), D-032 (verification gate — only verified businesses surface), D-091 (verification-tier × listing model), D-112 (honest verification labels), D-131 (seller WhatsApp OTP-proven before revealable), Phase D.6 (marketplace card density — no seller name on cards), Phase D.2 (`product-images` bucket precedent — owner-write / public-read), Phase C.5 (`verification-id-documents`/`-selfies` private-bucket precedent — opposite trust model)
+**Implementation:** `migrations/E.2.18.0-business-slug-backfill-and-avatars.sql` (applied 2026-05-29) + commit `<this>`. Step 2 (app code) ships separately: `generateBusinessSlug()` helper, `/sellers/[slug]/page.tsx` shop page, `BusinessAvatarUploader.tsx` client component, dashboard avatar widget, link integration from listing detail page seller card.
+
+### Context
+
+Every verified seller needs a public storefront URL — a landing page where buyers see the business name, verified badge, location, member-since date, active listings count, business avatar/logo, and the full grid of their active listings. This is the foundational missing piece between "listing detail page" (one product) and "marketplace" (all products) — the **per-seller** browse surface that lets buyers discover a seller's range after engaging with a single listing.
+
+The columns to make this work were banked at Phase E.1.0: `businesses.slug` (text, UNIQUE, nullable) for the URL and `businesses.logo_path` (text, nullable) for the avatar. Neither was used until tonight. The ACTUAL_SCHEMA banking note for Phase E.1.0 explicitly named the missing surface: *"Badge renders on the not-yet-built public storefront."* Step 1 (this migration) makes that storefront's data foundation real; Step 2 (separate commit) ships the user-facing surface.
+
+### Decision
+
+Ship the public storefront as **`/sellers/[slug]`**, with these foundation pieces banked in this migration:
+
+**Schema:**
+- `businesses.slug` **backfilled deterministically** from `business_name` via `regexp_replace + lower` SQL and **flipped to NOT NULL** in the same transaction. Going forward, every business — existing and future — has a non-null slug.
+- `businesses.logo_path` **NOT modified** (already existed from Phase E.1.0 — this migration just enables the storage layer that will populate it).
+
+**Storage:**
+- New `business-avatars` Supabase Storage bucket: **public=true**, 2 MB file size cap, MIME allowlist `[jpeg/png/webp]` (excludes GIF — static branding only — and PDF). Folder structure: `{business_id}/<filename>`.
+- Three RLS policies on `storage.objects` mirroring the `product-images` shape exactly:
+  - `business_avatars_owner_insert` — INSERT requires `(storage.foldername(name))[1]` (first path segment) match a row in `businesses` whose `owner_id = auth.uid()`.
+  - `business_avatars_owner_delete` — same ownership check on DELETE.
+  - `business_avatars_public_select` — anyone can SELECT (since avatars are public branding).
+
+### Rationale
+
+**Why backfill + NOT NULL flip in the same transaction:**
+
+Atomicity. The window between "some rows still null" and "constraint enforced" must not be observable to concurrent writers. Doing both in one `BEGIN..COMMIT` means either both land or neither does — no intermediate state where the app starts assuming slug is non-null but a row still has slug=NULL. At apply time the backfill ran over 4 rows (after the operator's pre-migration test-data cleanup of 5 obsolete test businesses); whole transaction was well under a second.
+
+**Why no random suffix on the business slug (unlike listing slugs):**
+
+`generateListingSlug` appends a 4-char random suffix because product titles ("iPhone 15 Pro Max") collide constantly across thousands of listings — the suffix is the only way to guarantee uniqueness without forcing sellers to invent unique titles. Business slugs are different: they're **brand identifiers** that should be stable, human-readable, and brandable. Jiji uses `/dealer/abc-motors`, not `/dealer/abc-motors-xy7z`. Collision is rare (the 4 current business_names produced 4 distinct slugs cleanly); app-layer uniqueness check + numeric suffix (`-2`, `-3`) handles future collisions without polluting normal cases with random gibberish. Step 2 ships `generateBusinessSlug()` mirroring the migration's deterministic shape so app-time inserts produce slugs identical to the backfill.
+
+**Why public-read on the avatar bucket:**
+
+Avatars are public branding — same trust model as `product-images` (anyone can view, only owner can write). Opposite of `verification-id-documents` / `verification-selfies` which are strict-private PII (NIN slips, ID photos, ID-holding selfies — buyer-side display would be a violation of seller dignity AND a data protection breach under NDPR per D-117 placeholder). A buyer browsing the marketplace must be able to see seller avatars without authentication; making the bucket private would require signed URLs on every render of every shop card / every listing detail page seller block — wasteful and complicates server-side rendering. Public bucket + owner-write policy is the right trust shape.
+
+**Why mirror `product-images` RLS shape exactly (not invent a new pattern):**
+
+`product-images` is the existing, deployed, audit-reviewed precedent for "owner-writable / public-readable" buckets on this codebase. Three policies: owner_insert (folder match on first path segment), owner_delete (same check on DELETE), public_select (anyone reads). Inventing a new pattern (e.g. adding an UPDATE policy for upsert semantics) creates a second mental model future maintainers must reconcile against the existing pattern. The replace-avatar flow uses **timestamped filenames** (`avatar-{Date.now()}.jpg`) + new INSERT + best-effort old-file DELETE, sidestepping any UPDATE-policy need entirely. Same shape as how `product-images` handles photo replacement.
+
+**Why 2 MB file size limit (vs `product-images`'s 5 MB):**
+
+Avatars display at 80px max (shop-page header) and 32–48px in listing cards. A 1080×1080 PNG with reasonable compression weighs under 1 MB; even a high-quality square JPG well under 2 MB. The existing `product-images` bucket caps at 5 MB because product photos are display-large (up to 800px wide in detail galleries). Avatars don't need that headroom. Smaller cap = less Storage waste from accidental "I uploaded a 4K screenshot as my logo" mistakes.
+
+### Operational consequences
+
+- **Step 2 app code** carries: `generateBusinessSlug(name: string): string` helper in `src/lib/listings/format.ts` (or a new `src/lib/business/format.ts` — Step 2 directive decides); `getBusinessAvatarPublicUrl(path: string): string` in `src/lib/storage.ts` paralleling `getProductImagePublicUrl`; `/sellers/[slug]/page.tsx` server-component page rendering the business + active listings (Edge runtime, single Supabase query with embedded products); `BusinessAvatarUploader.tsx` client component mirroring `ImageUploader.tsx` shape (browser-direct upload via authenticated session, no signed-URL roundtrip); dashboard avatar widget on `/dashboard/page.tsx` inline with the seller's account info; `updateBusinessAvatarAction` + `removeBusinessAvatarAction` server actions; link integration on `src/app/listings/[id]/page.tsx` line ~346 (wrap `business.business_name` in `<Link href={\`/sellers/${business.slug}\`}>`) + a new "View all listings from this seller →" link in the seller card.
+- **Marketplace cards remain unchanged** — per the Phase D.6 density decision (no seller name on cards), buyers discover seller shop pages by clicking through to a specific listing first. The shop page is the catalogue surface; the marketplace is the discovery surface.
+- **WhatsApp / reveal CTA is NOT on the shop page header** — reveal is per-listing per D-091 / D-129 / D-133 (accounting model is per-listing); a page-level CTA would either need its own accounting or land buyers into an arbitrary first-listing reveal. Buyers engage with a specific item, not a seller in the abstract. Keeps the "shop page is a catalogue, not a contact form" framing.
+- **Verification gate carries forward** — only `verification_status = 'verified'` businesses are reachable at `/sellers/[slug]`. Unsubmitted / rejected businesses 404 even if direct-URL probed. The query also defensively filters `is_disabled = false`.
+- **Existing `<Avatar>` component reused** — handles both the uploaded-image branch (rendered from `logo_path` via `getBusinessAvatarPublicUrl`) and the initials-placeholder branch (`business_name.slice(0, 2).toUpperCase()`). Buyer can't tell from a glance whether the seller uploaded an avatar; this is intentional (no "missing-avatar shame" UX).
+- **No image processing pipeline** — no resize, no format conversion, no aspect-ratio enforcement at upload time. Display in a `rounded-full` + `object-cover` container; browser handles the visual crop. Adding sharp/jimp processing is deferred until real demand surfaces (a seller complains about non-square avatars rendering poorly, etc.). At 2 MB cap, the upload payload is fine as-is.
+- **`businesses.description` (already in schema, nullable, currently unused on any display surface)** — Step 2 renders it conditionally on the shop page below the header when populated. Sellers edit it via the existing `ManageBusinessForm.tsx` on `/sell`. Zero new schema, zero new edit UI; the data is already there.
+
+### Anti-pattern
+
+- **Adding `slug` as a brand-new column when it already exists from Phase E.1.0.** The investigation surfaced this; the directive was adjusted to be a backfill + NOT NULL flip, not an ALTER ADD COLUMN. Discovering forgotten existing-column work is exactly what the "read the schema before writing migration SQL" discipline is for.
+- **Adding `avatar_path` as a brand-new column when `logo_path` already exists from Phase E.1.0.** Same lesson. The directive treated `logo_path` as the avatar column rather than introducing a parallel name, which would have been documentation churn for no gain.
+- **Making the avatar bucket private.** Forces signed-URL roundtrips on every render — kills server-side rendering performance and creates a buyer-visible auth requirement for what is purely public branding content. The `verification-id-documents` bucket is private for a reason (PII); avatars are not.
+- **Appending a random suffix to business slugs.** Listing slugs need this for title-collision reasons; business slugs become brand URLs and must be stable. A seller posting their `/sellers/abc-motors-xy7z` URL to social media gets a worse outcome than `/sellers/abc-motors`.
+- **Page-level WhatsApp CTA on the shop page.** Breaks the per-listing reveal accounting (D-091 / D-129 / D-133) and lands buyers into arbitrary first-listing reveals. The shop page is a catalogue; engagement happens per-item.
+- **Adding review / rating / response-time / follow-seller features in this build.** Each is a separate scope with its own schema, abuse vectors, moderation surface, and notification infrastructure. The foundation shipping tonight intentionally stops short of any of these — they can layer later if real demand surfaces.
+- **Building a separate "branding" admin tool to upload avatars on behalf of sellers.** Avatar upload is a self-service seller action; if the seller doesn't upload one, the initials-placeholder shape works fine. Building admin-upload infra is scope creep.
+- **Forcing square aspect ratio at upload time.** Adds client-side validation friction; the circular crop at render handles non-square uploads gracefully. Soft guidance ("Square images look best — 400×400 or larger") is sufficient.
+

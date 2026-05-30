@@ -19,7 +19,11 @@ export const businesses = pgTable("businesses", {
     .unique()
     .references(() => profiles.id, { onDelete: "cascade" }),
   business_name: text("business_name").notNull(),
-  slug: text("slug").unique(),
+  // E.2.18.0: backfilled deterministically from business_name + flipped to
+  // NOT NULL. App-time inserts use generateBusinessSlug() (no random
+  // suffix — business slugs must be stable + brandable, unlike listing
+  // slugs which append random for title-collision uniqueness).
+  slug: text("slug").notNull().unique(),
   description: text("description"),
   state_id: uuid("state_id").references(() => nigerianStates.id, { onDelete: "set null" }),
   logo_path: text("logo_path"),
