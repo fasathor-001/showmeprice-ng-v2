@@ -4,17 +4,19 @@ import { Container } from "@/components/layout";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { getProductImagePublicUrl } from "@/lib/storage";
 
-const FEATURED_COUNT = 8;
+const FEATURED_COUNT = 24;
 
 // Over-fetch multiplier — pull more recent listings than we render so the
 // round-robin below has material to diversify across sellers. 4× covers
 // the case where a single prolific seller would otherwise dominate the
-// top of the recency stream (today: the fashion seller holds 8 of 9
-// verified listings; at limit=8 the homepage was effectively a single-
-// seller catalogue). 32 rows is trivial latency cost at any plausible
-// scale through Phase F. When supply grows past low thousands, this
-// pattern can move to a server-side RPC using ROW_NUMBER OVER PARTITION
-// BY seller_id — not the right time today.
+// top of the recency stream (during the initial round-robin landing in
+// D-144, one fashion seller held 8 of 9 verified listings; at limit=8
+// the homepage was effectively a single-seller catalogue). With
+// FEATURED_COUNT bumped to 24, the displayed grid is 6 rows × 4 columns
+// on desktop and the over-fetch becomes 96 — still trivial latency cost
+// at any plausible scale through Phase F. When supply grows past low
+// thousands, this pattern can move to a server-side RPC using
+// ROW_NUMBER OVER PARTITION BY seller_id — not the right time today.
 const OVER_FETCH = FEATURED_COUNT * 4;
 
 /**
@@ -145,12 +147,6 @@ export async function FeaturedListings() {
       <Container>
         <div className="flex items-baseline justify-between mb-6">
           <h2 className="text-lg sm:text-xl font-medium text-ink">Recent listings</h2>
-          <Link
-            href="/marketplace"
-            className="text-sm text-teal-600 hover:text-teal-700"
-          >
-            View all →
-          </Link>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {items.map((listing) => {
@@ -188,6 +184,19 @@ export async function FeaturedListings() {
               />
             );
           })}
+        </div>
+        {/* Centered CTA below the grid — sends buyers into the full
+            marketplace once they've scanned the 24-card recent grid.
+            Renders only in this populated branch; the empty-state branch
+            already has its own "Sell on ShowMePrice" CTA, no need to
+            point buyers at an empty marketplace from an empty homepage. */}
+        <div className="mt-8 sm:mt-10 flex justify-center">
+          <Link
+            href="/marketplace"
+            className="inline-flex items-center gap-2 text-teal-700 hover:text-teal-900 font-medium text-sm sm:text-base"
+          >
+            View all listings →
+          </Link>
         </div>
       </Container>
     </section>
