@@ -3950,3 +3950,102 @@ If the app-time generator produced different output than the backfill (e.g. diff
 - **Different regex shapes between SQL backfill and TypeScript app-time generator.** Creates two parallel normalizers to maintain; future debugging has to remember which produced a given slug.
 - **Treating the 100-cap error as a backend bug** — it's a seller-facing error asking for a more distinctive name. The "fix" is the seller picking a different name, not raising the cap.
 
+## D-150 — Mobile distribution roadmap (Google Play first via TWA, Apple App Store second via Capacitor)
+
+**Status:** Locked (2026-05-31)
+**Cross-references:** Feature I (PWA foundation — manifest + service worker + install foundation, commit `994c6d2`). The Bubblewrap TWA path reads the live manifest at `app.showmeprice.ng/manifest.webmanifest`; Feature I unblocks that read. Apple's policy prohibits TWA-equivalent wrappers, which forces Capacitor or native for iOS.
+**Implementation:** Roadmap only — no code in this commit. Two future focused-sprint commits when triggered (one per store).
+
+### Context
+
+Distribution today is web-only via `app.showmeprice.ng`. Buyers and sellers reach the app by typing the URL or following shared listing links. Two gaps:
+
+- **Android discovery.** Nigerian buyers expect "the app" to be findable in Google Play. Web-only distribution is a credibility cost in a market where Jiji, Jumia, and Konga all ship native shells. The Feature I PWA install prompt closes part of this gap (browser-native "Install ShowMePrice") but doesn't surface in Play Store search.
+- **iOS reach.** Nigerian market is ~85–90% Android by share, but the iOS minority over-indexes for high-value buyers and sellers (Lagos professionals, diaspora returnees, repeat luxury-listing sellers). iOS Safari supports Add-to-Home-Screen from Feature I, but App Store presence is a separate trust signal these users expect.
+
+Native rebuilds (Swift for iOS, Kotlin for Android) would fragment the codebase, multiply the maintenance surface, and consume months of engineering at a stage where adding sellers and listings matters more than platform polish.
+
+### Decision
+
+ShowMePrice will be distributed via both Google Play Store and Apple App Store, sequenced, after current platform foundation work stabilizes.
+
+**1. Google Play via TWA / Bubblewrap — first.**
+
+The Feature I PWA foundation unblocks this path with no further app-code engineering. Remaining work is:
+- Bubblewrap CLI install + signing-key generation (one-time).
+- `.well-known/assetlinks.json` deployed to `app.showmeprice.ng` with the APK's SHA256 fingerprint (chicken-and-egg with signing — must happen after key generation).
+- Google Play Console: developer account ($25 one-time), listing creation, screenshots, content rating, privacy disclosure form, app description.
+- 7–14 day Play Store review cycle.
+
+Prerequisites before this work begins:
+- 50+ active listings (Play Store reviewers and arriving buyers both expect supply).
+- 10+ verified sellers.
+- 2–3 weeks of post-Feature-J stable production (no regressions in suspension / messaging / verification flows).
+- Lawyer-reviewed privacy policy (the current `/privacy` page is adequate for app review but the disclosure form asks specific questions worth getting right before submission, not after rejection).
+
+**2. Apple App Store via Capacitor wrapper — second, 4–6 weeks after Google Play is live.**
+
+Apple's App Store Review Guideline 4.2 ("Minimum Functionality") explicitly rejects pure TWA-style wrappers that just load a website. Capacitor (WKWebView native shell loading the existing PWA with a thin native bridge for permissions / status bar / launch) is the right path because it preserves the single codebase while satisfying Apple's "native enough" bar.
+
+Engineering scope: 1–2 focused-sprint weeks plus ongoing maintenance (Xcode + macOS toolchain requirement, periodic Capacitor SDK updates, App Store Connect submission cycles).
+
+Prerequisites: Google Play live and stable for 4–6 weeks first. Lessons from Play submission (which assets work, which copy reviewers flag, which privacy questions matter) directly inform App Store prep.
+
+**3. Native Swift / Kotlin rebuilds — explicitly OFF the roadmap.**
+
+Months of work per platform, no meaningful UX gain over the wrapped PWA at current scale, fragments the single codebase that lets one engineer ship full-stack features in days. Re-evaluate only if: (a) a specific native capability becomes business-critical and unreachable from web (push notifications can be added via Capacitor without going native), or (b) scale + revenue justify dedicated mobile engineers per platform.
+
+**4. iOS PWA "Add to Home Screen" — keep working in the meantime.**
+
+Already functional from Feature I. A small follow-up copy commit may add an "iPhone? Tap Share → Add to Home Screen" footer hint when copy-polish capacity allows. This is the iOS install path until Capacitor ships.
+
+### Rationale
+
+**Why Google Play first, not Apple first:**
+
+- Market dominance — Android is the larger immediate audience.
+- Lower engineering cost — TWA is mostly already built (Feature I); Capacitor requires real per-platform engineering work.
+- Faster review cycle (Google ~7 days vs Apple ~7–14 days plus rejection-iteration overhead).
+- Bubblewrap is well-documented and stable; Capacitor wrapping is also stable but each iOS submission cycle is a multi-day round-trip.
+
+**Why Capacitor for iOS, not native:**
+
+- Preserves the single Next 14 + Supabase codebase that lets feature work ship without per-platform forks.
+- Same engineer can ship a marketplace feature and have it appear on web, Android, and iOS in one commit.
+- Capacitor's WKWebView is a real browser; the existing service worker, manifest, React components, and edge runtime all work unchanged inside it.
+- Native rebuild would mean three implementations of every feature; not justified at current scale.
+
+**Why deferred, not immediate:**
+
+- App store submissions require a credible app — empty marketplace = rejection or low ratings.
+- Each submission cycle has a discipline cost (screenshots, copy, privacy form, content rating) that bleeds focus from listing / seller acquisition if interleaved.
+- Mobile launch is a release moment; doing it while platform work is in flux means buggy launch + bad first reviews.
+
+### Banked costs
+
+- Google Play Console developer account: **$25 one-time.**
+- Apple Developer Program membership: **$99/year recurring.**
+- Capacitor engineering: **1–2 focused-sprint weeks** plus ongoing iOS submission maintenance.
+- Macbook / Xcode toolchain access required for Apple submission (currently available; flag if that ever changes).
+
+### Operational consequences
+
+- **Store distribution is a focused release project, not mixed into feature commits.** Each store gets its own sprint with submission-specific discipline (screenshots, store descriptions, content rating, privacy disclosures, real-device testing, review-cycle iteration). Bundling store-prep into a feature PR conflates concerns and risks rolling back a feature to fix a store-asset problem.
+- **The Feature I PWA path stays the source of truth for both wrappers.** Improvements to the web app (offline behavior, install prompts, manifest fields, service worker policy) ship to all three surfaces — web, Android TWA, iOS Capacitor — from one place. No per-wrapper code branches.
+- **`.well-known/assetlinks.json`** will live in `public/.well-known/` once Google Play submission proceeds. Single file with the SHA256 fingerprint of the signed APK. Update only when re-signing.
+- **App-store-specific environment differences** (status bar styling, safe-area insets, Capacitor permission prompts) are handled via Capacitor config + small CSS tweaks, not via runtime branching in app code. Web stays the canonical UX.
+- **First Play Store review may flag issues** the web version doesn't expose (TWA-specific URL handling, Digital Asset Links validation, target SDK version compliance). Bank an iteration buffer of 1–2 weeks for review cycles.
+
+### Out of scope
+
+- **Push notifications.** Separate decision when a buyer-facing use case actually emerges (new message alerts? seller verification status? price drops?). Capacitor supports push; the right time to wire it is when the notification has clear value, not as a launch checkbox.
+- **In-app purchases.** No monetization path currently runs through the stores. If subscription tiers (D-129 Phase 2+) ever go through Apple/Google, that's a separate decision with significant revenue-share implications (Apple's 30% / 15% cut).
+- **App-store-specific features that would fragment the codebase.** Native widgets, Live Activities, Android shortcuts, etc. Defer to native-rebuild-justification threshold.
+
+### Anti-pattern
+
+- **Mixing store-submission work into feature commits.** Store prep has its own checklist (screenshots, copy, privacy form, content rating, real-device testing) that bleeds focus from feature work and risks rolling back a feature to fix a store-asset problem.
+- **Submitting to Apple with a pure TWA-style wrapper.** Guideline 4.2 rejects "websites in a thin shell" — Capacitor's native bridge + offline-capable PWA shell is the minimum bar. Pure WebView wrapper without bridge work gets rejected.
+- **Building Swift / Kotlin native shells at current scale.** Months of work, fragments the codebase, no meaningful UX gain over the wrapped PWA. Re-evaluate only on a specific business trigger.
+- **Launching either store with an empty marketplace.** Empty supply at launch = bad first reviews = lasting Play Store / App Store ranking damage. Prerequisites (50+ listings, 10+ verified sellers) exist for this reason.
+
