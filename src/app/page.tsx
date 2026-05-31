@@ -3,6 +3,7 @@ import {
   PopularCategories,
   FeaturedListings,
   HowItWorks,
+  BuyerTrust,
 } from "@/components/home";
 
 export const runtime = "edge";
@@ -14,6 +15,7 @@ export default function HomePage() {
       <PopularCategories />
       <FeaturedListings />
       <HowItWorks />
+      <BuyerTrust />
     </>
   );
 }
