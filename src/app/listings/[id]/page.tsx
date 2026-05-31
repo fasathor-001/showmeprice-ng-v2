@@ -561,13 +561,17 @@ export default async function ListingDetailPage({
               </div>
             )}
 
-            {/* Description */}
-            <div>
-              <h2 className="text-sm font-medium text-ink mb-2">Description</h2>
-              <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">
-                {listing.description}
-              </p>
-            </div>
+            {/* Description — gate the whole block on a non-null description
+                so a NULL row doesn't render a labelled empty <p>. Mirrors the
+                business.description && (...) pattern on /sellers/[slug]. */}
+            {listing.description && (
+              <div>
+                <h2 className="text-sm font-medium text-ink mb-2">Description</h2>
+                <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">
+                  {listing.description}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

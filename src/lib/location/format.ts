@@ -27,13 +27,47 @@
 // A seller in Lagos can publish a listing located in Abuja — these
 // columns intentionally differ at the data layer. The formatter is
 // agnostic to which column it's reading; the callsite chooses.
+//
+// Display normalization: `cityArea` is run through `titleCaseCity`
+// before composition. The column is free-text at signup so some legacy
+// rows are lowercase ("warri") — without normalization those leak into
+// every public card and shop header. State names come from the
+// `nigerian_states` lookup table and are already canonical, so they
+// are NOT passed through any casing helper. The casing helper is
+// idempotent — passing already-Title-Cased input is a safe no-op.
+
+/**
+ * Title-case a free-text city/area string while preserving whitespace
+ * runs (so "lekki phase 1" → "Lekki Phase 1"). Idempotent. Pure
+ * display normalization — does not mutate stored data.
+ *
+ * Exported so any non-formatLocation caller that needs the same
+ * display rule can reuse the single source of truth. `formatLocation`
+ * below applies this internally to its `cityArea` argument, so a
+ * standard display caller does NOT need to wrap manually.
+ */
+export function titleCaseCity(input: string): string {
+  return input
+    .toLowerCase()
+    .split(/(\s+)/)
+    .map((part) =>
+      /\s+/.test(part)
+        ? part
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join("");
+}
 
 export function formatLocation(
   cityArea: string | null | undefined,
   stateName: string | null | undefined,
 ): string | null {
-  if (!stateName && !cityArea) return null;
-  if (!stateName) return cityArea ?? null;
-  if (!cityArea) return stateName;
-  return `${cityArea}, ${stateName}`;
+  const city =
+    typeof cityArea === "string" && cityArea.length > 0
+      ? titleCaseCity(cityArea)
+      : null;
+  if (!stateName && !city) return null;
+  if (!stateName) return city;
+  if (!city) return stateName;
+  return `${city}, ${stateName}`;
 }
