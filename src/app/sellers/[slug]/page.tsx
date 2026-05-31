@@ -44,9 +44,18 @@ interface EmbeddedProduct {
   quantity: number;
   product_images: { storage_path: string; position: number }[] | null;
   nigerian_states: { name: string } | { name: string }[] | null;
+  // Feature O: embed extended with id/name/slug so the About card can
+  // derive top-3 categories sold by this seller for the chip strip.
+  // supports_inventory stays in the embed because the listings grid
+  // below uses it for the out-of-stock overlay parity check.
   categories:
-    | { supports_inventory: boolean }
-    | { supports_inventory: boolean }[]
+    | { id: string; name: string; slug: string; supports_inventory: boolean }
+    | {
+        id: string;
+        name: string;
+        slug: string;
+        supports_inventory: boolean;
+      }[]
     | null;
 }
 
@@ -115,7 +124,7 @@ export default async function SellerShopPage({ params }: PageProps) {
         quantity,
         product_images ( storage_path, position ),
         nigerian_states ( name ),
-        categories ( supports_inventory )
+        categories ( id, name, slug, supports_inventory )
       )
     `,
       )
@@ -153,6 +162,37 @@ export default async function SellerShopPage({ params }: PageProps) {
   const locationLine = [business.city_area, state?.name]
     .filter(Boolean)
     .join(" · ");
+
+  // Feature O: derive top-3 categories by listing count for the About
+  // card chip strip. Uses the existing query's now-extended categories
+  // embed — no additional round-trip. Each listing has a single
+  // category (PostgREST returns either a single object or an array
+  // depending on the embed shape; we normalize with Array.isArray).
+  // Sellers with 0 active listings get an empty array and the chip
+  // strip gracefully collapses (conditional render below).
+  const categoryCounts = new Map<
+    string,
+    { name: string; slug: string; count: number }
+  >();
+  for (const listing of activeListings) {
+    const cat = Array.isArray(listing.categories)
+      ? listing.categories[0]
+      : listing.categories;
+    if (!cat) continue;
+    const existing = categoryCounts.get(cat.id);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      categoryCounts.set(cat.id, {
+        name: cat.name,
+        slug: cat.slug,
+        count: 1,
+      });
+    }
+  }
+  const topCategories = Array.from(categoryCounts.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
 
   return (
     <Container>
@@ -197,15 +237,60 @@ export default async function SellerShopPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Optional description (existing businesses.description column,
-            already populated for some sellers — surfaces here when set). */}
-        {business.description && (
-          <div className="mb-8 max-w-2xl">
-            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">
+        {/* Feature O — About card. Sits between the compact identity
+            header above and the listings grid below. Contains:
+              1. Locked trust note (always rendered for verified sellers)
+              2. Optional business description (graceful no-render when
+                 the column is null)
+              3. Optional categories chip strip — top 3 categories this
+                 seller currently has active listings in, derived from
+                 the embedded query data (no extra round-trip).
+            Mirrors the visual language of BuyerTrust Section 5 + the
+            existing Card-based panels — neutral-50 background, soft
+            rounded corners, no warning colors, no danger styling. */}
+        <Card className="mb-6 max-w-3xl bg-neutral-50">
+          <h2 className="text-teal-700 font-semibold text-base mb-3">
+            About this seller
+          </h2>
+          <p className="text-sm text-ink-600 leading-relaxed mb-3">
+            Verified seller means this seller passed ShowMePrice account,
+            contact, and admin review before listing publicly.
+          </p>
+          {business.description && (
+            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed mb-3">
               {business.description}
             </p>
-          </div>
-        )}
+          )}
+          {topCategories.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs text-ink-600 mb-2">Categories sold</p>
+              <div className="flex flex-wrap gap-2">
+                {topCategories.map((cat) => (
+                  <Link
+                    key={cat.slug}
+                    href={`/categories/${cat.slug}`}
+                    className="inline-flex items-center text-xs sm:text-sm text-ink-600 hover:text-ink bg-white border border-neutral-300 hover:border-neutral-400 px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    {cat.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Feature O — safety reminder. Sits between the About card
+            and the listings grid: marks the visual transition from
+            "who is this seller" to "what they're selling — proceed
+            carefully." Thin neutral band, no warning colors, no
+            danger styling, no italic. Same locked safety copy used
+            verbatim per the Feature O directive. */}
+        <div className="mb-8 max-w-3xl rounded-lg bg-neutral-50 px-4 py-3">
+          <p className="text-sm text-ink-600 leading-relaxed">
+            Always ask questions, confirm details, and inspect where
+            possible before payment.
+          </p>
+        </div>
 
         {/* Listings grid (or empty state) */}
         {activeListings.length === 0 ? (

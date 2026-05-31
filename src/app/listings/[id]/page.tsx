@@ -436,7 +436,7 @@ export default async function ListingDetailPage({
                     href={`/sellers/${business.slug}`}
                     className="inline-block text-xs text-teal-700 hover:text-teal-900 font-medium mt-1.5"
                   >
-                    View all listings from this seller{" "}
+                    Visit seller shop{" "}
                     <span aria-hidden="true">→</span>
                   </Link>
                 </div>

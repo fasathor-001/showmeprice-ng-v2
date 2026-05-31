@@ -53,14 +53,17 @@ export function MoreFromSeller({
         <h2 className="text-lg sm:text-xl font-medium text-ink">
           More from {businessName}
         </h2>
-        {/* Color matches the existing seller-card link ("View all
-            listings from this seller →") at src/app/listings/[id]/page.tsx
-            line 395 — text-teal-700 hover:text-teal-900. */}
+        {/* Feature O: copy unified to "Visit seller shop →" across
+            both the listing-detail seller-card CTA and this rail link,
+            because the destination /sellers/[slug] now has both an
+            About card and the listings grid — "view all listings" is
+            too narrow a description. Color matches the existing
+            seller-card link styling: text-teal-700 hover:text-teal-900. */}
         <Link
           href={`/sellers/${businessSlug}`}
           className="text-sm text-teal-700 hover:text-teal-900"
         >
-          View all →
+          Visit seller shop →
         </Link>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
