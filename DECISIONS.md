@@ -4221,3 +4221,59 @@ Each phase: read-pass → verbatim diff review → commit. Security-adjacent thr
 
 **Out of scope for v1:** physical inspection; automated customs/VIN verification; payment-gated "Pro Verified" badges (explicit D-151 anti-pattern); multi-business category; structured doc-field capture.
 
+## D-153a — Vehicle Enhanced Verification Amendment (extends D-153)
+
+**Status:** Decided 2026-05-31. Amends, does not replace, D-153 (commit f7f5de3). D-153 remains the authoritative parent decision for vehicle enhanced verification; this records only the three deltas not covered there. No duplication of D-153 content.
+
+### 1. Vehicle type — three branches (extends D-153 point 3, which had two)
+
+Enhanced vehicle verification distinguishes THREE vehicle types, not two:
+
+- **Nigerian-used:** ownership/transfer evidence (where available); vehicle registration/licence details (where available); purchase receipt/invoice (where available).
+- **Tokunbo/imported:** ownership evidence; customs duty evidence (MANDATORY — see D-153 point 3); clearing/import documents (where available); purchase receipt/invoice (where available).
+- **Brand-new:** dealer invoice or purchase invoice; dealer/business legitimacy evidence (where appropriate); vehicle availability evidence. Customs-duty evidence is NOT automatically required from the seller unless the seller is also the importer or the import status requires it.
+
+The category_verification_requirements engine (D-153 point 3) must support all three branches.
+
+### 2. Hard copy/legal constraint — "reviewed," not "guaranteed" (standing rule, all surfaces)
+
+ShowMePrice must not publicly claim more than it can prove. This is a STANDING constraint on all badge, listing, and marketing copy — not a build-scope note. It binds any future copy change.
+
+**Critical distinction — "verified" splits by subject:**
+- SELLER/IDENTITY verification claims are ALLOWED, because ShowMePrice does verify seller identity (NIN, selfie, phone): e.g. "Seller verified by ShowMePrice," "Verified Seller."
+- DOCUMENT claims must use "reviewed," never "verified" or "guaranteed," because ShowMePrice checks submitted documents but does not guarantee their authenticity or assume liability for them.
+
+**Allowed:**
+- "Verified Seller" / "Seller verified by ShowMePrice" (identity)
+- "Vehicle documents reviewed"
+- "Ownership documents reviewed"
+- "Documents available for buyer inspection"
+
+**Prohibited unless ShowMePrice actually performs and can legally defend the check:**
+- "Ownership verified" / "Ownership guaranteed"
+- "Customs verified" / "Customs guaranteed"
+- "Mileage verified"
+- "Accident-free verified"
+- "Inspected by ShowMePrice"
+- "ShowMePrice guarantees this vehicle"
+- "ShowMePrice guarantees this transaction"
+
+**Standing rule:** For seller-submitted vehicle DOCUMENTS, use "reviewed" — never "verified" or "guaranteed" — unless ShowMePrice has a formal process that can legally support the stronger claim. "Verified" remains acceptable only for seller IDENTITY, which ShowMePrice does perform.
+
+### 3. Interim private-beta vendor collection checklist (operationalizes D-153 Interim)
+
+Until the in-app enhanced-document upload flow (Q.2) ships, early vehicle vendors may submit documents via support@showmeprice.ng as a TEMPORARY bridge only. This email route EXPIRES once the in-app flow ships.
+
+Per interim vehicle vendor, collect and record:
+- Seller name; business name; verified phone/WhatsApp
+- Vehicle type: Nigerian-used / Tokunbo-imported / brand-new
+- Vehicle ownership/availability evidence
+- Customs duty evidence (Tokunbo/imported only)
+- Dealer/purchase invoice (brand-new only)
+- Inspection/viewing location
+- Sample vehicle photos
+- Admin/founder verification note
+- Date reviewed; reviewer/admin name or ID
+
+All email-collected documents MUST be backfilled into the proper enhanced-verification record once Q.1/Q.2 ships (per D-153 grandfathering). Do not store these in seller_verifications' dormant banking columns.
+
