@@ -11,6 +11,7 @@ import {
 } from "@/lib/storage";
 import { ListingImageGallery } from "@/components/listings/ListingImageGallery";
 import { MessageSellerButton } from "@/components/listings/MessageSellerButton";
+import { RevealContactButton } from "@/components/listings/RevealContactButton";
 import { ListingShareBar } from "@/components/listings/ListingShareBar";
 import { ListingReportButton } from "@/components/listings/ListingReportButton";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
@@ -174,11 +175,15 @@ export default async function ListingDetailPage({
 
   let currentUserPhoneVerified = false;
   let existingConversationId: string | null = null;
+  // Feature N slice 3 — surface the buyer's reveal-counter on first paint so
+  // RevealContactButton can render "N free reveals available" without an
+  // extra round-trip. One column added to the existing profile read.
+  let currentUserFreeReveals: number | null = null;
   if (currentUser) {
     const [profileRes, convRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("verification_status")
+        .select("verification_status, signup_free_reveals_remaining")
         .eq("id", currentUser.id)
         .maybeSingle(),
       // Existing-conversation detection drives the "Continue conversation"
@@ -195,6 +200,9 @@ export default async function ListingDetailPage({
     currentUserPhoneVerified = isPhoneVerified(
       profileRes.data?.verification_status,
     );
+    currentUserFreeReveals =
+      (profileRes.data?.signup_free_reveals_remaining as number | null | undefined) ??
+      null;
     existingConversationId = (convRes.data?.id as string | undefined) ?? null;
   }
 
@@ -382,6 +390,19 @@ export default async function ListingDetailPage({
               isPhoneVerified={currentUserPhoneVerified}
               isOwnListing={isOwnListing}
               existingConversationId={existingConversationId}
+            />
+
+            {/* Feature N slice 3 — secondary outline CTA stacked beneath the
+                primary Message button. Messaging is primary; reveal is the
+                "when you're ready" path. On mobile this renders in the
+                document flow (the sticky bar above stays single-purpose). */}
+            <RevealContactButton
+              sellerId={business.owner_id}
+              listingId={listing.id}
+              userId={currentUser?.id ?? null}
+              isOwnListing={isOwnListing}
+              initialFreeRevealsRemaining={currentUserFreeReveals}
+              listingTitle={listing.title}
             />
 
             {/* Commit 12 K-060.5 — WhatsApp share + Copy link buttons.
