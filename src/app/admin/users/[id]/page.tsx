@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { formatNigerianPhone, isPhoneVerified } from "@/lib/auth";
+import { formatLocation } from "@/lib/location/format";
 import { ChangePhoneForm } from "./ChangePhoneForm";
 import { ChangeLocationForm } from "./ChangeLocationForm";
 import { SuspendUserPanel } from "./SuspendUserPanel";
@@ -26,6 +27,22 @@ export const runtime = "edge";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Display-only normalizer for businesses.city_area — some legacy rows store
+// the value lowercase ("warri") because the field was free-text at signup.
+// Title-cases each whitespace-separated word so the Account-card render is
+// consistent. Does not mutate stored data.
+function titleCaseCity(input: string): string {
+  return input
+    .toLowerCase()
+    .split(/(\s+)/)
+    .map((part) =>
+      /\s+/.test(part)
+        ? part
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join("");
+}
+
 interface PageProps {
   params: { id: string };
 }
@@ -39,7 +56,6 @@ interface ProfileRow {
   is_disabled: boolean;
   verification_status: string[];
   created_at: string | null;
-  nigerian_states: { id: string; name: string } | { id: string; name: string }[] | null;
 }
 
 interface AdminChangeRow {
@@ -89,8 +105,7 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
       .from("profiles")
       .select(
         `id, display_name, phone, state_id, role, is_disabled,
-         verification_status, created_at,
-         nigerian_states ( id, name )`,
+         verification_status, created_at`,
       )
       .eq("id", params.id)
       .maybeSingle(),
@@ -113,7 +128,8 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     adminClient
       .from("businesses")
       .select(
-        `id,
+        `id, state_id, city_area,
+         nigerian_states ( name ),
          seller_verifications ( id, status, submitted_at, reviewed_at )`,
       )
       .eq("owner_id", params.id)
@@ -126,10 +142,6 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
   const changes = (changesRaw ?? []) as AdminChangeRow[];
   const states = (statesRaw ?? []) as StateRow[];
 
-  const currentState = Array.isArray(targetProfile.nigerian_states)
-    ? (targetProfile.nigerian_states[0] ?? null)
-    : (targetProfile.nigerian_states ?? null);
-
   const phoneVerified = isPhoneVerified(targetProfile.verification_status);
 
   // Derive the latest seller_verifications row (any status). Sorted newest-
@@ -140,6 +152,12 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
   const businessWithVerifs = businessWithVerifsRaw as
     | {
         id: string;
+        state_id: string | null;
+        city_area: string | null;
+        nigerian_states:
+          | { name: string }
+          | { name: string }[]
+          | null;
         seller_verifications:
           | {
               id: string;
@@ -150,6 +168,26 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
           | null;
       }
     | null;
+
+  // Business location for the Account card. Sourced from the user's owned
+  // business (businesses.owner_id is UNIQUE per src/db/schema/businesses.ts,
+  // so this is always at most one row; .maybeSingle() above is correct
+  // cardinality — no multi-business branch needed). Distinct from
+  // profiles.state_id which is only ever written by the admin
+  // change-location RPC; the profile column stays the write target for the
+  // Change Location form below, unchanged.
+  const ownedBusinessStateName = businessWithVerifs
+    ? Array.isArray(businessWithVerifs.nigerian_states)
+      ? (businessWithVerifs.nigerian_states[0]?.name ?? null)
+      : (businessWithVerifs.nigerian_states?.name ?? null)
+    : null;
+  const ownedBusinessCity = businessWithVerifs?.city_area
+    ? titleCaseCity(businessWithVerifs.city_area)
+    : null;
+  const businessLocation = formatLocation(
+    ownedBusinessCity,
+    ownedBusinessStateName,
+  );
   const latestVerification =
     businessWithVerifs?.seller_verifications &&
     businessWithVerifs.seller_verifications.length > 0
@@ -204,10 +242,8 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
                 </dd>
               </div>
               <div>
-                <dt className="text-ink-600 text-xs">Location</dt>
-                <dd className="text-ink">
-                  {currentState?.name ?? "Not set"}
-                </dd>
+                <dt className="text-ink-600 text-xs">Business location</dt>
+                <dd className="text-ink">{businessLocation ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-ink-600 text-xs">User ID</dt>
