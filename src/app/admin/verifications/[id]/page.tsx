@@ -46,7 +46,11 @@ export default async function VerificationDetailPage({
       address_line_1, address_line_2, city,
       nin, id_document_type, id_document_path, selfie_path,
       status, submitted_at, reviewed_at, rejection_reason,
-      businesses ( id, business_name, description, owner_id ),
+      businesses (
+        id, business_name, description, owner_id,
+        seller_whatsapp, seller_whatsapp_verified_at,
+        profiles ( display_name, phone, user_type, created_at )
+      ),
       nigerian_states ( name )
     `
     )
@@ -62,16 +66,46 @@ export default async function VerificationDetailPage({
     ? verification.nigerian_states[0]
     : verification.nigerian_states;
 
-  // Signed URLs for private bucket access. Service role bypasses RLS.
+  // Feature R: owner profile nested under the businesses embed via the
+  // businesses.owner_id -> profiles.id FK. Extracted here so the
+  // Registration details panel renders without further round-trips.
+  // PostgREST returns the embed shape based on cardinality — supabase-js
+  // infers it as an array; runtime can occasionally hand back a single
+  // object, so we tolerate both.
+  const ownerProfileRaw = (
+    business as unknown as { profiles?: Record<string, unknown> | Record<string, unknown>[] } | null
+  )?.profiles;
+  const ownerProfile: Record<string, unknown> | null = Array.isArray(
+    ownerProfileRaw,
+  )
+    ? (ownerProfileRaw[0] ?? null)
+    : (ownerProfileRaw ?? null);
+
+  // Feature R: three admin-context lookups run in parallel — signed URLs
+  // for the private storage buckets, plus auth.users lookup for the
+  // registration email. Service role bypasses RLS on all three. Email is
+  // read in this server component only and rendered server-side; it is
+  // NEVER passed as a prop into a client component (ReviewActions below
+  // receives only verificationId).
   const adminClient = createAdminClient();
-  const { data: idDocSigned } = await adminClient.storage
-    .from("verification-id-documents")
-    .createSignedUrl(verification.id_document_path, SIGNED_URL_TTL_SECONDS);
-  const { data: selfieSigned } = verification.selfie_path
-    ? await adminClient.storage
-        .from("verification-selfies")
-        .createSignedUrl(verification.selfie_path, SIGNED_URL_TTL_SECONDS)
-    : { data: null };
+  const [
+    { data: idDocSigned },
+    { data: selfieSigned },
+    { data: ownerAuth },
+  ] = await Promise.all([
+    adminClient.storage
+      .from("verification-id-documents")
+      .createSignedUrl(verification.id_document_path, SIGNED_URL_TTL_SECONDS),
+    verification.selfie_path
+      ? adminClient.storage
+          .from("verification-selfies")
+          .createSignedUrl(verification.selfie_path, SIGNED_URL_TTL_SECONDS)
+      : Promise.resolve({ data: null }),
+    business?.owner_id
+      ? adminClient.auth.admin.getUserById(business.owner_id)
+      : Promise.resolve({ data: { user: null } }),
+  ]);
+  const ownerEmail = ownerAuth?.user?.email ?? null;
 
   const idDocIsPdf = verification.id_document_path.toLowerCase().endsWith(".pdf");
 
@@ -101,6 +135,73 @@ export default async function VerificationDetailPage({
         <p className="text-sm text-ink-600 mb-8">
           Submitted {new Date(verification.submitted_at).toLocaleString("en-NG")}
         </p>
+
+        {/* Feature R: read-only registration details panel. Sibling above
+            the existing two-column grid. All fields render server-side;
+            no email/PII crosses into a client component. */}
+        <Card className="mb-6">
+          <h2 className="text-sm font-medium text-ink mb-3">
+            Registration details
+          </h2>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+              <dt className="text-ink-600 text-xs">Display name</dt>
+              <dd className="text-ink">
+                {(ownerProfile?.display_name as string | undefined) ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-ink-600 text-xs">Email</dt>
+              <dd className="text-ink break-all">{ownerEmail ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-600 text-xs">Profile phone</dt>
+              <dd className="text-ink font-mono">
+                {ownerProfile?.phone
+                  ? `+${ownerProfile.phone as string}`
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-ink-600 text-xs">Business WhatsApp</dt>
+              <dd className="text-ink font-mono">
+                {business?.seller_whatsapp
+                  ? `+${business.seller_whatsapp}`
+                  : "Not set / uses profile phone"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-ink-600 text-xs">WhatsApp status</dt>
+              <dd className="text-ink">
+                {business?.seller_whatsapp_verified_at
+                  ? `Verified ${new Date(
+                      business.seller_whatsapp_verified_at,
+                    ).toLocaleDateString("en-NG", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}`
+                  : "Unverified"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-ink-600 text-xs">User type</dt>
+              <dd className="text-ink">
+                {(ownerProfile?.user_type as string | undefined) ?? "—"}
+              </dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-ink-600 text-xs">Account created</dt>
+              <dd className="text-ink">
+                {ownerProfile?.created_at
+                  ? new Date(
+                      ownerProfile.created_at as string,
+                    ).toLocaleString("en-NG")
+                  : "—"}
+              </dd>
+            </div>
+          </dl>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card>
