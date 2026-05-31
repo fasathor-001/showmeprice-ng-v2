@@ -4168,3 +4168,56 @@ Add a "Registration details" card to the admin verification queue page. Position
 - Do not add new columns to the profiles or businesses tables to support this; use only data already captured during signup + onboarding
 - Do not expose seller_whatsapp on public pages until Feature N (contact reveal) ships — this entry is admin-only
 
+## D-153 — Feature Q finalized design: category-specific enhanced verification (resolves D-151 open questions)
+
+**Status:** Decided 2026-05-31. Resolves the 8 open questions in D-151. Build deferred to a deliberate multi-phase effort (see Phasing) — NOT shipped same-day. Touches the most security-sensitive surfaces in the app (seller_verifications schema, RLS, server actions); to be built with full verbatim-diff review per phase.
+
+**Strategic basis (Nigerian + international market research):**
+- The Nigerian vehicle market splits sharply: open classifieds (Jiji, FB Marketplace) where buyers are warned of scams, vs. trusted platforms (Cars45/Autochek, Jiji Cars) competing on verification. The central fraud is a weak verification structure — fake listings of cars the seller doesn't own, and unverifiable ownership/customs status. A vehicle seller held to the SAME bar as a fashion seller is exactly the gap that reads as amateur. Enhanced vehicle verification is core to ShowMePrice's trust-first positioning, not optional.
+- ShowMePrice's lane is DOCUMENT verification (ownership proof + customs proof, manually reviewed), NOT physical inspection. Inspection (centers across Nigeria) is a capital-heavy operational business and explicitly out of scope. Document verification is a real, defensible step above open marketplaces.
+- Badge research is emphatic: too many badges/tiers confuse buyers and sellers; badges must tie to clear, real, earned criteria. This validates D-151's decision to keep a single visible "verified" badge in v1.
+
+**Locked design decisions:**
+
+1. **Build it** — document-based vehicle verification, not inspection-based.
+
+2. **Public differentiation (D-151 Q1):** ONE "verified" badge for all sellers, unchanged. Optionally ONE additional clearly-earned signal on vehicle listings only — e.g. "Ownership documents verified." No Bronze/Silver/Gold tier ladder. The single extra signal is a v1.x candidate, not required for Q core.
+
+3. **Doc requirements branch on vehicle origin (refines D-151 Tier A docs):**
+   - Nigerian-used vehicle: proof of ownership + transfer-of-ownership document.
+   - Imported (tokunbo) vehicle: customs duty payment receipt MANDATORY (a vehicle without it is impoundable — the single most important doc for imported cars), plus proof of ownership.
+   - `category_verification_requirements` table must support conditional/branching requirements, not a flat fixed set.
+
+4. **Trigger point (D-151 Q2 + the B.3 category crux):** Category lives at listing-level only today; no business-level category exists. Q introduces a business-level PRIMARY CATEGORY declared at verification submission, so the requirements engine can surface "vehicles requires these docs" up front. ENFORCEMENT BACKSTOP: a listing-creation gate — attempting to create a Tier A listing without completed enhanced verification for that category blocks with a prompt to complete it.
+
+5. **Re-verification flow (D-151 Q3):** Handled by the same listing-creation gate. A Tier C seller who later tries to list in a Tier A category is prompted to submit enhanced docs at that point. No separate re-verification flow needed.
+
+6. **Storage (D-151 Q4):** New dedicated bucket for enhanced/category documents (mirrors the existing verification-id-documents pattern with its own policy), keeping the ID-document bucket's RLS clean. Reuse-with-path-prefix acceptable only if the RLS audit confirms it's clean.
+
+7. **Verification state representation (D-151 Q5):** Do NOT add a value to the shared `verification_status` enum (shared across seller_verifications + businesses; ALTER TYPE + RLS implications make it heavy/risky). Represent enhanced status via a SEPARATE additive structure — a per-(business, category) enhanced-verification record. Baseline verification_status stays untouched; enhanced is layered on top. Exact column/table shape confirmed at build time against schema.
+
+8. **Tier B "Recommended" semantics (D-151 Q6):** Tier A (Vehicles, Real estate) = HARD gate, mandatory, cannot list without enhanced. Tier B (premium electronics, jewelry/watches) = SOFT for v1: surfaced as a prompt/upsell, optional "documents verified" signal if completed, NOT blocking. Tier B can harden later.
+
+9. **Customs/ownership doc validation (D-151 Q7):** Manual admin review (eyeball) for v1. No structured VIN/duty-amount field capture, no automated customs-service lookup in v1 — those are later enhancements.
+
+10. **Multi-business category (D-151 Q8):** Out of scope. businesses.owner_id is UNIQUE (one business per profile). Per-business primary category handles multi-business naturally if ever introduced. Deferred.
+
+**Grandfathering:** Existing baseline-verified Tier C sellers (Jervis_luxebrand, Reseller By OJemba, kay_interiors_hub) stay verified, untouched, no re-prompt. The car vendor onboarded 2026-06-01 (see Interim) is retroactively recorded as enhanced via the new structure once Q.1 ships — backfill the manually-collected docs.
+
+**RLS requirement (from investigation B.6):** seller_verifications currently has ZERO explicit RLS policies in version control. Any Q phase touching this table MUST add explicit policies, not rely on the current absence. RLS audit is a gating step before schema changes ship.
+
+**Interim — car vendor onboarding 2026-06-01 (no code):**
+- Onboard via standard /sell/verify flow (baseline submission: NIN + selfie + address).
+- Collect enhanced docs out-of-band (ownership proof; customs receipt if imported) via WhatsApp/email; store securely OUTSIDE seller_verifications (do not misuse the dormant secondary_document_path banking column).
+- HOLD admin approval — leave submission pending — until enhanced docs are in hand. Approve only then. (This prevents briefly exposing a Tier A seller at standard-tier verification.)
+- Communicate roadmap honestly per D-151 script: enhanced vehicle verification is a shipping feature, not a barrier.
+
+**Phasing (deliberate, not rushed; ~1-2 weeks total per D-151 sizing):**
+- Q.1 — Schema: category_verification_requirements table (branching reqs), enhanced-verification record structure, businesses primary-category field, RLS policies + seller_verifications RLS audit. New storage bucket.
+- Q.2 — Seller submission: primary-category declaration + variable per-category doc upload in /sell/verify.
+- Q.3 — Admin review: per-category checklist UI on the verification detail page (extends Feature R page).
+- Q.4 — Enforcement: listing-creation gate for Tier A; optional "documents verified" signal on vehicle listings.
+Each phase: read-pass → verbatim diff review → commit. Security-adjacent throughout.
+
+**Out of scope for v1:** physical inspection; automated customs/VIN verification; payment-gated "Pro Verified" badges (explicit D-151 anti-pattern); multi-business category; structured doc-field capture.
+
