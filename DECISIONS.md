@@ -4114,3 +4114,57 @@ Proposed category tiers (subject to refinement at Feature Q scoping):
 - Do not require CAC across the board as a baseline gate.
 - Do not build category-specific verification piecemeal (one category at a time) — design the table-driven approach in Feature Q so adding new categories is configuration, not code.
 
+## D-152 — Expand admin verification queue with seller registration details
+
+**Status:** Banked. Not yet built.
+
+**Cross-references:**
+- Current verification surface: `src/app/admin/kyc/[id]/page.tsx` or equivalent admin verification queue route (agent confirms exact path at Feature R Phase 1)
+- Related to baseline trust verification (existing KYC flow)
+- Surfaced 2026-05-31 during live verification of kay_interiors_hub (Asathor Oghenekaro) onboarding
+
+**Implementation:**
+Future Feature R. Single small commit, single file edit. Add a "Registration details" panel ABOVE the existing verification documents panels (Identity / Address / Business / Selfie / ID document). Read-only display of:
+- Email (from auth.users.email)
+- Profile phone (from profiles.phone)
+- Business WhatsApp if set (from businesses.seller_whatsapp), with verified-status indicator
+- Account created_at
+- User type (buyer / seller)
+- Display name
+
+**Context:**
+Current admin verification queue surfaces submitted KYC documents only (Identity card with legal name + NIN + ID type, Address card, Business name+description card, Selfie card, ID document card). Admin reviewing a submission cannot see baseline account context (signup email, phone number captured at signup, account age, whether business WhatsApp has been OTP-verified) without navigating to a separate admin user-detail view.
+
+This creates friction at the platform's highest-stakes decision point — verification approval. An admin should see "who is this person, when did they sign up, do their submitted documents match the account information already on file" in a single view.
+
+**Decision:**
+Add a "Registration details" card to the admin verification queue page. Position at the TOP of the page, above existing document cards. Read-only display of registration info already captured during signup + business setup. No new DB columns, no new server actions, no write capabilities.
+
+**Rationale:**
+- Improves admin decision quality at the most security-sensitive moment (verification approval)
+- Closes a real gap surfaced during a live admin verification session (Kay Interiors Hub onboarding on 2026-05-31)
+- Single small commit, no schema or RLS changes
+- Uses existing captured data — no new collection burden on sellers
+
+**Banked costs:**
+- Feature R scoping: ~30 min read pass to confirm current verification page structure + identify exact file path
+- Feature R implementation: 1-2 hour single commit, single file edit + visual verification on production
+- Total: <3 hours from start to shipped
+
+**Operational consequences:**
+- Existing verification queue continues working until Feature R ships
+- Admins continue eyeballing documents without registration context in the meantime (current workaround: manually navigate to user-detail view)
+- No effect on seller-facing UX — Feature R is admin-only
+
+**Out of scope:**
+- No write actions on the registration details panel (strictly read-only)
+- No surfacing of registration details on public seller pages (buyers don't see this)
+- No new data captured — only display of existing fields
+- No tooltip or hover-reveal — must be persistent visible panel
+- No changes to existing verification document cards (Identity / Address / Business / Selfie / ID document)
+
+**Anti-pattern:**
+- Do not implement as a tooltip, hover-reveal, or collapsible accordion — must be persistent visible panel at top of page
+- Do not add new columns to the profiles or businesses tables to support this; use only data already captured during signup + onboarding
+- Do not expose seller_whatsapp on public pages until Feature N (contact reveal) ships — this entry is admin-only
+
