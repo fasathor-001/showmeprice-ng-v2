@@ -4277,3 +4277,25 @@ Per interim vehicle vendor, collect and record:
 
 All email-collected documents MUST be backfilled into the proper enhanced-verification record once Q.1/Q.2 ships (per D-153 grandfathering). Do not store these in seller_verifications' dormant banking columns.
 
+## D-154 — ShowMePrice Verified Dispatch / Hub: future buyer-protection service (NOT default model)
+
+**Status:** Decided 2026-05-31. Roadmap/trust decision, NOT a build. Originated from seller (OJemba) feedback raising the core marketplace-trust problem: buyer pays, seller ships something different, buyer blames the platform, trust breaks. Banked to (a) capture the direction, (b) prevent premature overclaim before the service exists.
+
+**Core decision:**
+ShowMePrice does NOT route transactions through a hub by default. The hub is a FUTURE, OPTIONAL, PAID trust service for high-value / high-risk categories — not the marketplace's default model. Default remains the identity-verified introduction marketplace.
+
+**Why the idea is sound:** A neutral inspection checkpoint (seller → hub → product check → ShowMePrice repackaging/sticker → buyer) gives buyer confidence, evidence of what shipped, seller accountability, a premium trust service, and a real differentiator from open classifieds. Matches the vehicle-research finding that trusted platforms win on verification/fulfillment control while open classifieds compete only on reach.
+
+**Why NOT default / NOT now:** A hub is a second business, not a feature — physical location, staff, inspection process, receiving, storage/security, repackaging materials, delivery partners, lost/damaged liability, insurance, dispute process, operating cost, support. The moment ShowMePrice receives and repackages goods it assumes materially more responsibility ("ShowMePrice checked it, so ShowMePrice should refund me"). Wildly premature at current scale (3-4 verified sellers; constraint is supply, not buyer protection). This is Jumia/Konga-tier infrastructure; ShowMePrice's current defensible edge — identity-verified sellers — already exceeds open classifieds at zero operational cost.
+
+**Phased model (locked):**
+- **Phase 1 (NOW):** Identity-verified introduction marketplace. Verified sellers, clear prices, in-platform messaging, WhatsApp reveal, reports, suspension, buyer-safety copy. ShowMePrice does NOT hold money or inspect products. (This is live today.)
+- **Phase 2 (FUTURE PILOT) — "ShowMePrice Verified Dispatch":** OPTIONAL PAID service, not default. Small high-value categories only (phones, laptops, electronics, luxury fashion, wigs/hair, small high-value items). EXCLUDE initially: cars, large furniture, heavy appliances, fragile/oversized. Flow: buyer requests Verified Dispatch → seller ships to hub → ShowMePrice checks VISIBLE match against listing (title, photos, model/color/size/basic condition) → records photos/video → repackages with ShowMePrice sticker → buyer pays delivery + verification fee → delivered. Start as a one-city pilot.
+- **Phase 3 (LATER) — Escrow + Verified Dispatch:** Buyer pays into escrow → seller ships to hub → check + repackage → buyer receives → funds released; wrong item → dispute/refund. Requires payment/escrow infrastructure (regulated fund-holding in Nigeria), legal terms, dispute rules. The powerful version; the heaviest.
+
+**Lighter middle-steps (software-only, no warehouse) worth noting as cheaper partial versions reachable before a full hub:** escrow alone (hold payment, release on buyer confirmation), and a dispute-resolution/mediation process (report a bad deal, ShowMePrice mediates without holding goods). Both still premature at current scale, but precede the physical hub.
+
+**STANDING WORDING RULE (extends D-153a to fulfillment claims):** Verified Dispatch, if/when built, checks VISIBLE PRODUCT MATCH ONLY — title, photos, model/color/size/basic condition. It must NOT claim: full quality inspection, authenticity/originality guarantee, functionality/warranty guarantee, or refund guarantee — UNLESS the deeper inspection + refund processes actually exist and can be honored. Use "checks visible match" never "guarantees." Same honesty discipline as D-153a's reviewed-not-guaranteed rule.
+
+**Trigger to revisit:** when transaction volume is high enough that buyer protection (not supply) is the growth constraint. Until then: Phase 1 only; focus is sellers + listings toward 10/42.
+
