@@ -92,7 +92,7 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
       .select(
         `
         id, title, price_kobo, is_negotiable, created_at,
-        quantity,
+        quantity, city_area,
         product_images ( storage_path, position ),
         businesses!inner ( business_name, verification_status ),
         nigerian_states ( name ),
@@ -365,6 +365,7 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
                       ? getProductImagePublicUrl(primary.storage_path)
                       : undefined
                   }
+                  cityArea={listing.city_area}
                   stateName={state?.name}
                   outOfStock={outOfStock}
                 />

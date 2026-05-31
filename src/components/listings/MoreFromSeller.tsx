@@ -28,6 +28,10 @@ interface MoreFromSellerProps {
     price_kobo: number;
     is_negotiable: boolean;
     quantity: number;
+    // Feature P: listing's own city_area, passed through to ListingCard
+    // so the rail's cards render "City, State" consistently with every
+    // other ListingCard mount site.
+    city_area: string | null;
     product_images: { storage_path: string; position: number }[];
     nigerian_states:
       | { name: string }
@@ -97,6 +101,7 @@ export function MoreFromSeller({
                   ? getProductImagePublicUrl(primary.storage_path)
                   : undefined
               }
+              cityArea={listing.city_area}
               stateName={state?.name}
               outOfStock={outOfStock}
             />

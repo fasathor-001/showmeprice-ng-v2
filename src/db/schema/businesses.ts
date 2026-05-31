@@ -26,6 +26,14 @@ export const businesses = pgTable("businesses", {
   slug: text("slug").notNull().unique(),
   description: text("description"),
   state_id: uuid("state_id").references(() => nigerianStates.id, { onDelete: "set null" }),
+  // Sprint 3 / Gap D.2: free-text city/area where the business operates
+  // from. Captured at onboarding (BecomeSellerForm) and editable via
+  // ManageBusinessForm. Required for sellers onboarded post-D.2;
+  // nullable in the schema because pre-D.2 legacy rows may carry NULL
+  // until backfilled by the seller through ManageBusinessForm. Mirror
+  // added in Feature P to close drift — column already exists in
+  // production, no migration generated.
+  city_area: text("city_area"),
   logo_path: text("logo_path"),
   verification_status: verificationStatusEnum("verification_status")
     .notNull()

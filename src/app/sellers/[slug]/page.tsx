@@ -6,6 +6,7 @@ import { Container } from "@/components/layout";
 import { Avatar, Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { ReportUserButton } from "@/components/users/ReportUserButton";
+import { formatLocation } from "@/lib/location/format";
 import {
   getBusinessAvatarPublicUrl,
   getProductImagePublicUrl,
@@ -42,6 +43,11 @@ interface EmbeddedProduct {
   created_at: string;
   status: string;
   quantity: number;
+  // Feature P: products.city_area surfaced so each ListingCard in the
+  // shop's listings grid below can render "City, State" via
+  // formatLocation(). Listing-location (this), distinct from the
+  // seller's operating location which lives on businesses.city_area.
+  city_area: string | null;
   product_images: { storage_path: string; position: number }[] | null;
   nigerian_states: { name: string } | { name: string }[] | null;
   // Feature O: embed extended with id/name/slug so the About card can
@@ -121,7 +127,7 @@ export default async function SellerShopPage({ params }: PageProps) {
       nigerian_states ( name ),
       products (
         id, title, price_kobo, is_negotiable, created_at, status,
-        quantity,
+        quantity, city_area,
         product_images ( storage_path, position ),
         nigerian_states ( name ),
         categories ( id, name, slug, supports_inventory )
@@ -159,9 +165,11 @@ export default async function SellerShopPage({ params }: PageProps) {
     { year: "numeric", month: "long" },
   );
 
-  const locationLine = [business.city_area, state?.name]
-    .filter(Boolean)
-    .join(" · ");
+  // Feature P: shared formatLocation helper produces "City, State"
+  // when both present, falls back to state alone, returns null when
+  // neither is available. Caller uses the existing truthiness gate
+  // below to skip rendering when null.
+  const locationLine = formatLocation(business.city_area, state?.name);
 
   // Feature O: derive top-3 categories by listing count for the About
   // card chip strip. Uses the existing query's now-extended categories
@@ -338,6 +346,7 @@ export default async function SellerShopPage({ params }: PageProps) {
                       ? getProductImagePublicUrl(primary.storage_path)
                       : undefined
                   }
+                  cityArea={listing.city_area}
                   stateName={listingState?.name}
                   outOfStock={outOfStock}
                 />

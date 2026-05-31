@@ -39,7 +39,7 @@ export async function FeaturedListings() {
     .from("products")
     .select(
       `
-      id, title, price_kobo, is_negotiable, seller_id, created_at, quantity,
+      id, title, price_kobo, is_negotiable, seller_id, created_at, quantity, city_area,
       product_images ( storage_path, position ),
       businesses!inner ( business_name, verification_status ),
       nigerian_states ( name ),
@@ -118,6 +118,7 @@ export async function FeaturedListings() {
                     ? getProductImagePublicUrl(primary.storage_path)
                     : undefined
                 }
+                cityArea={listing.city_area}
                 stateName={state?.name}
                 outOfStock={outOfStock}
               />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui";
 import { formatNaira } from "@/lib/listings";
+import { formatLocation } from "@/lib/location/format";
 import { ProductImage } from "./ProductImage";
 
 interface ListingCardProps {
@@ -9,6 +10,11 @@ interface ListingCardProps {
   priceKobo: number | bigint;
   isNegotiable: boolean;
   primaryImageUrl?: string | null;
+  // Feature P: products.city_area for "City, State" rendering via
+  // formatLocation. Optional — when undefined/null, the card falls
+  // back to state-alone (or no location chip at all if state is also
+  // missing). This is the LISTING's location, not the seller's.
+  cityArea?: string | null;
   stateName?: string;
   // E.2.17.0 / Step 2: when true, render an "Out of stock" overlay on
   // the image (top-left, mirroring the dashboard's "Sold" overlay
@@ -30,9 +36,11 @@ export function ListingCard({
   priceKobo,
   isNegotiable,
   primaryImageUrl,
+  cityArea,
   stateName,
   outOfStock = false,
 }: ListingCardProps) {
+  const location = formatLocation(cityArea, stateName);
   return (
     <Link href={`/listings/${id}`} className="block">
       <Card variant="hover" padding="none" className="overflow-hidden h-full">
@@ -76,10 +84,10 @@ export function ListingCard({
           <h3 className="text-sm text-ink-600 leading-snug line-clamp-2 mt-1 mb-2">
             {title}
           </h3>
-          {stateName && (
+          {location && (
             <span className="inline-flex items-center gap-1 text-xs text-ink-600">
               <MapPinIcon />
-              {stateName}
+              {location}
             </span>
           )}
         </div>

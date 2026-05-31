@@ -37,6 +37,16 @@ export const products = pgTable("products", {
   state_id: uuid("state_id").references(() => nigerianStates.id, {
     onDelete: "set null",
   }),
+  // Sprint 3 / Gap D.3: free-text city/area where this listing is
+  // physically located. Distinct from businesses.city_area (seller's
+  // operating location) — a seller in Lagos may publish a listing
+  // located in Abuja. Captured at listing create + edit via the
+  // EditListingForm cityArea input; required via validateCityArea.
+  // Nullable in the schema because pre-D.3 legacy listings may carry
+  // NULL until the seller backfills via edit. Mirror added in Feature P
+  // to close drift — column already exists in production, no migration
+  // generated.
+  city_area: text("city_area"),
   status: productStatusEnum("status").notNull().default("draft"),
   view_count: integer("view_count").notNull().default(0),
   is_featured: boolean("is_featured").notNull().default(false),

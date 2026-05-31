@@ -15,6 +15,7 @@ import { ListingShareBar } from "@/components/listings/ListingShareBar";
 import { ListingReportButton } from "@/components/listings/ListingReportButton";
 import { PropertyWarningBanner } from "@/components/listings/PropertyWarningBanner";
 import { MoreFromSeller } from "@/components/listings/MoreFromSeller";
+import { formatLocation } from "@/lib/location/format";
 import {
   getSpecsForCategory,
   labelForSpec,
@@ -34,11 +35,11 @@ export default async function ListingDetailPage({
     .select(
       `
       id, title, description, price_kobo, is_negotiable, status, created_at, category_specs,
-      quantity,
+      quantity, city_area,
       product_images ( storage_path, position ),
       categories ( id, name, slug, parent_id, supports_inventory ),
       nigerian_states ( name, slug ),
-      businesses ( id, slug, business_name, description, verification_status, owner_id, created_at, state_id, logo_path, is_disabled )
+      businesses ( id, slug, business_name, description, verification_status, owner_id, created_at, state_id, logo_path, city_area, is_disabled )
     `
     )
     .eq("id", params.id)
@@ -158,7 +159,7 @@ export default async function ListingDetailPage({
       .from("products")
       .select(
         `
-        id, title, price_kobo, is_negotiable, created_at, quantity,
+        id, title, price_kobo, is_negotiable, created_at, quantity, city_area,
         product_images ( storage_path, position ),
         nigerian_states ( name ),
         categories ( supports_inventory )
@@ -302,27 +303,41 @@ export default async function ListingDetailPage({
                 >
                   Verified seller
                 </Badge>
-                {state && (
-                  <Badge
-                    variant="neutral"
-                    leftIcon={
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        aria-hidden="true"
-                      >
-                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                        <circle cx="12" cy="10" r="3" />
-                      </svg>
-                    }
-                  >
-                    {state.name}
-                  </Badge>
-                )}
+                {/* Feature P: badge shows the LISTING's location
+                    (products.city_area + products.state), not the
+                    seller's operating location (which renders below
+                    in the seller card). formatLocation produces
+                    "City, State" when both present, falls back to
+                    state alone. We render the badge whenever the
+                    formatter returns anything (typically when state
+                    is present, even if city_area is null). */}
+                {(() => {
+                  const listingLocation = formatLocation(
+                    listing.city_area,
+                    state?.name,
+                  );
+                  return listingLocation ? (
+                    <Badge
+                      variant="neutral"
+                      leftIcon={
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden="true"
+                        >
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                      }
+                    >
+                      {listingLocation}
+                    </Badge>
+                  ) : null;
+                })()}
                 {listing.is_negotiable && (
                   <Badge variant="teal">Price negotiable</Badge>
                 )}
@@ -426,10 +441,25 @@ export default async function ListingDetailPage({
                       />
                     </svg>
                   </div>
-                  <p className="text-xs text-ink-600 mt-0.5">
-                    Member since {memberSince}
-                    {sellerState && <> · {sellerState.name}</>}
-                  </p>
+                  {/* Feature P: seller location = SELLER's operating
+                      location, drawn from businesses.city_area +
+                      businesses.state (via sellerState lookup above).
+                      Distinct from the listing-badge above (which uses
+                      products.city_area + products.state). When the
+                      formatter returns null, we render "Member since X"
+                      alone with no trailing separator. */}
+                  {(() => {
+                    const sellerLocation = formatLocation(
+                      business.city_area,
+                      sellerState?.name,
+                    );
+                    return (
+                      <p className="text-xs text-ink-600 mt-0.5">
+                        Member since {memberSince}
+                        {sellerLocation && <> · {sellerLocation}</>}
+                      </p>
+                    );
+                  })()}
                   {/* E.2.18.0 / D-142: discoverability CTA into the
                       seller's full shop catalogue. */}
                   <Link
