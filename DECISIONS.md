@@ -4049,3 +4049,68 @@ Already functional from Feature I. A small follow-up copy commit may add an "iPh
 - **Building Swift / Kotlin native shells at current scale.** Months of work, fragments the codebase, no meaningful UX gain over the wrapped PWA. Re-evaluate only on a specific business trigger.
 - **Launching either store with an empty marketplace.** Empty supply at launch = bad first reviews = lasting Play Store / App Store ranking damage. Prerequisites (50+ listings, 10+ verified sellers) exist for this reason.
 
+## D-151 — Category-specific enhanced verification for high-value categories
+
+**Status:** Banked. Not yet built.
+
+**Cross-references:**
+- Verification baseline: NIN + selfie + address + business name (currently live per E.2.x KYC flow)
+- Related to future Pro tier (D-129) but explicitly NOT monetization-gated
+- Related to Feature N (contact reveal) which gates on verified status
+
+**Implementation:**
+Future Feature Q (post-vendor-meeting). Multi-stage feature requiring:
+- New `category_verification_requirements` table mapping category → required document types
+- New verification state distinguishing baseline-verified from enhanced-verified
+- Onboarding flow extension: ask for category-matching documents during signup or first listing creation
+- Admin queue: per-category review checklist
+- Public-facing differentiation (TBD — enhanced badge vs. silent backend gate)
+
+**Context:**
+Current verification (NIN + selfie + address) is sufficient baseline trust for everyday sellers (fashion, beauty, furniture, home goods). High-value / high-risk categories (vehicles, real estate, premium electronics, jewelry & watches) carry transaction risk that justifies additional document requirements.
+
+A buyer spending ₦5,000,000 on a used car needs more assurance than a buyer spending ₦20,000 on a handbag. Verification rigor should match transaction risk.
+
+**Decision:**
+Build category-specific enhanced verification as a future feature. Requirements are MANDATORY per high-risk category, NOT monetization-gated. A car seller is required to provide enhanced documents because of what they're selling, not because they paid for a tier.
+
+Proposed category tiers (subject to refinement at Feature Q scoping):
+
+- **Tier A — Mandatory enhanced verification:**
+  - Vehicles (cars, motorcycles, commercial vehicles): CAC certificate if registered as dealer OR vehicle ownership proof, customs documents for imported vehicles
+  - Real estate (when category added): property ownership documents, agency registration if applicable
+
+- **Tier B — Recommended enhanced verification:**
+  - Premium electronics & gadgets (high-value laptops, premium phones, gaming consoles): supplier/distributor relationship documentation
+  - Jewelry & watches (high-value: gold, diamond, luxury watches): supplier documentation, certificate of authenticity where applicable
+
+- **Tier C — Baseline verification sufficient:**
+  - Fashion, hair & wigs, beauty & personal care, furniture, most everyday categories
+
+**Rationale:**
+- **Trust scaling:** verification rigor should match transaction risk. Asking a furniture seller for CAC is friction for no buyer benefit. Asking a car seller for vehicle ownership documents is friction that materially protects buyers.
+- **Not monetization-gated:** tying enhanced verification to a paid tier creates the wrong incentive (sellers buying credibility) and the wrong UX (buyers needing to learn the difference between "Verified" and "Pro Verified"). Required-by-category is cleaner.
+- **Nigerian market context:** most legitimate sellers in everyday categories are small traders or informal businesses without CAC registration. Requiring CAC across the board would block 80%+ of legitimate sellers. Targeting it at high-risk categories preserves accessibility while raising the floor where it matters.
+- **Competitive positioning:** "ShowMePrice verifies vehicle sellers with ownership documents and customs proof" is a real differentiator vs. classifieds platforms that don't.
+
+**Banked costs:**
+- Feature Q scoping: ~2-3 hours read pass + product decisions
+- Feature Q implementation: J-class multi-stage feature (~1-2 weeks)
+- Existing 3 verified sellers (Jervis_luxebrand, Reseller By OJemba, kay_interiors_hub) are all in Tier C and grandfathered with baseline verification
+- Future vehicle sellers (post-meeting): onboard with baseline, then upgrade to enhanced when Feature Q ships
+
+**Operational consequences:**
+- Tomorrow's car vendor meeting: vendors onboarded with baseline verification. Communicate roadmap honestly: "Enhanced verification specifically for vehicle sellers ships in [timeframe]. You'll need vehicle ownership documents and customs proof at that point. It's a feature, not a barrier."
+- Until Feature Q ships, vehicle category listings rely on baseline verification + buyer-side caution (BuyerTrust safety copy already covers this).
+- Once Feature Q ships: vehicle category listing creation gated on enhanced documents.
+
+**Out of scope:**
+- This is NOT a paid feature. Pro tier (D-129) remains a separate decision about premium seller benefits.
+- Generic "verified" badge does NOT split into multiple tiers visible to buyers in v1. Internal-only distinction during admin review. Public differentiation is a separate decision at Feature Q scoping.
+- CAC registration is NOT required for everyday categories. Many legitimate Nigerian sellers operate informally.
+
+**Anti-pattern:**
+- Do not build "Pro Verified" or "Premium Verified" badge tied to payment.
+- Do not require CAC across the board as a baseline gate.
+- Do not build category-specific verification piecemeal (one category at a time) — design the table-driven approach in Feature Q so adding new categories is configuration, not code.
+
