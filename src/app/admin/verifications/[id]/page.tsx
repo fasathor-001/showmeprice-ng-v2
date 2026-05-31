@@ -47,7 +47,7 @@ export default async function VerificationDetailPage({
       nin, id_document_type, id_document_path, selfie_path,
       status, submitted_at, reviewed_at, rejection_reason,
       businesses (
-        id, business_name, description, owner_id,
+        id, business_name, slug, description, owner_id,
         seller_whatsapp, seller_whatsapp_verified_at,
         profiles ( display_name, phone, user_type, created_at )
       ),
@@ -255,7 +255,24 @@ export default async function VerificationDetailPage({
             <dl className="space-y-2 text-sm">
               <div>
                 <dt className="text-ink-600 text-xs">Name</dt>
-                <dd className="text-ink">{business?.business_name ?? "—"}</dd>
+                <dd className="text-ink">
+                  {business?.business_name ? (
+                    verification.status === "verified" && business?.slug ? (
+                      <Link
+                        href={`/sellers/${business.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-700 hover:text-teal-900 underline underline-offset-2"
+                      >
+                        {business.business_name}
+                      </Link>
+                    ) : (
+                      business.business_name
+                    )
+                  ) : (
+                    "—"
+                  )}
+                </dd>
               </div>
               {business?.description && (
                 <div>
