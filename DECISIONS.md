@@ -4315,3 +4315,26 @@ ShowMePrice does NOT route transactions through a hub by default. The hub is a F
 
 **Trigger to build:** lawyer-finalized ToS + Privacy in hand, and Play-submission sprint beginning.
 
+## D-156 — BusinessAvatarUploader needs square-crop guidance + preview (buyer-facing polish, deferred)
+
+**Status:** Banked 2026-05-31. Known-item / polish backlog. NOT a now-build — build during a deliberate polish pass, not as an interrupt. Origin: first real seller avatar upload in production (kay_interiors_hub) surfaced the gap.
+
+**What happened:** kay_interiors_hub uploaded a business avatar — the first seller to do so (Jervis + OJemba both have NULL logo_path). Her shop avatar "didn't render properly." Investigation verdict: NOT a code bug. The file uploaded correctly, the business-avatars public bucket serves it fine, the URL resolves directly in-browser. The problem is a CONTENT/SHAPE MISMATCH: she uploaded a wide ~16:9 banner/business-card (logo + tagline + furniture artwork) where the avatar slot is a small circle (Avatar component, rounded-full, object-cover, ~64-80px). A wide banner cropped to a small circle shows only a meaningless center sliver — looks broken though nothing is broken. The Avatar component + storage path both work as designed.
+
+**Root cause:** src/components/business/BusinessAvatarUploader.tsx gives the seller NO guidance on required shape/dimensions, and no preview of how the image will appear in the circular avatar slot before saving. A seller who does everything right from their side can still upload the wrong shape. Also note: the uploader lives on /dashboard/business-profile, NOT in the /sell/verify onboarding flow — so new sellers are never prompted to add a logo at all (a separate, related gap — see "future consideration" below).
+
+**Immediate handling (no code, done out-of-band):** message the affected seller (Kay) to send a SQUARE version (~400x400, logo/icon only). Her shop looks right once she re-uploads. The banner is fine for other uses, just not the round slot.
+
+**Structural fix (THIS bank — build later in a polish pass):**
+- Add dimension/shape guidance to BusinessAvatarUploader: tell the seller the image becomes a circular profile picture and a square image works best (suggest ~400x400 min).
+- Add a crop/preview step so the seller SEES how their image lands in the circle (and can reposition/crop) before saving — prevents the wrong-shape upload at the source.
+- Optional: client-side aspect-ratio hint / soft warning if a very non-square image is selected.
+
+**Why it matters (severity = buyer-facing trust polish, MED):** a seller's profile photo is a buyer-facing trust signal; a broken-looking avatar reads unprofessional on the exact surfaces (shop header, listing seller card) buyers judge. Belongs with the buyer-facing audit's other MED polish items. But it is NOT blocking — the fallback (initials circle) is graceful for the no-avatar case, and the immediate Kay fix is a message, not code.
+
+**Related future consideration (bank-adjacent, not this item):** consider a soft "add a business logo to boost buyer trust" prompt during/after seller onboarding, since the uploader currently lives only in the dashboard and new sellers never encounter it. Decide separately whether onboarding-time logo prompting is worth the added onboarding friction (weigh against the seller-recruitment-friction concern from D-155).
+
+**Confirmed NON-issues (ruled out during investigation, recorded so they're not re-chased):** upload flow works; business-avatars bucket is public-read and serves correctly; storage URL construction in src/lib/storage.ts is correct; no signed-URL needed; next.config.js empty remotePatterns is NOT blocking avatar render (Kay's file serves + listing images render in prod) — though declaring images.remotePatterns for the Supabase host remains a separate latent hardening item worth its own bank if image-loader strictness ever surfaces.
+
+**Trigger to build:** next deliberate buyer-facing polish pass (alongside the audit's other MED items — mobile layout, trust-copy alignment). Not before; supply remains the priority.
+
