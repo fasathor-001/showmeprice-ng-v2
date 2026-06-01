@@ -4364,3 +4364,25 @@ Do NOT present ShowMePrice as "available nationwide" yet.
 
 **Relationship to other decisions:** same "control manually now, build the system when scale demands it" discipline as D-155 (T&C modal) and D-154 (hub). Build against proven need, not anticipated need.
 
+## D-158 — Referral-code system (Feature U-B): deferred, build when scale or rewards justify
+
+**Status:** Decided 2026-06-01. Banked as deferred. The lightweight version (Feature U slice 1, D-numberless / commit 44006b3) shipped — optional free-text "referred by" name at seller signup, admin-only display. THIS entry banks the heavier structured version for later.
+
+**Context:** Seller referrals are emerging as a real acquisition channel (kay_interiors_hub referred 4 sellers). The decision was "build A (lightweight free-text capture) now, bank B (full code system) for later." A shipped. This banks B.
+
+**What Feature U-B would be (the deferred build):**
+- Each seller gets a unique referral code.
+- Referred sellers enter the code at signup; the system validates it against the seller registry and links the new seller to the referrer (FK, not free text).
+- Code + referrer shown on the admin verification profile (both sides of the link).
+- Optionally: a referral count / leaderboard per seller for the founder's supply view.
+
+**Why deferred (not now):**
+- A code system is infrastructure for VOLUME and AUTOMATION — code generation, uniqueness, validation, linkage, edge-case handling (invalid/expired codes). At current scale (~4 sellers, founder knows every shop name) the free-text capture from slice 1 already achieves the stated goal: "know who referred whom, visible on the admin profile."
+- The code only earns its complexity when (a) signups outpace the founder's ability to reconcile free-text referrer names by hand, OR (b) codes need to UNLOCK something (a referral reward, discount, leaderboard) — i.e. when the code carries real weight beyond "store who referred."
+
+**Related deferred decision — referral REWARDS:** whether to incentivize referrals (give the referrer something) is a SEPARATE decision, not bundled here. Reward design carries its own questions: what to give, whether it costs money, and whether it attracts low-quality sign-ups gaming the reward. Track referrals first (slice 1 does this); decide on rewards only if the data shows referrals are worth incentivizing. A reward program is likely the actual trigger that justifies building U-B (codes make rewards attributable/abuse-resistant).
+
+**Trigger to build U-B:** free-text referrer reconciliation becomes unmanageable at scale, OR a referral-reward program is decided (rewards need codes for clean attribution). Until then, slice 1's free-text capture suffices.
+
+**Display scope (carried from slice 1):** referral data stays ADMIN-ONLY — internal supply intelligence, never surfaced on the public shop or buyer-facing surfaces.
+
