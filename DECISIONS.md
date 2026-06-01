@@ -4338,3 +4338,29 @@ ShowMePrice does NOT route transactions through a hub by default. The hub is a F
 
 **Trigger to build:** next deliberate buyer-facing polish pass (alongside the audit's other MED items — mobile layout, trust-copy alignment). Not before; supply remains the priority.
 
+## D-157 — Launch geographic focus: enabled-states limit (config-driven, build deferred to pre-wider-signup)
+
+**Status:** Decided 2026-06-01. Banked with rationale. NOT a now-build — current phase uses manual control; code enforcement deferred until signups outpace hand-onboarding.
+
+**Decision:** ShowMePrice launches geographically focused, NOT nationwide. Launch states (state-level, cities nest under them):
+- **Lagos**
+- **FCT / Abuja**
+- **Rivers** (city/area: Port Harcourt — Rivers is the STATE, Port Harcourt the city)
+- **Delta** (city/area: Warri, etc.)
+
+Do NOT present ShowMePrice as "available nationwide" yet.
+
+**Why:** Marketplaces need density/liquidity. ~4 sellers across 36 states looks empty everywhere; ~4 sellers concentrated in Lagos/Delta/Abuja/Rivers feels active where the platform actually serves. Supply is already clustering in Delta + Lagos organically — the limit matches the platform to where supply is, not an artificial constraint. Standard beachhead strategy: win focused markets, then expand. Narrow is the strategy, not a limitation of ambition.
+
+**Current phase (NOW) — manual control, no code:** Geography is controlled by who the founder approves/verifies. Since every seller is still hand-onboarded, manual approval already gatekeeps geography. No code restriction needed today. Operational rule: private-beta seller onboarding is focused on Lagos, FCT/Abuja, Rivers, Delta.
+
+**Future build (BEFORE wider/public signup) — config-driven enforcement:**
+- Single source of truth: ENABLED_LAUNCH_STATES = ["Lagos", "FCT", "Rivers", "Delta"] (one config, not hardcoded across forms).
+- Read it in: seller signup / buyer-to-seller conversion, product listing location, marketplace filters, category filters, homepage/location messaging.
+- Expanding states later (Ogun, Oyo, Anambra, Kano, Edo, Enugu...) must be a one-line config edit, NOT a multi-file change.
+- Unsupported-state sellers get WARM copy, not a hard block: "ShowMePrice is currently onboarding sellers in Lagos, Abuja, Port Harcourt, and Delta for private beta. We're expanding to more states soon." A "Join waitlist" option is a later addition; a friendly message suffices first.
+
+**Trigger to build:** when seller signups outpace the founder's ability to hand-approve/steer geography (e.g. referral momentum — Kay already referred 4 — brings sellers faster than manual verification can gatekeep), OR when opening public/wider signup. Until then, manual approval suffices and the build is premature.
+
+**Relationship to other decisions:** same "control manually now, build the system when scale demands it" discipline as D-155 (T&C modal) and D-154 (hub). Build against proven need, not anticipated need.
+
