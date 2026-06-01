@@ -4386,3 +4386,14 @@ Do NOT present ShowMePrice as "available nationwide" yet.
 
 **Display scope (carried from slice 1):** referral data stays ADMIN-ONLY — internal supply intelligence, never surfaced on the public shop or buyer-facing surfaces.
 
+## D-155 ERRATUM (2026-06-01)
+
+D-155's rationale paragraph references "the 10/42 Play prerequisite." This is a
+transcription typo: the canonical Google Play listings target is **50**, not 42,
+per D-150 (the authoritative decision defining Play prerequisites: 50+ active
+listings + 10+ verified sellers). The "42" was the *remaining gap* at the time
+(50 target − 8 current listings = 42 remaining), mistakenly written as the
+target. Read D-155's "10/42" as "10/50". No other part of D-155 is affected.
+D-150, the seller-acquisition-tracker, and the lawyer-review brief all correctly
+state 50 — this erratum corrects only the single stray figure in D-155's prose.
+
