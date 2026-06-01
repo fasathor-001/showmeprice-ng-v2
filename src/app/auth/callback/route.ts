@@ -46,6 +46,12 @@ export async function GET(request: NextRequest) {
         user_type?: string;
         business_name?: string;
         business_state_id?: string;
+        // Feature U slice 1 — optional referrer name stashed by signUpAction
+        // when the seller filled the optional "Were you referred by a seller?"
+        // field at signup. Key is OMITTED when blank, so a truthiness gate
+        // distinguishes "seller provided a name" from "seller skipped the
+        // field" without an empty-string fallback path.
+        referred_by_name?: string;
       };
       if (
         metadata.user_type === "seller" &&
@@ -66,6 +72,12 @@ export async function GET(request: NextRequest) {
             owner_id: user.id,
             business_name: metadata.business_name,
             state_id: metadata.business_state_id,
+            // Optional — column is NULLABLE; omit the key entirely when no
+            // referrer was provided, rather than writing '' or null
+            // explicitly. The DB default is NULL.
+            ...(metadata.referred_by_name
+              ? { referred_by_name: metadata.referred_by_name }
+              : {}),
           });
           if (bizError) {
             // Best-effort: route to /sell so they can complete via

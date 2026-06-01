@@ -48,7 +48,7 @@ export default async function VerificationDetailPage({
       status, submitted_at, reviewed_at, rejection_reason,
       businesses (
         id, business_name, slug, description, owner_id,
-        seller_whatsapp, seller_whatsapp_verified_at,
+        seller_whatsapp, seller_whatsapp_verified_at, referred_by_name,
         profiles ( display_name, phone, user_type, created_at )
       ),
       nigerian_states ( name )
@@ -190,6 +190,17 @@ export default async function VerificationDetailPage({
                 {(ownerProfile?.user_type as string | undefined) ?? "—"}
               </dd>
             </div>
+            {/* Feature U slice 1 — conditional "Referred by" row. Renders
+                only when the seller entered a referrer name at signup.
+                Admin-only surface; never rendered on public pages. */}
+            {business?.referred_by_name && (
+              <div className="sm:col-span-2">
+                <dt className="text-ink-600 text-xs">Referred by</dt>
+                <dd className="text-ink">
+                  {business.referred_by_name as string}
+                </dd>
+              </div>
+            )}
             <div className="sm:col-span-2">
               <dt className="text-ink-600 text-xs">Account created</dt>
               <dd className="text-ink">

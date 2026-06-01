@@ -56,6 +56,15 @@ export const businesses = pgTable("businesses", {
   // tracking only). Phase F+ enforces per tier.
   seller_reply_quota: integer("seller_reply_quota"),
 
+  // E.2.22.0 / Feature U slice 1: free-text shop/business name of the
+  // referring seller, as entered by the new seller at signup. Optional.
+  // NULL when not provided. Trimmed + length-capped (100) at the
+  // application layer (signUpAction). Admin-only display surface —
+  // never rendered on the public seller shop or any buyer surface.
+  // NOT a referral-code system (future Feature U-B if/when scale
+  // justifies structured codes).
+  referred_by_name: text("referred_by_name"),
+
   // E.2.11.0: seller WhatsApp number for buyer contact reveal.
   // E.164 without '+' (e.g. 2348012345678). Nullable: NULL = seller chose
   // "use my verified profile phone" (fallback at reveal time is profile.phone).

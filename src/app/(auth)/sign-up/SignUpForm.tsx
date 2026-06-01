@@ -192,6 +192,30 @@ export function SignUpForm({ states }: Props) {
               <p className="text-xs text-danger mt-1.5">{state.errors.businessStateId}</p>
             )}
           </div>
+
+          {/* Feature U slice 1 — optional "referred by" capture. Free-text
+              shop name; never blocks signup; admin-only display surface. */}
+          <div>
+            <label
+              htmlFor="referredByName"
+              className="block text-sm font-medium text-ink mb-1.5"
+            >
+              Were you referred by a seller?{" "}
+              <span className="font-normal text-ink-400">(optional)</span>
+            </label>
+            <Input
+              id="referredByName"
+              name="referredByName"
+              type="text"
+              maxLength={100}
+              error={state.errors?.referredByName}
+              placeholder="Their shop name — e.g. Jervis_luxebrand"
+            />
+            <p className="mt-1.5 text-xs text-ink-600">
+              Leave blank if you weren&apos;t referred. Helps us thank the seller
+              who introduced you.
+            </p>
+          </div>
         </fieldset>
       )}
 

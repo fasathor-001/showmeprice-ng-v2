@@ -38,6 +38,7 @@ export interface ActionResult {
     _form?: string;
     businessName?: string;
     businessStateId?: string;
+    referredByName?: string;
   };
   success?: boolean;
 }
@@ -78,6 +79,16 @@ export async function signUpAction(
   const userType = String(formData.get("userType") ?? "buyer");
   const businessName = String(formData.get("businessName") ?? "").trim();
   const businessStateId = String(formData.get("businessStateId") ?? "");
+  // Feature U slice 1 — optional referrer capture. Trim + length-cap at the
+  // application layer (no DB CHECK; this is reference data, not an invariant).
+  // Empty/whitespace → null so the admin display can use a truthiness gate.
+  // Treated as untrusted user input — stored verbatim, never executed; same
+  // posture as business_name.
+  const referredByNameRaw = String(formData.get("referredByName") ?? "").trim();
+  const referredByName =
+    referredByNameRaw.length > 0
+      ? referredByNameRaw.slice(0, 100)
+      : null;
 
   // Defense in depth: re-run client-side validation server-side.
   const errors = validateSignUpForm({ email, password, displayName, phone }) as ActionResult["errors"];
@@ -129,6 +140,11 @@ export async function signUpAction(
           ? {
               business_name: businessName,
               business_state_id: businessStateId,
+              // Feature U slice 1 — only set when the seller actually
+              // entered a referrer name. Key omitted entirely otherwise
+              // so the callback can use a simple `if (metadata.referred_by_name)`
+              // gate without distinguishing empty-string from absent.
+              ...(referredByName ? { referred_by_name: referredByName } : {}),
             }
           : {}),
       },
