@@ -5,17 +5,29 @@ import {
   sortStatesByFeatured,
   getFeaturedCityChips,
 } from "@/lib/states";
+import {
+  filterToLaunchStates,
+  LAUNCH_LOCATIONS_LABEL,
+} from "@/lib/location/launch-states";
 
 export async function Hero() {
   const supabase = createClient();
   const { data: statesData } = await supabase
     .from("nigerian_states")
     .select("id, name, slug");
-  const states = sortStatesByFeatured(statesData ?? []);
+  // D-157 launch geographic focus: restrict the homepage state selector
+  // (and the downstream chip generator) to launch states only. The label
+  // for the "no specific state" option becomes LAUNCH_LOCATIONS_LABEL
+  // instead of the prior "All Nigeria"; the chips collapse to the launch
+  // city set because we feed only launch states into the chip helper.
+  const states = filterToLaunchStates(
+    sortStatesByFeatured(statesData ?? []),
+  );
 
-  // City chips ordered by actual listing count (D.6.2). Top 9 by verified-
-  // active listing count, ties broken by FEATURED_STATE_SLUGS order, padded
-  // with the featured fallback if fewer than 9 states have listings.
+  // City chips ordered by actual listing count (D.6.2). With the input
+  // filtered to launch states only, the chip set is at most 4 launch
+  // cities; the helper's own padding fallback also draws from the same
+  // pre-filtered list, so non-launch states never appear.
   const cityChips = await getFeaturedCityChips(supabase, states);
 
   return (
@@ -52,7 +64,7 @@ export async function Hero() {
                   aria-label="Filter by state"
                   className="flex-1 bg-transparent border-0 outline-none text-base text-ink-600 py-3 cursor-pointer focus:text-ink"
                 >
-                  <option value="">All Nigeria</option>
+                  <option value="">{LAUNCH_LOCATIONS_LABEL}</option>
                   {states.map((s) => (
                     <option key={s.id} value={s.slug}>
                       {s.name}
@@ -87,7 +99,7 @@ export async function Hero() {
               href="/marketplace"
               className="inline-flex items-center text-xs sm:text-sm text-teal-700 hover:text-teal-900 px-3 py-1.5"
             >
-              All states →
+              All launch locations →
             </Link>
           </div>
         </div>

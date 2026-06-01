@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { Badge, Card, ToastFromSearchParams } from "@/components/ui";
 import { getVerificationState } from "@/lib/verification";
+import { filterToLaunchStates } from "@/lib/location/launch-states";
 import { BecomeSellerForm } from "./BecomeSellerForm";
 import { ManageBusinessForm } from "./ManageBusinessForm";
 import { SellerWhatsappRecoveryBanner } from "./SellerWhatsappRecoveryBanner";
@@ -17,7 +18,7 @@ export default async function SellPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in?next=/sell");
 
-  const [{ data: business }, { data: states }, { data: profile }] =
+  const [{ data: business }, { data: statesRaw }, { data: profile }] =
     await Promise.all([
       supabase
         .from("businesses")
@@ -26,9 +27,13 @@ export default async function SellPage() {
         )
         .eq("owner_id", user.id)
         .maybeSingle(),
+      // D-157: buyer→seller conversion state dropdown is launch-only.
+      // Include `slug` here so filterToLaunchStates can identify rows;
+      // strip the slug below before passing to BecomeSellerForm /
+      // ManageBusinessForm (both consume {id, name}).
       supabase
         .from("nigerian_states")
-        .select("id, name")
+        .select("id, name, slug")
         .order("name", { ascending: true }),
       // E.2.11 / Stage C: read the user's phone + verification_status so the
       // BecomeSellerForm can pre-fill the "Use my verified number" option.
@@ -41,6 +46,14 @@ export default async function SellPage() {
         .eq("id", user.id)
         .maybeSingle(),
     ]);
+
+  // D-157: filter to launch states and strip slug before handing to the
+  // form components (BecomeSellerForm and ManageBusinessForm both consume
+  // {id, name}). One transformation, two consumers.
+  const states = filterToLaunchStates(statesRaw ?? []).map(({ id, name }) => ({
+    id,
+    name,
+  }));
 
   if (!business) {
     const isPhoneVerified = (profile?.verification_status ?? []).includes(

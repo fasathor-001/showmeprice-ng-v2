@@ -30,6 +30,7 @@ import {
   parseSpecsFromFormData,
 } from "@/lib/categorySpecs";
 import { isLaunchCategory } from "@/lib/categories";
+import { isLaunchStateId } from "@/lib/location/launch-states";
 import { dispatchVerificationDecisionEmail } from "@/lib/notifications/send-verification-decision-notification";
 import { dispatchAdminVerificationSubmissionEmail } from "@/lib/notifications/send-admin-verification-submission-notification";
 
@@ -112,6 +113,22 @@ export async function signUpAction(
 
   const supabase = createClient();
   const origin = resolveRequestOrigin();
+
+  // D-157 defense-in-depth: the signup form only offers launch states in
+  // its dropdown, but a tampered client could submit any uuid here. Reject
+  // a non-launch businessStateId server-side. Only runs on the seller
+  // path (buyer signup never submits a businessStateId).
+  if (userType === "seller" && businessStateId) {
+    const launchOk = await isLaunchStateId(supabase, businessStateId);
+    if (!launchOk) {
+      return {
+        errors: {
+          businessStateId:
+            "Only Lagos, Abuja, Port Harcourt, and Delta are available during private beta.",
+        },
+      };
+    }
+  }
 
   // With email confirmation ON (D-023), signUp does NOT return a session.
   // Any RLS-protected write here (profile UPDATE, business INSERT) would
@@ -460,6 +477,19 @@ export async function becomeSellerAction(
       .maybeSingle();
     if (existingBiz) {
       return { errors: { _form: "You already have a seller account" } };
+    }
+
+    // D-157 defense-in-depth: the form only offers launch states in its
+    // dropdown, but a tampered client could submit any uuid. Reject a
+    // non-launch stateId server-side.
+    const launchOk = await isLaunchStateId(supabase, stateId);
+    if (!launchOk) {
+      return {
+        errors: {
+          stateId:
+            "Only Lagos, Abuja, Port Harcourt, and Delta are available during private beta.",
+        },
+      };
     }
 
     // E.2.18.0 / D-142: generate the URL slug for this business deterministically
@@ -1417,6 +1447,19 @@ export async function createListingAction(
     }
   }
 
+  // D-157 defense-in-depth: the new-listing form only offers launch states
+  // in its dropdown, but a tampered client could submit any uuid as
+  // stateId. Reject non-launch state_ids server-side.
+  const launchStateOk = await isLaunchStateId(supabase, stateId);
+  if (!launchStateOk) {
+    return {
+      errors: {
+        stateId:
+          "Listing location must be in a launch market (Lagos, Abuja, Port Harcourt, or Delta).",
+      },
+    };
+  }
+
   // Sprint 3 / Gap D.2: resolve category (slug + specs in one lookup) and
   // enforce the Phase E launch-category allowlist server-side. The UI may
   // filter the category dropdown, but the server is the trust boundary —
@@ -1667,6 +1710,24 @@ export async function updateListingAction(
     )
     .eq("id", productId)
     .maybeSingle();
+
+  // D-157 defense-in-depth + STICKY-STATE exception: the edit form offers
+  // launch states PLUS the listing's pre-existing state (per the build-time
+  // sticky decision — so editing other fields never silently relocates a
+  // historical listing). The validation here mirrors that: accept the
+  // submitted stateId if it matches the listing's CURRENT state_id
+  // (sticky), otherwise require it to be a launch state.
+  if (stateId !== productSnapshot?.state_id) {
+    const launchStateOk = await isLaunchStateId(supabase, stateId);
+    if (!launchStateOk) {
+      return {
+        errors: {
+          stateId:
+            "Listing location must be in a launch market (Lagos, Abuja, Port Harcourt, or Delta).",
+        },
+      };
+    }
+  }
 
   const { error: updateError } = await supabase
     .from("products")

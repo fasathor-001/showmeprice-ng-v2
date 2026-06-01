@@ -5,6 +5,11 @@ import { Card } from "@/components/ui";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { sortStatesByFeatured } from "@/lib/states";
+import {
+  filterToLaunchStates,
+  launchStateIds,
+  LAUNCH_LOCATIONS_LABEL,
+} from "@/lib/location/launch-states";
 
 export const runtime = "edge";
 
@@ -62,7 +67,10 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     const { data: statesData } = await supabase
       .from("nigerian_states")
       .select("id, name, slug");
-    states = sortStatesByFeatured(statesData ?? []);
+    // D-157 launch geographic focus: dropdown shows launch states only; a
+    // ?state=<non-launch-slug> URL doesn't resolve (states.find returns
+    // undefined) → falls through to the implicit-all-launch path below.
+    states = filterToLaunchStates(sortStatesByFeatured(statesData ?? []));
     selectedState = stateSlug
       ? (states.find((s) => s.slug === stateSlug) ?? null)
       : null;
@@ -121,6 +129,13 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     }
     if (selectedState) {
       query = query.eq("state_id", selectedState.id);
+    } else {
+      // D-157: implicit "All launch locations" still restricts to launch-
+      // state listings (so an unselected dropdown doesn't surface listings
+      // from non-launch states). Any pre-existing listing whose state_id
+      // is outside the launch set becomes invisible here — intended per
+      // the launch-focus decision; flagged at build time.
+      query = query.in("state_id", launchStateIds(states));
     }
 
     const { data: listings, error } = await query;
@@ -210,7 +225,7 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
                 defaultValue={stateSlug}
                 className="block w-full bg-white border border-neutral-300 rounded-lg text-sm text-ink px-3 py-2 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-400"
               >
-                <option value="">All states</option>
+                <option value="">{LAUNCH_LOCATIONS_LABEL}</option>
                 {states.map((s) => (
                   <option key={s.id} value={s.slug}>
                     {s.name}

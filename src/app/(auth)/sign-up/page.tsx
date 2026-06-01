@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout";
 import { SignUpForm } from "./SignUpForm";
+import { filterToLaunchStates } from "@/lib/location/launch-states";
 
 export const runtime = "edge";
 
@@ -13,10 +14,17 @@ export default async function SignUpPage() {
   } = await supabase.auth.getUser();
   if (user) redirect("/dashboard");
 
-  const { data: states } = await supabase
+  // D-157: seller-path state dropdown shows launch states only. Add `slug`
+  // to the select so filterToLaunchStates can identify each row; strip it
+  // back before handing to SignUpForm, which only consumes {id, name}.
+  const { data: statesRaw } = await supabase
     .from("nigerian_states")
-    .select("id, name")
+    .select("id, name, slug")
     .order("name", { ascending: true });
+  const states = filterToLaunchStates(statesRaw ?? []).map(({ id, name }) => ({
+    id,
+    name,
+  }));
 
   return (
     <Container size="narrow">

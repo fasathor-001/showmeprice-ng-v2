@@ -8,6 +8,7 @@ import { updateListingAction } from "@/app/(auth)/actions";
 import { formatNaira } from "@/lib/listings";
 import { getProductImagePublicUrl } from "@/lib/storage";
 import { getVerificationState } from "@/lib/verification";
+import { filterToLaunchStates } from "@/lib/location/launch-states";
 
 export const runtime = "edge";
 
@@ -65,7 +66,7 @@ export default async function EditListingPage({
   if (listing.seller_id !== user.id) redirect("/dashboard/listings");
   if (listing.business_id !== business.id) redirect("/dashboard/listings");
 
-  const [{ data: categories }, { data: states }] = await Promise.all([
+  const [{ data: categories }, { data: statesRaw }] = await Promise.all([
     supabase
       .from("categories")
       // slug + parent_id are needed by CategorySpecFields (D.7) to resolve
@@ -74,8 +75,36 @@ export default async function EditListingPage({
       // field on EditListingForm.
       .select("id, name, slug, parent_id, supports_inventory")
       .order("sort_order", { ascending: true }),
-    supabase.from("nigerian_states").select("id, name").order("name", { ascending: true }),
+    // D-157: edit-listing dropdown is launch-only PLUS sticky for the
+    // listing's current state. Select `slug` so filterToLaunchStates can
+    // identify rows; the sticky logic below appends the current state if
+    // it's outside the launch set so editing other fields never silently
+    // relocates a historical listing.
+    supabase
+      .from("nigerian_states")
+      .select("id, name, slug")
+      .order("name", { ascending: true }),
   ]);
+
+  // Launch-only filter + sticky current-state exception. If the listing's
+  // current state_id resolves to a non-launch state, append it to the
+  // dropdown list so the seller can save the form without inadvertently
+  // changing the listing's location. updateListingAction validates the
+  // submitted stateId against (launch states ∪ {listing.state_id}).
+  const launchStates = filterToLaunchStates(statesRaw ?? []);
+  let stateOptionsSource = launchStates;
+  if (listing.state_id) {
+    const inLaunchSet = launchStates.some((s) => s.id === listing.state_id);
+    if (!inLaunchSet) {
+      const currentState = (statesRaw ?? []).find(
+        (s) => s.id === listing.state_id,
+      );
+      if (currentState) {
+        stateOptionsSource = [...launchStates, currentState];
+      }
+    }
+  }
+  const states = stateOptionsSource.map(({ id, name }) => ({ id, name }));
 
   const existingImages = [...(listing.product_images ?? [])]
     .sort((a, b) => a.position - b.position)
@@ -100,7 +129,7 @@ export default async function EditListingPage({
           <EditListingForm
             action={boundUpdateAction}
             categories={categories ?? []}
-            states={states ?? []}
+            states={states}
             businessId={business.id}
             productId={listing.id}
             existingImages={existingImages}

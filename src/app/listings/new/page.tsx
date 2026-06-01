@@ -7,6 +7,7 @@ import { NewListingForm } from "@/components/listings/NewListingForm";
 import { createListingAction } from "@/app/(auth)/actions";
 import { getVerificationState } from "@/lib/verification";
 import { requirePhoneVerified } from "@/lib/auth";
+import { filterToLaunchStates } from "@/lib/location/launch-states";
 
 export const runtime = "edge";
 
@@ -136,7 +137,7 @@ export default async function NewListingPage() {
     reason: "listings",
   });
 
-  const [{ data: categories }, { data: states }] = await Promise.all([
+  const [{ data: categories }, { data: statesRaw }] = await Promise.all([
     supabase
       .from("categories")
       // slug + parent_id are needed by CategorySpecFields to resolve which
@@ -145,11 +146,18 @@ export default async function NewListingPage() {
       // field on NewListingForm.
       .select("id, name, slug, parent_id, supports_inventory")
       .order("sort_order", { ascending: true }),
+    // D-157: new-listing state dropdown shows launch states only. Select
+    // `slug` here so filterToLaunchStates can identify rows; strip below.
     supabase
       .from("nigerian_states")
-      .select("id, name")
+      .select("id, name, slug")
       .order("name", { ascending: true }),
   ]);
+
+  const states = filterToLaunchStates(statesRaw ?? []).map(({ id, name }) => ({
+    id,
+    name,
+  }));
 
   return (
     <Container size="narrow">
@@ -169,7 +177,7 @@ export default async function NewListingPage() {
           <NewListingForm
             action={createListingAction}
             categories={categories ?? []}
-            states={states ?? []}
+            states={states}
             businessId={business.id}
           />
         </Card>
