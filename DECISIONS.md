@@ -4299,3 +4299,19 @@ ShowMePrice does NOT route transactions through a hub by default. The hub is a F
 
 **Trigger to revisit:** when transaction volume is high enough that buyer protection (not supply) is the growth constraint. Until then: Phase 1 only; focus is sellers + listings toward 10/42.
 
+## D-155 — Terms of Service acceptance at signup: mechanism buildable, content lawyer-gated, deferred
+
+**Status:** Decided 2026-05-31. Captures the decision to add a Terms of Service + Privacy Policy acceptance step at signup for buyers and sellers. The MECHANISM (modal, accept-to-continue gate, recording user+version+timestamp) is buildable software. The CONTENT (the binding terms) is a legal instrument and is gated on lawyer review — NOT drafted by AI as live binding terms.
+
+**Why:** A signup acceptance is how ShowMePrice's honestly-chosen positions become binding and acknowledged rather than homepage copy: introduction-platform-not-transaction-platform (no escrow, no fund-holding, no goods inspection), identity-verified-not-product-verified, "reviewed not guaranteed" (D-153a), hub/escrow future-not-now (D-154). It also gives a durable written answer to the seller-raised "who bears the loss if a deal goes bad" question.
+
+**Locked sequencing:**
+- Privacy Policy v0.2 draft EXISTS (entity-grounded, NDPR/NDPA-aware, pending legal review). Terms of Service does NOT exist yet.
+- Lawyer brief (Review Brief + ToS draft basis + Privacy finalization questions) prepared for legal submission [target: week of 2026-06-01].
+- T&C acceptance MODAL build is deferred until: (a) lawyer finalizes the terms content, AND (b) closer to Play submission where acceptance is expected.
+- Rationale for deferral: building the modal before terms are final means rebuilding it to fit the lawyer's version; AND an acceptance wall adds friction to seller onboarding during the active recruitment phase (sellers 5-10 toward the 10/42 Play prerequisite). Do NOT put a T&C gate in front of the supply pipeline mid-recruitment.
+
+**Out of scope / guardrail:** ShowMePrice must not publish AI-drafted binding legal terms. Plain-language position summaries may be drafted as INPUT to the lawyer, always labeled "draft for legal review," never deployed as live terms.
+
+**Trigger to build:** lawyer-finalized ToS + Privacy in hand, and Play-submission sprint beginning.
+
