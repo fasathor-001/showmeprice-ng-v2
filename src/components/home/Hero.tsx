@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { Container } from "@/components/layout";
 import { createClient } from "@/lib/supabase/server";
-import {
-  sortStatesByFeatured,
-  getFeaturedCityChips,
-} from "@/lib/states";
+import { sortStatesByFeatured } from "@/lib/states";
 import {
   filterToLaunchStates,
   LAUNCH_LOCATIONS_LABEL,
+  LAUNCH_LOCATION_CHIPS,
 } from "@/lib/location/launch-states";
 
 export async function Hero() {
@@ -16,19 +14,19 @@ export async function Hero() {
     .from("nigerian_states")
     .select("id, name, slug");
   // D-157 launch geographic focus: restrict the homepage state selector
-  // (and the downstream chip generator) to launch states only. The label
-  // for the "no specific state" option becomes LAUNCH_LOCATIONS_LABEL
-  // instead of the prior "All Nigeria"; the chips collapse to the launch
-  // city set because we feed only launch states into the chip helper.
+  // to launch states only. The label for the "no specific state" option
+  // becomes LAUNCH_LOCATIONS_LABEL instead of the prior "All Nigeria".
   const states = filterToLaunchStates(
     sortStatesByFeatured(statesData ?? []),
   );
 
-  // City chips ordered by actual listing count (D.6.2). With the input
-  // filtered to launch states only, the chip set is at most 4 launch
-  // cities; the helper's own padding fallback also draws from the same
-  // pre-filtered list, so non-launch states never appear.
-  const cityChips = await getFeaturedCityChips(supabase, states);
+  // Chips render the fixed launch set in canonical order (Lagos, Abuja,
+  // Delta, Rivers) with state-level labels — sourced from
+  // LAUNCH_LOCATION_CHIPS in src/lib/location/launch-states.ts. Replaces
+  // the previous dynamic listing-count-sorted helper (getFeaturedCityChips)
+  // which surfaced city labels and could re-order on supply shifts; the
+  // canonical chip set is now stable, order-stable, and admin-controlled.
+  const cityChips = LAUNCH_LOCATION_CHIPS;
 
   return (
     <section className="bg-neutral-50 border-b border-neutral-200">
@@ -88,8 +86,8 @@ export async function Hero() {
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             {cityChips.map((chip) => (
               <Link
-                key={chip.stateSlug}
-                href={`/marketplace?state=${chip.stateSlug}`}
+                key={chip.slug}
+                href={`/marketplace?state=${chip.slug}`}
                 className="inline-flex items-center text-xs sm:text-sm text-ink-600 hover:text-ink bg-white border border-neutral-300 hover:border-neutral-400 px-3 py-1.5 rounded-full transition-colors"
               >
                 {chip.label}

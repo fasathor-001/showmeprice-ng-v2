@@ -85,6 +85,25 @@ export function launchStateIds<T extends { id: string; slug: string }>(
 export const LAUNCH_LOCATIONS_LABEL = "All launch locations";
 
 /**
+ * Fixed-order homepage quick-pick chip set. Order, labels, and slugs are
+ * authoritative here — replaces the dynamic listing-count-sorted chips
+ * previously produced by getFeaturedCityChips. Labels are state-level
+ * ("Delta" / "Rivers") rather than the city-labels in STATE_CITY_LABELS
+ * ("Warri" / "Port Harcourt"); "Abuja" stays as the recognizable name
+ * for the FCT/slug=abuja since buyers search "Abuja", not "FCT".
+ *
+ * Single source of truth: expanding launch markets later means adding
+ * one entry here AND one slug to LAUNCH_STATE_SLUGS above — both edits
+ * land in this file.
+ */
+export const LAUNCH_LOCATION_CHIPS = [
+  { label: "Lagos", slug: "lagos" },
+  { label: "Abuja", slug: "abuja" },
+  { label: "Delta", slug: "delta" },
+  { label: "Rivers", slug: "rivers" },
+] as const;
+
+/**
  * Warm copy for surfaces that need to explain why a seller's state isn't
  * available yet. Reserved for future use; no current consumer renders it
  * directly (the form dropdowns simply omit non-launch states).
